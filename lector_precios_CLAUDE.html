@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d2e">
+<title>Edumerca · Consulte su precio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --verde:#0f3d2e; --verde2:#16573f; --amarillo:#ffd23f;
+    --papel:#fbfaf5; --tinta:#1b1b1b; --gris:#6b7069; --rojo:#c0392b;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *,*::before,*::after{box-sizing:inherit}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--verde); color:var(--papel);
+    font-family:"Barlow",system-ui,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+  }
+  header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px}
+  .marca{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;letter-spacing:.02em}
+  .estado{font-size:.85rem;opacity:.7}
+  main{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:16px;text-align:center}
+
+  /* Pantalla de espera */
+  .espera h1{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(2.4rem,9vw,5rem);line-height:1;margin:0 0 12px}
+  .espera p{font-size:clamp(1rem,3.5vw,1.4rem);opacity:.8;margin:0}
+  .flecha{margin-top:28px;width:64px;height:64px;border:4px solid var(--amarillo);border-radius:50%;
+    display:grid;place-items:center;animation:pulso 1.8s ease-in-out infinite}
+  .flecha svg{width:28px;fill:var(--amarillo)}
+  @keyframes pulso{50%{transform:scale(1.12);opacity:.6}}
+
+  /* Etiqueta de precio */
+  .etiqueta{
+    background:var(--papel);color:var(--tinta);width:min(560px,100%);
+    border-radius:6px;padding:28px 24px 22px;position:relative;
+    box-shadow:0 18px 0 -8px var(--amarillo);
+    animation:entra .25s ease-out;
+  }
+  .etiqueta .nombre{font-size:clamp(1.2rem,4.5vw,1.8rem);font-weight:600;line-height:1.2;margin:0 0 14px;text-transform:uppercase}
+  .etiqueta .precio{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(4rem,20vw,8.5rem);line-height:.9;color:var(--verde)}
+  .etiqueta .precio small{font-size:.35em;vertical-align:top;margin-right:4px}
+  .etiqueta .codigo{margin-top:14px;font-size:.9rem;color:var(--gris)}
+  .etiqueta.error .precio{font-size:clamp(2rem,9vw,3.4rem);color:var(--rojo)}
+  @keyframes entra{from{transform:translateY(12px);opacity:0}}
+
+  /* Cámara */
+  #camara{width:min(420px,100%);border-radius:6px;overflow:hidden;background:#000;margin-top:18px}
+  #camara video{display:block;width:100%!important}
+
+  footer{display:flex;gap:10px;justify-content:center;padding:14px 16px 18px}
+  button{
+    font:600 1.05rem "Barlow",sans-serif;border:0;border-radius:6px;padding:14px 22px;cursor:pointer;
+    background:var(--amarillo);color:var(--verde);
+  }
+  button.sec{background:var(--verde2);color:var(--papel)}
+  button:focus-visible{outline:3px solid var(--papel);outline-offset:3px}
+
+  #entrada{position:absolute;left:-9999px;opacity:0}
+  @media (prefers-reduced-motion:reduce){.flecha,.etiqueta{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="marca" id="marca">EDUMERCA</div>
+  <div class="estado" id="estado">Cargando precios…</div>
+</header>
+
+<main id="zona"></main>
+<div id="camara" hidden></div>
+
+<footer>
+  <button id="btnCamara">Escanear con cámara</button>
+  <button id="btnManual" class="sec">Digitar código</button>
+  <button id="btnCsv" class="sec">Cargar CSV</button>
+</footer>
+<input type="file" id="archivoCsv" accept=".csv,text/csv" hidden>
+
+<!-- Recibe lo que "escribe" el lector de código de barras (Bluetooth/USB) -->
+<input id="entrada" inputmode="none" autocomplete="off" aria-label="Código de barras">
+
+<script>
+/* =========== CONFIGURACIÓN =========== */
+// URL de la web app de Apps Script (05_lector_precios.gs). También se puede
+// pasar como ?api=URL o tocando 5 veces el logo "EDUMERCA".
+const API_URL_DEFECTO = "";
+const SEGUNDOS_EN_PANTALLA = 8;       // tiempo que se muestra el precio
+const MINUTOS_REFRESCO = 30;          // cada cuánto se recarga el catálogo
+/* ===================================== */
+
+const $ = id => document.getElementById(id);
+const zona = $("zona"), entrada = $("entrada"), estado = $("estado");
+let catalogo = new Map();   // código de barras o código interno -> {n: nombre, p: precio}
+let temporizador = null, escaner = null;
+
+const guardar = (k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const leer = k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+
+function apiUrl(){
+  const q = new URLSearchParams(location.search).get("api");
+  if(q) guardar("api_url", q);
+  return q || leer("api_url") || API_URL_DEFECTO;
+}
+
+const pesos = n => Number(n).toLocaleString("es-CO",{maximumFractionDigits:0});
+
+/* ---- Catálogo ---- */
+function cargarEnMapa(lista){
+  catalogo = new Map();
+  for(const it of lista){
+    const item = {n:it.nombre, p:it.precio, c:it.codigo};
+    if(it.barras) String(it.barras).split(/[,;\s]+/).filter(Boolean)
+      .forEach(b=>catalogo.set(b.replace(/^0+/,""), item));
+    if(it.codigo) catalogo.set("#"+String(it.codigo), item);
+  }
+}
+
+async function descargarCatalogo(){
+  if(leer("modo") === "csv"){ cargarCopiaLocal(); return; }
+  const url = apiUrl();
+  if(!url){ estado.textContent = "Falta configurar la URL de precios"; return; }
+  try{
+    const r = await fetch(url + (url.includes("?")?"&":"?") + "t=" + Date.now());
+    const datos = await r.json();
+    if(!Array.isArray(datos.productos)) throw new Error("respuesta sin productos");
+    cargarEnMapa(datos.productos);
+    guardar("catalogo", JSON.stringify(datos.productos));
+    guardar("catalogo_fecha", new Date().toISOString());
+    estado.textContent = catalogo.size ? `${datos.productos.length} productos` : "Catálogo vacío";
+  }catch(e){
+    const copia = leer("catalogo");
+    if(copia){
+      cargarEnMapa(JSON.parse(copia));
+      const f = new Date(leer("catalogo_fecha"));
+      estado.textContent = `Sin conexión · precios del ${f.toLocaleDateString("es-CO")}`;
+    }else{
+      estado.textContent = "No se pudieron cargar los precios";
+    }
+  }
+}
+
+function cargarCopiaLocal(){
+  const copia = leer("catalogo");
+  if(!copia){ estado.textContent = "Cargue un CSV con los productos"; return; }
+  const lista = JSON.parse(copia);
+  cargarEnMapa(lista);
+  const f = new Date(leer("catalogo_fecha"));
+  estado.textContent = `${lista.length} productos · CSV del ${f.toLocaleDateString("es-CO")}`;
+}
+
+/* ---- CSV subido a mano ---- */
+function parsearCsv(texto){
+  texto = texto.replace(/^\uFEFF/, "");
+  const filas = []; let fila = [], campo = "", comillas = false;
+  for(let i = 0; i < texto.length; i++){
+    const c = texto[i];
+    if(comillas){
+      if(c === '"'){ if(texto[i+1] === '"'){ campo += '"'; i++; } else comillas = false; }
+      else campo += c;
+    }else if(c === '"') comillas = true;
+    else if(c === "," || c === ";"){ fila.push(campo); campo = ""; }
+    else if(c === "\n"){ fila.push(campo); filas.push(fila); fila = []; campo = ""; }
+    else if(c !== "\r") campo += c;
+  }
+  if(campo || fila.length){ fila.push(campo); filas.push(fila); }
+  return filas;
+}
+
+function csvAProductos(texto){
+  const filas = parsearCsv(texto);
+  const enc = filas.shift().map(h => h.trim().toLowerCase());
+  const col = (...nombres) => enc.findIndex(h => nombres.includes(h));
+  const iCod = col("codigo","código"), iNom = col("nombre","descripcion"),
+        iPre = col("precio","precio_venta"), iBar = col("barcode","codigo_barras","barras"),
+        iEst = col("estado");
+  if(iNom < 0 || iPre < 0) throw new Error("El CSV debe tener columnas 'nombre' y 'precio'");
+  return filas
+    .filter(f => f[iNom] && f[iPre] !== "" && !isNaN(Number(f[iPre])))
+    .filter(f => iEst < 0 || String(f[iEst]).trim().toLowerCase() !== "inactivo")
+    .map(f => ({
+      codigo: iCod >= 0 ? f[iCod].trim() : "",
+      barras: iBar >= 0 ? f[iBar].trim() : "",
+      nombre: f[iNom].trim(),
+      precio: Number(f[iPre])
+    }));
+}
+
+$("btnCsv").addEventListener("click", () => $("archivoCsv").click());
+$("archivoCsv").addEventListener("change", async e => {
+  const archivo = e.target.files[0]; if(!archivo) return;
+  try{
+    const productos = csvAProductos(await archivo.text());
+    guardar("catalogo", JSON.stringify(productos));
+    guardar("catalogo_fecha", new Date().toISOString());
+    guardar("modo", "csv");
+    cargarCopiaLocal();
+    const conBarras = productos.filter(p => p.barras).length;
+    alert(`Cargados ${productos.length} productos (${conBarras} con código de barras).`);
+  }catch(err){
+    alert("No se pudo leer el CSV: " + err.message);
+  }
+  e.target.value = "";
+});
+
+function buscar(codigo){
+  codigo = String(codigo).trim();
+  if(/^\d{1,4}$/.test(codigo)) return catalogo.get("#"+codigo) || catalogo.get("#"+codigo.padStart(4,"0"));
+  return catalogo.get(codigo.replace(/^0+/,"")) || catalogo.get("#"+codigo);
+}
+
+/* ---- Pantallas ---- */
+function pantallaEspera(){
+  zona.innerHTML = `
+    <div class="espera">
+      <h1>Consulte su precio</h1>
+      <p>Pase el código de barras del producto por el lector</p>
+      <div class="flecha" style="margin-inline:auto"><svg viewBox="0 0 24 24"><path d="M12 16 5 9h14z"/></svg></div>
+    </div>`;
+}
+
+function mostrar(codigo){
+  clearTimeout(temporizador);
+  const it = buscar(codigo);
+  const div = document.createElement("div");
+  div.className = "etiqueta" + (it ? "" : " error");
+  if(it){
+    div.innerHTML = `<p class="nombre"></p>
+      <div class="precio"><small>$</small>${pesos(it.p)}</div>
+      <div class="codigo">Código ${codigo}</div>`;
+    div.querySelector(".nombre").textContent = it.n;
+  }else{
+    div.innerHTML = `<p class="nombre">Producto no encontrado</p>
+      <div class="precio">Pregunte en caja</div>
+      <div class="codigo">Código ${codigo}</div>`;
+  }
+  zona.replaceChildren(div);
+  temporizador = setTimeout(pantallaEspera, SEGUNDOS_EN_PANTALLA*1000);
+}
+
+/* ---- Lector físico (se comporta como teclado) ---- */
+entrada.addEventListener("keydown", e=>{
+  if(e.key === "Enter"){
+    const v = entrada.value.trim(); entrada.value = "";
+    if(v) mostrar(v);
+  }
+});
+function mantenerFoco(){ if(document.activeElement !== entrada) entrada.focus({preventScroll:true}); }
+setInterval(mantenerFoco, 800);
+document.addEventListener("click", ()=>setTimeout(mantenerFoco,50));
+
+/* ---- Cámara ---- */
+let ultimoLeido = "", ultimoTiempo = 0;
+$("btnCamara").addEventListener("click", async ()=>{
+  const cont = $("camara");
+  if(escaner){
+    await escaner.stop().catch(()=>{}); escaner = null;
+    cont.hidden = true; $("btnCamara").textContent = "Escanear con cámara"; return;
+  }
+  if(typeof Html5Qrcode === "undefined"){ mostrar("—"); return; }
+  cont.hidden = false; $("btnCamara").textContent = "Cerrar cámara";
+  escaner = new Html5Qrcode("camara", {
+    formatsToSupport:[
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128
+    ],
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false
+  });
+  try{
+    await escaner.start({facingMode:"environment"}, {fps:10, qrbox:{width:280,height:120}},
+      txt=>{
+        const ahora = Date.now();
+        if(txt === ultimoLeido && ahora - ultimoTiempo < 3000) return; // evita repetir
+        ultimoLeido = txt; ultimoTiempo = ahora;
+        if(navigator.vibrate) navigator.vibrate(80);
+        mostrar(txt);
+      }, ()=>{});
+  }catch(err){
+    escaner = null; cont.hidden = true; $("btnCamara").textContent = "Escanear con cámara";
+    alert("No se pudo abrir la cámara. Revise que la página esté en https y que tenga permiso de cámara.");
+  }
+});
+
+/* ---- Digitar código ---- */
+$("btnManual").addEventListener("click", ()=>{
+  const v = prompt("Código de barras o código interno (4 dígitos):");
+  if(v) mostrar(v.trim());
+});
+
+/* ---- Configuración oculta: 5 toques en el logo ---- */
+let toques = 0, tToques;
+$("marca").addEventListener("click", ()=>{
+  toques++; clearTimeout(tToques); tToques = setTimeout(()=>toques=0, 1500);
+  if(toques >= 5){
+    toques = 0;
+    const u = prompt("URL de la web app de precios:", apiUrl());
+    if(u !== null){ guardar("api_url", u.trim()); guardar("modo", u.trim() ? "api" : "csv"); descargarCatalogo(); }
+  }
+});
+
+/* ---- Inicio ---- */
+pantallaEspera();
+descargarCatalogo();
+setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
+mantenerFoco();
+</script>
+</body>
+</html>
