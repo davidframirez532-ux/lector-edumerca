@@ -90,7 +90,7 @@
 /* =========== CONFIGURACIÓN =========== */
 // URL de la web app de Apps Script (05_lector_precios.gs). También se puede
 // pasar como ?api=URL o tocando 5 veces el logo "EDUMERCA".
-const API_URL_DEFECTO = "";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbz3szhpon8OQfnow67D7QhXtadcvl2X4Gm110wmroKCdeTYA_pCiFHr5NCEDnfI7WDy/exec";
 const SEGUNDOS_EN_PANTALLA = 8;       // tiempo que se muestra el precio
 const MINUTOS_REFRESCO = 30;          // cada cuánto se recarga el catálogo
 /* ===================================== */
@@ -106,7 +106,8 @@ const leer = k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 function apiUrl(){
   const q = new URLSearchParams(location.search).get("api");
   if(q) guardar("api_url", q);
-  return q || leer("api_url") || API_URL_DEFECTO;
+  const guardada = leer("api_url");
+  return q || (guardada !== null ? guardada : API_URL_DEFECTO);
 }
 
 const pesos = n => Number(n).toLocaleString("es-CO",{maximumFractionDigits:0});
@@ -123,12 +124,14 @@ function cargarEnMapa(lista){
 }
 
 async function descargarCatalogo(){
-  if(leer("modo") === "csv"){ cargarCopiaLocal(); return; }
   const url = apiUrl();
+  $("btnCsv").hidden = !!url;             // con Drive conectado no hace falta subir CSV
+  if(!url){ cargarCopiaLocal(); return; }
   if(!url){ estado.textContent = "Falta configurar la URL de precios"; return; }
   try{
     const r = await fetch(url + (url.includes("?")?"&":"?") + "t=" + Date.now());
     const datos = await r.json();
+    if(datos.error) throw new Error(datos.error);
     if(!Array.isArray(datos.productos)) throw new Error("respuesta sin productos");
     cargarEnMapa(datos.productos);
     guardar("catalogo", JSON.stringify(datos.productos));
@@ -199,7 +202,6 @@ $("archivoCsv").addEventListener("change", async e => {
     const productos = csvAProductos(await archivo.text());
     guardar("catalogo", JSON.stringify(productos));
     guardar("catalogo_fecha", new Date().toISOString());
-    guardar("modo", "csv");
     cargarCopiaLocal();
     const conBarras = productos.filter(p => p.barras).length;
     alert(`Cargados ${productos.length} productos (${conBarras} con código de barras).`);
@@ -301,7 +303,7 @@ $("marca").addEventListener("click", ()=>{
   if(toques >= 5){
     toques = 0;
     const u = prompt("URL de la web app de precios:", apiUrl());
-    if(u !== null){ guardar("api_url", u.trim()); guardar("modo", u.trim() ? "api" : "csv"); descargarCatalogo(); }
+    if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
   }
 });
 
