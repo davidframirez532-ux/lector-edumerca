@@ -101,6 +101,11 @@
     background:var(--verde3);border-radius:6px;padding:4px 8px;min-width:3.6em;text-align:center}
   .item .nom{font-size:1.05rem;font-weight:600;line-height:1.2;text-transform:uppercase}
   .item .pre{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;color:var(--amarillo);white-space:nowrap}
+  #digitar{gap:16px}
+  .ayuda{margin:4px 0 0;opacity:.8;font-size:1.05rem}
+  .codigo-manual{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:2.2rem;letter-spacing:.04em;text-align:center}
+  .boton-buscar{background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;
+    padding:18px;font-size:1.4rem;font-weight:600;cursor:pointer}
   .vacio{opacity:.7;text-align:center;padding:32px 0;font-size:1.1rem}
 
   @media (prefers-reduced-motion:reduce){.boton-grande,.etiqueta{animation:none}}
@@ -135,11 +140,23 @@
 
 <section class="pantalla" id="resultado"></section>
 
+<section class="pantalla" id="digitar">
+  <div class="cabeza">
+    <h2>Digitar código</h2>
+    <button class="sec" id="btnVolverDigitar">Volver</button>
+  </div>
+  <p class="ayuda">Escribe el código de barras o el código del producto</p>
+  <input class="buscador codigo-manual" id="codigoManual" type="text" inputmode="numeric" pattern="[0-9]*"
+    placeholder="Ej: 7702032110278" autocomplete="off" enterkeyhint="search">
+  <button class="boton-buscar" id="btnBuscarCodigo">Buscar precio</button>
+</section>
+
 <section class="pantalla" id="lista">
   <div class="cabeza">
     <h2>Sin código de barras</h2>
     <button class="sec" id="btnVolver">Volver</button>
   </div>
+  <button class="boton-lista" id="btnDigitar" style="width:100%">Digitar código manualmente</button>
   <input class="buscador" id="buscador" type="search" placeholder="Buscar por nombre o código" autocomplete="off" enterkeyhint="search">
   <div class="chips" id="chips"></div>
   <div class="items" id="items"></div>
@@ -170,7 +187,7 @@ const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f
 
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
-  if(id !== "lista") setTimeout(()=>entrada.focus({preventScroll:true}),50);
+  if(id !== "lista" && id !== "digitar") setTimeout(()=>entrada.focus({preventScroll:true}),50);
 }
 
 /* ---------- Precios ---------- */
@@ -188,18 +205,38 @@ function cargarEnMapa(lista){
     const barras = String(it.barras||"").split(/[,;\s]+/).filter(Boolean);
     barras.forEach(b=>catalogo.set(b.replace(/^0+/,""), item));
     if(item.c) catalogo.set("#"+item.c, item);
-    if(!barras.some(b=>b.length > MAX_DIGITOS_CORTO)) sinCodigo.push(item);
+    const codigosCortos = barras.length ? barras : [item.c];
+    if(codigosCortos.length && codigosCortos.every(b=>b && b.length <= MAX_DIGITOS_CORTO)) sinCodigo.push(item);
   }
   sinCodigo.sort((a,b)=>a.n.localeCompare(b.n,"es"));
   pintarChips();
   if($("lista").classList.contains("activa")) pintarLista();
 }
+async function pedirPrecios(url){
+  // Apps Script a veces tarda en "despertar" o responde un error suelto: se reintenta 3 veces
+  let ultimoError;
+  for(let intento = 1; intento <= 3; intento++){
+    const ctrl = new AbortController();
+    const tt = setTimeout(()=>ctrl.abort(), 25000);
+    try{
+      const r = await fetch(url + (url.includes("?")?"&":"?") + "t=" + Date.now(), {signal:ctrl.signal});
+      clearTimeout(tt);
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    }catch(e){
+      clearTimeout(tt); ultimoError = e;
+      await new Promise(ok=>setTimeout(ok, intento * 4000));
+    }
+  }
+  throw ultimoError;
+}
+let descargando = false;
 async function descargarCatalogo(){
+  if(descargando) return; descargando = true;
   const url = apiUrl();
   try{
     if(!url) throw new Error("sin URL");
-    const r = await fetch(url + (url.includes("?")?"&":"?") + "t=" + Date.now());
-    const d = await r.json();
+    const d = await pedirPrecios(url);
     if(d.error) throw new Error(d.error);
     if(!Array.isArray(d.productos) || !d.productos.length) throw new Error("vacío");
     cargarEnMapa(d.productos);
@@ -207,16 +244,22 @@ async function descargarCatalogo(){
     guardar("catalogo_fecha", new Date().toISOString());
     estado.textContent = `${d.productos.length} productos`;
   }catch(e){
+    console.warn("No se pudieron actualizar los precios:", e);
     const copia = leer("catalogo");
     if(copia){
-      cargarEnMapa(JSON.parse(copia));
-      estado.textContent = `Sin conexión · precios del ${new Date(leer("catalogo_fecha")).toLocaleDateString("es-CO")}`;
+      if(!catalogo.size) cargarEnMapa(JSON.parse(copia));
+      const f = new Date(leer("catalogo_fecha"));
+      const hoy = f.toDateString() === new Date().toDateString();
+      estado.textContent = hoy
+        ? `Precios de las ${f.toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"})}`
+        : `Sin conexión · precios del ${f.toLocaleDateString("es-CO")}`;
     }else estado.textContent = "No se pudieron cargar los precios";
-  }
+    setTimeout(descargarCatalogo, 2*60*1000);   // vuelve a intentar en 2 minutos
+  }finally{ descargando = false; }
 }
 function buscar(c){
   c = String(c).trim();
-  return catalogo.get(c.replace(/^0+/,"")) || catalogo.get("#"+c);
+  return catalogo.get(c.replace(/^0+/,"")) || catalogo.get("#"+c) || catalogo.get("#"+c.replace(/^0+/,""));
 }
 
 /* ---------- Cámara ---------- */
@@ -279,19 +322,22 @@ function pintarEtiqueta(html, error, volverA){
 }
 function volverDeResultado(){
   clearTimeout(tResultado);
-  if($("resultado").dataset.volver === "lista") abrirLista(false); else inicio();
+  const v = $("resultado").dataset.volver;
+  if(v === "lista") abrirLista(false);
+  else if(v === "digitar") abrirDigitar();
+  else inicio();
 }
 function mostrarItem(it, volverA){
   const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>`, false, volverA);
   div.querySelector(".nombre").textContent = it.n;
 }
-function mostrar(codigo){
+function mostrar(codigo, volverA){
   const it = buscar(codigo);
-  if(!it) return mostrarError("Producto no encontrado", "Pregunte en caja");
-  mostrarItem(it);
+  if(!it) return mostrarError("Producto no encontrado", "Pregunte en caja", volverA);
+  mostrarItem(it, volverA);
 }
-function mostrarError(titulo, texto){
-  const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"></div>`, true);
+function mostrarError(titulo, texto, volverA){
+  const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"></div>`, true, volverA);
   div.querySelector(".nombre").textContent = titulo;
   div.querySelector(".precio").textContent = texto;
 }
@@ -339,6 +385,26 @@ function tocarLista(){
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
 }
 
+/* ---------- Digitar código ---------- */
+function abrirDigitar(){
+  $("codigoManual").value = "";
+  ir("digitar");
+  tocarLista();
+  setTimeout(()=>$("codigoManual").focus(), 80);
+}
+function buscarManual(){
+  const v = $("codigoManual").value.replace(/\D/g,"");
+  if(!v){ $("codigoManual").focus(); return; }
+  clearTimeout(tLista);
+  $("codigoManual").blur();
+  mostrar(v, "digitar");
+}
+$("btnDigitar").addEventListener("click", abrirDigitar);
+$("btnVolverDigitar").addEventListener("click", ()=>abrirLista(false));
+$("btnBuscarCodigo").addEventListener("click", buscarManual);
+$("codigoManual").addEventListener("keydown", e=>{ if(e.key === "Enter") buscarManual(); });
+$("codigoManual").addEventListener("input", tocarLista);
+
 /* ---------- Eventos ---------- */
 $("btnEscanear").addEventListener("click", abrirCamara);
 $("btnLista").addEventListener("click", ()=>abrirLista());
@@ -357,7 +423,7 @@ entrada.addEventListener("keydown", async e=>{
   mostrar(v);
 });
 setInterval(()=>{
-  if(!$("lista").classList.contains("activa") && document.activeElement !== entrada)
+  if(!$("lista").classList.contains("activa") && !$("digitar").classList.contains("activa") && document.activeElement !== entrada)
     entrada.focus({preventScroll:true});
 }, 1000);
 
@@ -379,6 +445,13 @@ document.addEventListener("visibilitychange", ()=>{ if(document.hidden && escane
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 
 /* ---------- Arranque ---------- */
+// Al volver internet o al volver a abrir la app, actualiza
+window.addEventListener("online", descargarCatalogo);
+document.addEventListener("visibilitychange", ()=>{
+  if(!document.hidden && Date.now() - new Date(leer("catalogo_fecha")||0) > 10*60*1000) descargarCatalogo();
+});
+// Muestra de una vez la copia guardada mientras llegan los precios nuevos
+try{ const c = leer("catalogo"); if(c) cargarEnMapa(JSON.parse(c)); }catch(e){}
 descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 </script>
