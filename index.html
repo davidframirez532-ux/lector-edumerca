@@ -4,10 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f3d2e">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Edumerca · Consulte su precio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
@@ -21,252 +22,191 @@
   body{
     background:var(--verde); color:var(--papel);
     font-family:"Barlow",system-ui,sans-serif;
-    display:flex; flex-direction:column; overflow:hidden;
-    -webkit-user-select:none; user-select:none;
+    overflow:hidden; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
   }
-  header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px}
-  .marca{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;letter-spacing:.02em}
-  .estado{font-size:.85rem;opacity:.7}
-  main{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:16px;text-align:center}
+  .pantalla{position:fixed;inset:0;display:none;padding:
+    max(16px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right))
+    max(16px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+  .pantalla.activa{display:flex}
 
-  /* Pantalla de espera */
-  .espera h1{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(2.4rem,9vw,5rem);line-height:1;margin:0 0 12px}
-  .espera p{font-size:clamp(1rem,3.5vw,1.4rem);opacity:.8;margin:0}
-  .flecha{margin-top:28px;width:64px;height:64px;border:4px solid var(--amarillo);border-radius:50%;
-    display:grid;place-items:center;animation:pulso 1.8s ease-in-out infinite}
-  .flecha svg{width:28px;fill:var(--amarillo)}
-  @keyframes pulso{50%{transform:scale(1.12);opacity:.6}}
+  .marca{position:fixed;top:max(10px,env(safe-area-inset-top));left:max(18px,env(safe-area-inset-left));
+    font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;z-index:5}
+  .estado{position:fixed;top:max(14px,env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));
+    font-size:.8rem;opacity:.6;z-index:5}
 
-  /* Etiqueta de precio */
+  /* ---------- Inicio ---------- */
+  #inicio{align-items:center;justify-content:center;cursor:pointer}
+  #inicio .boton{
+    display:flex;align-items:center;gap:clamp(18px,4vw,48px);
+    background:var(--amarillo);color:var(--verde);border:0;border-radius:10px;
+    padding:clamp(20px,5vh,48px) clamp(28px,6vw,72px);cursor:pointer;
+    box-shadow:0 12px 0 var(--verde2);
+    animation:latido 2.2s ease-in-out infinite;
+  }
+  #inicio .boton svg{width:clamp(56px,12vh,120px);height:auto;flex:none}
+  #inicio .boton span{font-family:"Barlow Condensed",sans-serif;font-weight:800;
+    font-size:clamp(2.6rem,11vh,6.5rem);line-height:.95;text-align:left}
+  #inicio .boton:focus-visible{outline:4px solid var(--papel);outline-offset:6px}
+  @keyframes latido{50%{transform:scale(1.04)}}
+
+  /* ---------- Cámara ---------- */
+  #escaneo{align-items:center;justify-content:center;gap:clamp(16px,4vw,48px)}
+  #camara{background:#000;border-radius:10px;overflow:hidden;
+    width:min(62vw,calc(80vh * 4 / 3));aspect-ratio:4/3}
+  #camara video{width:100%!important;height:100%!important;object-fit:cover}
+  .lateral{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+  .lateral p{margin:0;font-size:clamp(1.1rem,4vh,1.8rem);max-width:18ch;line-height:1.2}
+  .cuenta{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(3rem,16vh,7rem);
+    color:var(--amarillo);line-height:1}
+  .cancelar{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;
+    font:600 1.1rem "Barlow",sans-serif;padding:12px 26px;cursor:pointer}
+
+  /* ---------- Resultado ---------- */
+  #resultado{align-items:center;justify-content:center}
   .etiqueta{
-    background:var(--papel);color:var(--tinta);width:min(560px,100%);
-    border-radius:6px;padding:28px 24px 22px;position:relative;
-    box-shadow:0 18px 0 -8px var(--amarillo);
-    animation:entra .25s ease-out;
+    background:var(--papel);color:var(--tinta);border-radius:10px;
+    width:min(96vw,1200px);max-height:88vh;
+    display:grid;grid-template-columns:1fr auto;align-items:center;gap:clamp(16px,4vw,56px);
+    padding:clamp(20px,5vh,48px) clamp(24px,4vw,56px);
+    box-shadow:0 14px 0 var(--amarillo);animation:entra .25s ease-out;
   }
-  .etiqueta .nombre{font-size:clamp(1.2rem,4.5vw,1.8rem);font-weight:600;line-height:1.2;margin:0 0 14px;text-transform:uppercase}
-  .etiqueta .precio{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(4rem,20vw,8.5rem);line-height:.9;color:var(--verde)}
-  .etiqueta .precio small{font-size:.35em;vertical-align:top;margin-right:4px}
-  .etiqueta .codigo{margin-top:14px;font-size:.9rem;color:var(--gris)}
-  .etiqueta.error .precio{font-size:clamp(2rem,9vw,3.4rem);color:var(--rojo)}
-  @keyframes entra{from{transform:translateY(12px);opacity:0}}
+  .etiqueta .nombre{margin:0;font-weight:600;text-transform:uppercase;
+    font-size:clamp(1.6rem,8vh,4rem);line-height:1.08;overflow-wrap:anywhere}
+  .etiqueta .precio{font-family:"Barlow Condensed",sans-serif;font-weight:800;color:var(--verde);
+    font-size:clamp(5rem,32vh,15rem);line-height:.85;white-space:nowrap}
+  .etiqueta .precio small{font-size:.4em;vertical-align:top;margin-right:6px}
+  .etiqueta.error .precio{font-size:clamp(2.4rem,12vh,5.5rem);color:var(--rojo);white-space:normal}
+  .barra{position:fixed;left:0;bottom:0;height:6px;background:var(--amarillo)}
+  @keyframes entra{from{transform:scale(.96);opacity:0}}
+  @keyframes baja{from{width:100%}to{width:0}}
 
-  /* Cámara */
-  #camara{width:min(420px,100%);border-radius:6px;overflow:hidden;background:#000;margin-top:18px}
-  #camara video{display:block;width:100%!important}
-
-  footer{display:flex;gap:10px;justify-content:center;padding:14px 16px 18px}
-  button{
-    font:600 1.05rem "Barlow",sans-serif;border:0;border-radius:6px;padding:14px 22px;cursor:pointer;
-    background:var(--amarillo);color:var(--verde);
+  /* Vertical (por si acaso): todo apilado */
+  @media (orientation:portrait){
+    #escaneo{flex-direction:column}
+    #camara{width:min(92vw,60vh);aspect-ratio:3/4}
+    .etiqueta{grid-template-columns:1fr;text-align:center}
+    #inicio .boton{flex-direction:column}
+    #inicio .boton span{text-align:center}
   }
-  button.sec{background:var(--verde2);color:var(--papel)}
-  button:focus-visible{outline:3px solid var(--papel);outline-offset:3px}
-
+  @media (prefers-reduced-motion:reduce){#inicio .boton,.etiqueta{animation:none}}
   #entrada{position:absolute;left:-9999px;opacity:0}
-  @media (prefers-reduced-motion:reduce){.flecha,.etiqueta{animation:none}}
 </style>
 </head>
 <body>
-<header>
-  <div class="marca" id="marca">EDUMERCA</div>
-  <div class="estado" id="estado">Cargando precios…</div>
-</header>
+<div class="marca" id="marca">EDUMERCA</div>
+<div class="estado" id="estado">Cargando precios…</div>
 
-<main id="zona"></main>
-<div id="camara" hidden></div>
+<section class="pantalla activa" id="inicio">
+  <button class="boton" id="btnEscanear" aria-label="Escanea tu producto">
+    <svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true">
+      <path d="M4 4h14v5H9v9H4zM46 4h14v14h-5V9h-9zM4 46h5v9h9v5H4zM55 46h5v14H46v-5h9z"/>
+      <rect x="15" y="16" width="3" height="32"/><rect x="21" y="16" width="6" height="32"/>
+      <rect x="30" y="16" width="2" height="32"/><rect x="35" y="16" width="5" height="32"/>
+      <rect x="43" y="16" width="2" height="32"/><rect x="47" y="16" width="3" height="32"/>
+    </svg>
+    <span>ESCANEA TU<br>PRODUCTO</span>
+  </button>
+</section>
 
-<footer>
-  <button id="btnCamara">Escanear con cámara</button>
-  <button id="btnManual" class="sec">Digitar código</button>
-  <button id="btnCsv" class="sec">Cargar CSV</button>
-</footer>
-<input type="file" id="archivoCsv" accept=".csv,text/csv" hidden>
+<section class="pantalla" id="escaneo">
+  <div id="camara"></div>
+  <div class="lateral">
+    <p>Pon el código de barras frente a la cámara</p>
+    <div class="cuenta" id="cuenta">30</div>
+    <button class="cancelar" id="btnCancelar">Cancelar</button>
+  </div>
+</section>
 
-<!-- Recibe lo que "escribe" el lector de código de barras (Bluetooth/USB) -->
-<input id="entrada" inputmode="none" autocomplete="off" aria-label="Código de barras">
+<section class="pantalla" id="resultado"></section>
+
+<!-- Lector físico Bluetooth/USB, por si se conecta uno (no se ve) -->
+<input id="entrada" inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-// URL de la web app de Apps Script (05_lector_precios.gs). También se puede
-// pasar como ?api=URL o tocando 5 veces el logo "EDUMERCA".
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbz3szhpon8OQfnow67D7QhXtadcvl2X4Gm110wmroKCdeTYA_pCiFHr5NCEDnfI7WDy/exec";
-const SEGUNDOS_EN_PANTALLA = 8;       // tiempo que se muestra el precio
-const MINUTOS_REFRESCO = 30;          // cada cuánto se recarga el catálogo
+const SEGUNDOS_CAMARA = 30;       // tiempo máximo con la cámara abierta
+const SEGUNDOS_RESULTADO = 8;     // tiempo mostrando el precio
+const MINUTOS_REFRESCO = 30;      // cada cuánto se recargan los precios
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
-const zona = $("zona"), entrada = $("entrada"), estado = $("estado");
-let catalogo = new Map();   // código de barras o código interno -> {n: nombre, p: precio}
-let temporizador = null, escaner = null;
+const estado = $("estado"), entrada = $("entrada");
+let catalogo = new Map(), escaner = null, tCuenta = null, tResultado = null, ocupado = false;
 
-const guardar = (k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const leer = k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const guardar=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const leer=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const pesos=n=>Number(n).toLocaleString("es-CO",{maximumFractionDigits:0});
 
+function ir(id){
+  document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
+}
+
+/* ---------- Precios ---------- */
 function apiUrl(){
   const q = new URLSearchParams(location.search).get("api");
   if(q) guardar("api_url", q);
-  const guardada = leer("api_url");
-  return q || (guardada !== null ? guardada : API_URL_DEFECTO);
+  const g = leer("api_url");
+  return q || (g !== null ? g : API_URL_DEFECTO);
 }
-
-const pesos = n => Number(n).toLocaleString("es-CO",{maximumFractionDigits:0});
-
-/* ---- Catálogo ---- */
 function cargarEnMapa(lista){
   catalogo = new Map();
   for(const it of lista){
-    const item = {n:it.nombre, p:it.precio, c:it.codigo};
+    const item = {n:it.nombre, p:it.precio};
     if(it.barras) String(it.barras).split(/[,;\s]+/).filter(Boolean)
       .forEach(b=>catalogo.set(b.replace(/^0+/,""), item));
     if(it.codigo) catalogo.set("#"+String(it.codigo), item);
   }
 }
-
 async function descargarCatalogo(){
   const url = apiUrl();
-  $("btnCsv").hidden = !!url;             // con Drive conectado no hace falta subir CSV
-  if(!url){ cargarCopiaLocal(); return; }
-  if(!url){ estado.textContent = "Falta configurar la URL de precios"; return; }
   try{
+    if(!url) throw new Error("sin URL");
     const r = await fetch(url + (url.includes("?")?"&":"?") + "t=" + Date.now());
-    const datos = await r.json();
-    if(datos.error) throw new Error(datos.error);
-    if(!Array.isArray(datos.productos)) throw new Error("respuesta sin productos");
-    cargarEnMapa(datos.productos);
-    guardar("catalogo", JSON.stringify(datos.productos));
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    if(!Array.isArray(d.productos) || !d.productos.length) throw new Error("vacío");
+    cargarEnMapa(d.productos);
+    guardar("catalogo", JSON.stringify(d.productos));
     guardar("catalogo_fecha", new Date().toISOString());
-    estado.textContent = catalogo.size ? `${datos.productos.length} productos` : "Catálogo vacío";
+    estado.textContent = `${d.productos.length} productos`;
   }catch(e){
     const copia = leer("catalogo");
     if(copia){
       cargarEnMapa(JSON.parse(copia));
-      const f = new Date(leer("catalogo_fecha"));
-      estado.textContent = `Sin conexión · precios del ${f.toLocaleDateString("es-CO")}`;
-    }else{
-      estado.textContent = "No se pudieron cargar los precios";
-    }
+      estado.textContent = `Sin conexión · precios del ${new Date(leer("catalogo_fecha")).toLocaleDateString("es-CO")}`;
+    }else estado.textContent = "No se pudieron cargar los precios";
   }
 }
-
-function cargarCopiaLocal(){
-  const copia = leer("catalogo");
-  if(!copia){ estado.textContent = "Cargue un CSV con los productos"; return; }
-  const lista = JSON.parse(copia);
-  cargarEnMapa(lista);
-  const f = new Date(leer("catalogo_fecha"));
-  estado.textContent = `${lista.length} productos · CSV del ${f.toLocaleDateString("es-CO")}`;
+function buscar(c){
+  c = String(c).trim();
+  return catalogo.get(c.replace(/^0+/,"")) || catalogo.get("#"+c);
 }
 
-/* ---- CSV subido a mano ---- */
-function parsearCsv(texto){
-  texto = texto.replace(/^\uFEFF/, "");
-  const filas = []; let fila = [], campo = "", comillas = false;
-  for(let i = 0; i < texto.length; i++){
-    const c = texto[i];
-    if(comillas){
-      if(c === '"'){ if(texto[i+1] === '"'){ campo += '"'; i++; } else comillas = false; }
-      else campo += c;
-    }else if(c === '"') comillas = true;
-    else if(c === "," || c === ";"){ fila.push(campo); campo = ""; }
-    else if(c === "\n"){ fila.push(campo); filas.push(fila); fila = []; campo = ""; }
-    else if(c !== "\r") campo += c;
-  }
-  if(campo || fila.length){ fila.push(campo); filas.push(fila); }
-  return filas;
-}
-
-function csvAProductos(texto){
-  const filas = parsearCsv(texto);
-  const enc = filas.shift().map(h => h.trim().toLowerCase());
-  const col = (...nombres) => enc.findIndex(h => nombres.includes(h));
-  const iCod = col("codigo","código"), iNom = col("nombre","descripcion"),
-        iPre = col("precio","precio_venta"), iBar = col("barcode","codigo_barras","barras"),
-        iEst = col("estado");
-  if(iNom < 0 || iPre < 0) throw new Error("El CSV debe tener columnas 'nombre' y 'precio'");
-  return filas
-    .filter(f => f[iNom] && f[iPre] !== "" && !isNaN(Number(f[iPre])))
-    .filter(f => iEst < 0 || String(f[iEst]).trim().toLowerCase() !== "inactivo")
-    .map(f => ({
-      codigo: iCod >= 0 ? f[iCod].trim() : "",
-      barras: iBar >= 0 ? f[iBar].trim() : "",
-      nombre: f[iNom].trim(),
-      precio: Number(f[iPre])
-    }));
-}
-
-$("btnCsv").addEventListener("click", () => $("archivoCsv").click());
-$("archivoCsv").addEventListener("change", async e => {
-  const archivo = e.target.files[0]; if(!archivo) return;
+/* ---------- Pantalla horizontal y completa ---------- */
+async function pantallaCompleta(){
   try{
-    const productos = csvAProductos(await archivo.text());
-    guardar("catalogo", JSON.stringify(productos));
-    guardar("catalogo_fecha", new Date().toISOString());
-    cargarCopiaLocal();
-    const conBarras = productos.filter(p => p.barras).length;
-    alert(`Cargados ${productos.length} productos (${conBarras} con código de barras).`);
-  }catch(err){
-    alert("No se pudo leer el CSV: " + err.message);
-  }
-  e.target.value = "";
-});
-
-function buscar(codigo){
-  codigo = String(codigo).trim();
-  if(/^\d{1,4}$/.test(codigo)) return catalogo.get("#"+codigo) || catalogo.get("#"+codigo.padStart(4,"0"));
-  return catalogo.get(codigo.replace(/^0+/,"")) || catalogo.get("#"+codigo);
+    if(!document.fullscreenElement && document.documentElement.requestFullscreen)
+      await document.documentElement.requestFullscreen({navigationUI:"hide"});
+    if(screen.orientation && screen.orientation.lock)
+      await screen.orientation.lock("landscape");
+  }catch(e){ /* algunos celulares no lo permiten; se usa el giro normal */ }
 }
 
-/* ---- Pantallas ---- */
-function pantallaEspera(){
-  zona.innerHTML = `
-    <div class="espera">
-      <h1>Consulte su precio</h1>
-      <p>Pase el código de barras del producto por el lector</p>
-      <div class="flecha" style="margin-inline:auto"><svg viewBox="0 0 24 24"><path d="M12 16 5 9h14z"/></svg></div>
-    </div>`;
-}
+/* ---------- Cámara ---------- */
+async function abrirCamara(){
+  if(ocupado) return; ocupado = true;
+  clearTimeout(tResultado);
+  pantallaCompleta();
+  ir("escaneo");
+  let quedan = SEGUNDOS_CAMARA;
+  $("cuenta").textContent = quedan;
+  tCuenta = setInterval(()=>{
+    quedan--; $("cuenta").textContent = quedan;
+    if(quedan <= 0) cerrarCamara().then(inicio);
+  }, 1000);
 
-function mostrar(codigo){
-  clearTimeout(temporizador);
-  const it = buscar(codigo);
-  const div = document.createElement("div");
-  div.className = "etiqueta" + (it ? "" : " error");
-  if(it){
-    div.innerHTML = `<p class="nombre"></p>
-      <div class="precio"><small>$</small>${pesos(it.p)}</div>
-      <div class="codigo">Código ${codigo}</div>`;
-    div.querySelector(".nombre").textContent = it.n;
-  }else{
-    div.innerHTML = `<p class="nombre">Producto no encontrado</p>
-      <div class="precio">Pregunte en caja</div>
-      <div class="codigo">Código ${codigo}</div>`;
-  }
-  zona.replaceChildren(div);
-  temporizador = setTimeout(pantallaEspera, SEGUNDOS_EN_PANTALLA*1000);
-}
-
-/* ---- Lector físico (se comporta como teclado) ---- */
-entrada.addEventListener("keydown", e=>{
-  if(e.key === "Enter"){
-    const v = entrada.value.trim(); entrada.value = "";
-    if(v) mostrar(v);
-  }
-});
-function mantenerFoco(){ if(document.activeElement !== entrada) entrada.focus({preventScroll:true}); }
-setInterval(mantenerFoco, 800);
-document.addEventListener("click", ()=>setTimeout(mantenerFoco,50));
-
-/* ---- Cámara ---- */
-let ultimoLeido = "", ultimoTiempo = 0;
-$("btnCamara").addEventListener("click", async ()=>{
-  const cont = $("camara");
-  if(escaner){
-    await escaner.stop().catch(()=>{}); escaner = null;
-    cont.hidden = true; $("btnCamara").textContent = "Escanear con cámara"; return;
-  }
-  if(typeof Html5Qrcode === "undefined"){ mostrar("—"); return; }
-  cont.hidden = false; $("btnCamara").textContent = "Cerrar cámara";
   escaner = new Html5Qrcode("camara", {
     formatsToSupport:[
       Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
@@ -276,29 +216,74 @@ $("btnCamara").addEventListener("click", async ()=>{
     experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false
   });
   try{
-    await escaner.start({facingMode:"environment"}, {fps:10, qrbox:{width:280,height:120}},
-      txt=>{
-        const ahora = Date.now();
-        if(txt === ultimoLeido && ahora - ultimoTiempo < 3000) return; // evita repetir
-        ultimoLeido = txt; ultimoTiempo = ahora;
+    await escaner.start({facingMode:"environment"},
+      {fps:12, qrbox:(w,h)=>({width:Math.floor(w*.8), height:Math.floor(h*.45)})},
+      async codigo=>{
+        if(!escaner) return;
         if(navigator.vibrate) navigator.vibrate(80);
-        mostrar(txt);
+        await cerrarCamara();
+        mostrar(codigo);
       }, ()=>{});
   }catch(err){
-    escaner = null; cont.hidden = true; $("btnCamara").textContent = "Escanear con cámara";
-    alert("No se pudo abrir la cámara. Revise que la página esté en https y que tenga permiso de cámara.");
+    await cerrarCamara();
+    mostrarError("No se pudo abrir la cámara", "Revise el permiso de cámara del navegador");
   }
-});
+}
+async function cerrarCamara(){
+  clearInterval(tCuenta);
+  const e = escaner; escaner = null;
+  if(e){ try{ await e.stop(); }catch(x){} try{ e.clear(); }catch(x){} }
+  ocupado = false;
+}
 
-/* ---- Digitar código ---- */
-$("btnManual").addEventListener("click", ()=>{
-  const v = prompt("Código de barras o código interno (4 dígitos):");
-  if(v) mostrar(v.trim());
-});
+/* ---------- Pantallas ---------- */
+function inicio(){ clearTimeout(tResultado); ir("inicio"); }
 
-/* ---- Configuración oculta: 5 toques en el logo ---- */
+function pintarEtiqueta(html, error){
+  const div = document.createElement("div");
+  div.className = "etiqueta" + (error ? " error" : "");
+  div.innerHTML = html;
+  const barra = document.createElement("div");
+  barra.className = "barra";
+  barra.style.animation = `baja ${SEGUNDOS_RESULTADO}s linear forwards`;
+  $("resultado").replaceChildren(div, barra);
+  ir("resultado");
+  clearTimeout(tResultado);
+  tResultado = setTimeout(inicio, SEGUNDOS_RESULTADO*1000);
+  return div;
+}
+function mostrar(codigo){
+  const it = buscar(codigo);
+  if(!it) return mostrarError("Producto no encontrado", "Pregunte en caja");
+  const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>`);
+  div.querySelector(".nombre").textContent = it.n;
+}
+function mostrarError(titulo, texto){
+  const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"></div>`, true);
+  div.querySelector(".nombre").textContent = titulo;
+  div.querySelector(".precio").textContent = texto;
+}
+
+/* ---------- Eventos ---------- */
+$("btnEscanear").addEventListener("click", e=>{ e.stopPropagation(); abrirCamara(); });
+$("inicio").addEventListener("click", abrirCamara);
+$("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(inicio));
+$("resultado").addEventListener("click", ()=>{ inicio(); });
+
+// Lector físico: escribe el código y envía Enter
+entrada.addEventListener("keydown", async e=>{
+  if(e.key !== "Enter") return;
+  const v = entrada.value.trim(); entrada.value = "";
+  if(!v) return;
+  if(escaner) await cerrarCamara();
+  mostrar(v);
+});
+setInterval(()=>{ if(document.activeElement !== entrada) entrada.focus({preventScroll:true}); }, 1000);
+
+// Configuración oculta: 5 toques en el logo
 let toques = 0, tToques;
-$("marca").addEventListener("click", ()=>{
+$("marca").addEventListener("click", e=>{
+  e.stopPropagation();
   toques++; clearTimeout(tToques); tToques = setTimeout(()=>toques=0, 1500);
   if(toques >= 5){
     toques = 0;
@@ -307,11 +292,12 @@ $("marca").addEventListener("click", ()=>{
   }
 });
 
-/* ---- Inicio ---- */
-pantallaEspera();
+// Si el celular se bloquea o cambia de app, apaga la cámara
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden && escaner) cerrarCamara().then(inicio); });
+
+/* ---------- Arranque ---------- */
 descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
-mantenerFoco();
 </script>
 </body>
 </html>
