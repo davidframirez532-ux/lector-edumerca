@@ -221,7 +221,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxcb8Qzap4j-eQwQAgy2tuVdKf4rtoW4qIPDD_g59gBYGG0zXaAax9aVTS6TnZiQqDt/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycby4fJMxpy5woXq3AEI_kdakNoDyuS3KRT3cwJWP3qlAzVdgvwHau5j7mPqP2--CvdTv/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -256,7 +256,7 @@ function apiUrl(){
   return q || (g !== null ? g : API_URL_DEFECTO);
 }
 function cargarEnMapa(lista){
-  catalogo = new Map(); productos = []; sinCodigo = [];
+  catalogo = new Map(); productos = []; sinCodigo = new Set();
   for(const it of lista){
     if(!it.nombre || it.precio === "" || isNaN(Number(it.precio))) continue;
     const barras = String(it.barras||"").split(/[,;\s]+/).filter(Boolean);
