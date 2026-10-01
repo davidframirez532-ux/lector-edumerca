@@ -223,8 +223,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v10 · 30-sep-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxnBOgTuGFoBMlwOB4EfVHTS6g_V5Y-nFKr2UiBntSDdeI1O8-3wT37j7BNZixV8nub/exec";
+const VERSION = "v13 · 30-sep-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbx5ObBA6EwWNXp3ZN5UH-D2KHEjdMDSm74hht965e_HFn_sVISp5pqfJb5F13zGuPub/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -299,6 +299,7 @@ async function descargarCatalogo(){
     if(d.error) throw new Error(d.error);
     if(!Array.isArray(d.productos) || !d.productos.length) throw new Error("vacío");
     cargarEnMapa(d.productos);
+    if(d.actualizado) guardar("csv_fecha", d.actualizado);
     guardar("catalogo", JSON.stringify(d.productos));
     guardar("catalogo_fecha", new Date().toISOString());
     estado.textContent = `${d.productos.length} productos`;
@@ -386,7 +387,7 @@ function volverDeResultado(){
 function mostrarItem(it, volverA, codigoUsado){
   const div = pintarEtiqueta(
     `<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>` +
-    (it.q !== null ? `<p class="cant">En Siigo: <b>${num(it.q)}</b></p>` : "") +
+    `<p class="cant">En Siigo: <b>${it.q === null ? "sin dato" : num(it.q)}</b></p>` +
     `<p class="cod-chico"></p>`, false, volverA);
   div.querySelector(".nombre").textContent = it.n;
   div.querySelector(".cod-chico").textContent = "Código " + (codigoUsado || it.b || it.c);
@@ -450,7 +451,13 @@ function abrirLista(limpiar = true){
   if(limpiar){ $("buscador").value = ""; categoria = ""; soloSinCodigo = false; }
   pintarChips(); pintarLista(); ir("lista"); tocarLista();
 }
-function tocarLista(){ clearTimeout(tLista); tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000); }
+function tocarLista(){
+  clearTimeout(tLista);
+  const act = document.querySelector(".pantalla.activa");
+  // durante el conteo físico la app NO vuelve sola al inicio
+  if(act && ["conteo","conteoItem"].includes(act.id)) return;
+  tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
+}
 
 /* ---------- Conteo físico ---------- */
 function cargarConteo(){
@@ -639,6 +646,49 @@ $("cantidadReal").addEventListener("keydown", e=>{
   if(e.key === "Enter"){ e.preventDefault(); if(guardarItemConteo()) abrirCamara("conteo"); }
 });
 
+$("btnActualizarSiigo").addEventListener("click", async ()=>{
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  const btn = $("btnActualizarSiigo"), msg = $("msgAjustes");
+  const antes = leer("csv_fecha") || "";
+  btn.disabled = true;
+  const t0 = Date.now();
+  const reloj = setInterval(()=>{
+    btn.textContent = `Actualizando… ${Math.round((Date.now()-t0)/1000)}s`;
+  }, 1000);
+  btn.textContent = "Actualizando… 0s";
+  msg.textContent = "Trae el inventario de Siigo. Puede tardar varios minutos, no cierres la app.";
+
+  // Se dispara la orden sin esperar respuesta (el proceso es largo)
+  fetch(url, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body: JSON.stringify({accion:"actualizar"})}).catch(()=>{});
+
+  // Y se revisa cada 15 segundos si el CSV ya cambió
+  let listo = false;
+  for(let i = 0; i < 32 && !listo; i++){
+    await new Promise(ok=>setTimeout(ok, 15000));
+    try{
+      const d = await pedirPrecios(url);
+      if(d.actualizado && d.actualizado !== antes){
+        guardar("csv_fecha", d.actualizado);
+        if(Array.isArray(d.productos) && d.productos.length){
+          cargarEnMapa(d.productos);
+          guardar("catalogo", JSON.stringify(d.productos));
+          guardar("catalogo_fecha", new Date().toISOString());
+          estado.textContent = `${d.productos.length} productos`;
+        }
+        listo = true;
+      }
+    }catch(e){ /* mientras corre, el script puede no responder */ }
+  }
+  clearInterval(reloj);
+  btn.disabled = false; btn.textContent = "Actualizar inventario desde Siigo";
+  msg.textContent = listo
+    ? `Listo · ${productos.length} productos actualizados`
+    : "No se confirmó la actualización. Revisa Ejecuciones en Apps Script.";
+});
+
+
 // Lector físico Bluetooth/USB
 entrada.addEventListener("keydown", async e=>{
   if(e.key !== "Enter") return;
@@ -686,34 +736,11 @@ $("btnCambiarUrl").addEventListener("click", ()=>{
   const u = prompt("URL de la web app de precios:", apiUrl());
   if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
 });
-$("btnActualizarSiigo").addEventListener("click", async ()=>{
-  const url = apiUrl();
-  if(!url) return alert("Falta configurar la URL de Apps Script.");
-  const btn = $("btnActualizarSiigo"), msg = $("msgAjustes");
-  btn.disabled = true;
-  const t0 = Date.now();
-  const reloj = setInterval(()=>{
-    const s = Math.round((Date.now()-t0)/1000);
-    btn.textContent = `Actualizando… ${s}s`;
-  }, 1000);
-  btn.textContent = "Actualizando… 0s";
-  msg.textContent = "Trae el inventario de Siigo. Puede tardar 1 a 3 minutos, no cierres la app.";
-  try{
-    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({accion:"actualizar"})});
-    const d = await r.json();
-    if(!d.ok) throw new Error(d.error || "error");
-    await descargarCatalogo();
-    msg.textContent = `Listo · ${productos.length} productos actualizados`;
-  }catch(e){
-    msg.textContent = "No se pudo actualizar: " + e.message;
-  }finally{
-    clearInterval(reloj);
-    btn.disabled = false; btn.textContent = "Actualizar inventario desde Siigo";
-  }
-});
 document.addEventListener("visibilitychange", ()=>{
-  if(document.hidden && escaner) cerrarCamara().then(inicio);
+  if(document.hidden && escaner){
+    const enConteo = modoCamara === "conteo";
+    cerrarCamara().then(()=> enConteo ? abrirConteo() : inicio());
+  }
   if(!document.hidden && Date.now() - new Date(leer("catalogo_fecha")||0) > 10*60*1000) descargarCatalogo();
 });
 window.addEventListener("online", descargarCatalogo);
