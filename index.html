@@ -192,20 +192,35 @@
 <section class="pantalla" id="conteo">
   <div class="cabeza"><h2>Conteo físico</h2><button class="sec" id="btnVolverConteo">Volver</button></div>
   <div class="resumen">
-    <div class="caja"><b id="cnTotal">0</b><span>contados</span></div>
+    <div class="caja"><b id="cnHoy">0</b><span>contados hoy</span></div>
     <div class="caja"><b id="cnDif">0</b><span>con diferencia</span></div>
+    <div class="caja"><b id="cnAvance">0%</b><span>del catálogo</span></div>
   </div>
   <div class="acciones">
     <button class="ppal" id="btnConteoEscanear">Escanear</button>
     <button class="sec" id="btnConteoDigitar">Digitar</button>
+    <button class="sec" id="btnPendientes">Pendientes</button>
+    <button class="sec" id="btnAjustar">Ajustar en Siigo</button>
   </div>
+  <p id="cnEstado" style="margin:0;font-size:.85rem;opacity:.7;text-align:center"></p>
   <div class="items" id="conteoItems"></div>
   <div class="acciones">
     <button class="sec chico" id="btnConteoCompartir">Compartir CSV</button>
     <button class="sec chico" id="btnConteoTxt">Compartir TXT</button>
     <button class="sec chico" id="btnConteoExportar">Descargar</button>
-    <button class="sec chico" id="btnConteoDrive">Guardar en Drive</button>
-    <button class="sec chico" id="btnConteoBorrar">Borrar todo</button>
+    <button class="sec chico" id="btnConteoBorrar">Limpiar pantalla</button>
+  </div>
+</section>
+
+<!-- ============ PENDIENTES DE AJUSTAR EN SIIGO ============ -->
+<section class="pantalla" id="ajustar">
+  <div class="cabeza"><h2>Ajustar en Siigo</h2><button class="sec" id="btnVolverAjustar">Volver</button></div>
+  <p id="ajEstado" style="margin:0;opacity:.8;font-size:.95rem"></p>
+  <div class="items" id="ajItems"></div>
+  <div class="acciones">
+    <button class="ppal chico" id="btnPlantilla" style="flex:2">Generar plantilla Siigo</button>
+    <button class="sec chico" id="btnAjCompartir">Compartir lista</button>
+    <button class="ppal" id="btnAjMarcar" style="flex:2;font-size:1.05rem;padding:14px">Marcar como ajustados</button>
   </div>
 </section>
 
@@ -223,21 +238,22 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v13 · 30-sep-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbx5ObBA6EwWNXp3ZN5UH-D2KHEjdMDSm74hht965e_HFn_sVISp5pqfJb5F13zGuPub/exec";
+const VERSION = "v18 · 1-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwhIxV-J5ecifBn5wv9W5ZDYs7q2U0m5owrfd5heml3XAV-H8muF30rYC7wdx3bGA6l/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
 const MAX_DIGITOS_CORTO = 5;
 const MINUTOS_REFRESCO = 30;
+const DIAS_PENDIENTE = 30;        // un producto se considera pendiente pasados estos días
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
 const estado = $("estado"), entrada = $("entrada");
-let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", soloSinCodigo = false;
+let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
 let escaner = null, modoCamara = "precio", pendiente = null;
 let tCuenta = null, tResultado = null, tLista = null, ocupado = false;
-let conteo = [];
+let conteo = [], cola = [], ultimos = {}, quien = "";
 
 const guardar=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const leer=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
@@ -247,8 +263,25 @@ const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f
 
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
-  const escribible = ["lista","conteoItem","ajustes"].includes(id);
+  const escribible = ["lista","conteoItem","ajustes","ajustar"].includes(id);
   if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
+}
+
+function hace(iso){
+  const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if(d <= 0) return "hoy";
+  if(d === 1) return "ayer";
+  if(d < 30) return `hace ${d} días`;
+  const m = Math.floor(d/30);
+  return m === 1 ? "hace 1 mes" : `hace ${m} meses`;
+}
+function ultimoDe(it){
+  return ultimos[it.c] || ultimos[it.b] || null;
+}
+function esPendiente(it){
+  const u = ultimoDe(it);
+  if(!u) return true;
+  return (Date.now() - new Date(u.f)) / 86400000 >= DIAS_PENDIENTE;
 }
 
 /* ---------- Precios ---------- */
@@ -316,6 +349,21 @@ async function descargarCatalogo(){
     setTimeout(descargarCatalogo, 2*60*1000);
   }finally{ descargando = false; }
 }
+async function cargarUltimos(){
+  const url = apiUrl();
+  if(!url) return;
+  try{
+    const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=conteos&t=" + Date.now());
+    const d = await r.json();
+    if(d.ok && d.conteos){
+      ultimos = d.conteos;
+      guardar("ultimos", JSON.stringify(ultimos));
+    }
+  }catch(e){
+    try{ ultimos = JSON.parse(leer("ultimos") || "{}"); }catch(x){ ultimos = {}; }
+  }
+}
+
 function buscar(c){
   c = String(c).trim();
   return catalogo.get(c.replace(/^0+/,"")) || catalogo.get("#"+c) || catalogo.get("#"+c.replace(/^0+/,""));
@@ -388,6 +436,7 @@ function mostrarItem(it, volverA, codigoUsado){
   const div = pintarEtiqueta(
     `<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>` +
     `<p class="cant">En Siigo: <b>${it.q === null ? "sin dato" : num(it.q)}</b></p>` +
+    (ultimoDe(it) ? `<p class="cod-chico">Contado ${hace(ultimoDe(it).f)} · ${num(ultimoDe(it).r)} und</p>` : "") +
     `<p class="cod-chico"></p>`, false, volverA);
   div.querySelector(".nombre").textContent = it.n;
   div.querySelector(".cod-chico").textContent = "Código " + (codigoUsado || it.b || it.c);
@@ -410,15 +459,27 @@ function mostrarError(titulo, texto, volverA){
 }
 
 /* ---------- Listas ---------- */
-function fuente(){ return soloSinCodigo ? productos.filter(i=>sinCodigo.has(i)) : productos; }
+function fuente(){
+  if(filtroExtra === "sin") return productos.filter(i=>sinCodigo.has(i));
+  if(filtroExtra === "pend") return productos.filter(esPendiente);
+  if(filtroExtra === "cont") return productos.filter(i=>!!ultimoDe(i));
+  return productos;
+}
 function pintarChips(){
   const cats = [...new Set(productos.map(i=>i.cat).filter(Boolean))].sort();
   if(categoria && !cats.includes(categoria)) categoria = "";
-  const sin = document.createElement("button");
-  sin.className = "chip"; sin.textContent = "Sin código de barras";
-  sin.setAttribute("aria-pressed", soloSinCodigo);
-  sin.onclick = ()=>{ soloSinCodigo = !soloSinCodigo; pintarChips(); pintarLista(); tocarLista(); };
-  $("chips").replaceChildren(sin, ...["", ...cats].map(c=>{
+const extras = [
+    {t:"Sin código de barras", k:"sin"},
+    {t:"Pendientes", k:"pend"},
+    {t:"Contados", k:"cont"}
+  ].map(x=>{
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = x.t;
+    b.setAttribute("aria-pressed", filtroExtra === x.k);
+    b.onclick = ()=>{ filtroExtra = filtroExtra === x.k ? "" : x.k; pintarChips(); pintarLista(); tocarLista(); };
+    return b;
+  });
+  $("chips").replaceChildren(...extras, ...["", ...cats].map(c=>{
     const b = document.createElement("button");
     b.className = "chip"; b.textContent = c ? c.toLowerCase() : "Todas";
     b.setAttribute("aria-pressed", c === categoria);
@@ -439,35 +500,81 @@ function pintarLista(){
   cont.replaceChildren(...res.map(i=>{
     const b = document.createElement("button");
     b.className = "item";
-    b.innerHTML = `<span class="cod"></span><span class="nom"></span><span class="pre">$${pesos(i.p)}</span>`;
+    const u = ultimoDe(i);
+    b.innerHTML = `<span class="cod"></span>
+      <span class="nom"><span class="t"></span><small></small></span>
+      <span class="pre">$${pesos(i.p)}</span>`;
     b.querySelector(".cod").textContent = i.c || i.b;
-    b.querySelector(".nom").textContent = i.n;
+    b.querySelector(".t").textContent = i.n;
+    b.querySelector("small").textContent = u ? `✓ contado ${hace(u.f)}` : "nunca contado";
     b.onclick = ()=>{ clearTimeout(tLista); mostrarItem(i, "lista"); };
     return b;
   }));
 }
 function abrirLista(limpiar = true){
   $("tituloLista").textContent = "Catálogo completo";
-  if(limpiar){ $("buscador").value = ""; categoria = ""; soloSinCodigo = false; }
+  if(limpiar){ $("buscador").value = ""; categoria = ""; filtroExtra = ""; }
   pintarChips(); pintarLista(); ir("lista"); tocarLista();
 }
 function tocarLista(){
   clearTimeout(tLista);
   const act = document.querySelector(".pantalla.activa");
   // durante el conteo físico la app NO vuelve sola al inicio
-  if(act && ["conteo","conteoItem"].includes(act.id)) return;
+  if(act && ["conteo","conteoItem","ajustar"].includes(act.id)) return;
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
 }
 
 /* ---------- Conteo físico ---------- */
 function cargarConteo(){
   try{ conteo = JSON.parse(leer("conteo") || "[]"); }catch(e){ conteo = []; }
+  try{ cola = JSON.parse(leer("cola") || "[]"); }catch(e){ cola = []; }
+  try{ ultimos = JSON.parse(leer("ultimos") || "{}"); }catch(e){ ultimos = {}; }
+  quien = leer("quien") || "";
 }
+function pedirQuien(){
+  if(quien) return quien;
+  const q = (prompt("¿Quién va a contar? (nombre corto, se guarda en este celular)") || "").trim();
+  if(q){ quien = q; guardar("quien", q); }
+  return quien;
+}
+/* Envía a Drive lo que haya en cola; si no hay internet, lo deja para después */
+let enviando = false;
+async function enviarCola(){
+  if(enviando || !cola.length) return;
+  const url = apiUrl();
+  if(!url) return;
+  enviando = true;
+  const lote = cola.slice();
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({quien, conteo: lote})});
+    const d = await r.json();
+    if(d.ok){
+      cola = cola.filter(l=>!lote.includes(l));
+      guardar("cola", JSON.stringify(cola));
+      lote.forEach(l=>{ ultimos[l.codigo] = {f:l.hora, r:l.real, s:l.siigo, q:l.quien}; });
+      guardar("ultimos", JSON.stringify(ultimos));
+    }
+  }catch(e){ /* se reintenta luego */ }
+  finally{ enviando = false; pintarConteo(); }
+}
+setInterval(enviarCola, 20000);
+window.addEventListener("online", enviarCola);
 function guardarConteo(){ guardar("conteo", JSON.stringify(conteo)); }
-function abrirConteo(){ clearTimeout(tLista); pintarConteo(); ir("conteo"); }
+function abrirConteo(){
+  clearTimeout(tLista); pedirQuien(); pintarConteo(); ir("conteo");
+  cargarUltimos().then(pintarConteo);
+}
 function pintarConteo(){
-  $("cnTotal").textContent = conteo.length;
+  $("cnHoy").textContent = conteo.length;
   $("cnDif").textContent = conteo.filter(c=>c.siigo !== null && c.real !== c.siigo).length;
+  const hechos = productos.filter(i=>!!ultimoDe(i)).length;
+  $("cnAvance").textContent = productos.length ? Math.round(hechos*100/productos.length) + "%" : "0%";
+  const porAj = porAjustar().length;
+  $("btnAjustar").textContent = porAj ? `Ajustar (${porAj})` : "Ajustar en Siigo";
+  $("cnEstado").textContent = cola.length
+    ? `${cola.length} sin enviar a Drive · se reintenta solo`
+    : (conteo.length ? "Todo guardado en Drive" : "");
   const cont = $("conteoItems");
   if(!conteo.length){
     cont.innerHTML = `<div class="vacio">Aún no has contado nada.<br>Toca Escanear y digita la cantidad real de cada producto.</div>`;
@@ -497,10 +604,12 @@ function pedirCantidad(codigo){
   pendiente = {codigo: cod, nombre: it ? it.n : "PRODUCTO NO REGISTRADO", precio: it ? it.p : "",
                siigo: it && it.q !== null ? it.q : null};
   const previo = conteo.find(c=>c.codigo === cod);
+  const ult = it ? ultimoDe(it) : ultimos[cod];
   $("fichaConteo").innerHTML =
     `<h3></h3><div class="meta"></div>
      <div class="siigo">${pendiente.siigo === null ? "?" : num(pendiente.siigo)}<span>cantidad en Siigo</span></div>` +
-    (previo ? `<div class="meta" style="margin-top:10px">Ya contado: ${num(previo.real)} · se reemplaza</div>` : "");
+    (previo ? `<div class="meta" style="margin-top:10px">Ya contado hoy: ${num(previo.real)} · se reemplaza</div>`
+     : ult ? `<div class="meta" style="margin-top:10px">Último conteo ${hace(ult.f)}: ${num(ult.r)} und</div>` : "");
   $("fichaConteo").querySelector("h3").textContent = pendiente.nombre;
   $("fichaConteo").querySelector(".meta").textContent =
     "Código " + cod + (pendiente.precio !== "" ? " · $" + pesos(pendiente.precio) : "");
@@ -511,9 +620,13 @@ function pedirCantidad(codigo){
 function guardarItemConteo(){
   const v = $("cantidadReal").value.replace(",",".").trim();
   if(v === "" || isNaN(Number(v))){ $("cantidadReal").focus(); return false; }
+  const linea = {...pendiente, real: Number(v), hora: new Date().toISOString(), quien};
   conteo = conteo.filter(c=>c.codigo !== pendiente.codigo);
-  conteo.push({...pendiente, real: Number(v), hora: new Date().toISOString()});
+  conteo.push(linea);
+  cola.push(linea);
+  guardar("cola", JSON.stringify(cola));
   guardarConteo();
+  enviarCola();
   $("cantidadReal").blur();
   return true;
 }
@@ -608,6 +721,118 @@ async function enviarConteo(){
   }finally{ btn.disabled = false; btn.textContent = "Guardar en Drive"; }
 }
 
+/* ---------- Pendientes de ajustar en Siigo ---------- */
+function porAjustar(){
+  return Object.entries(ultimos)
+    .filter(([cod,u]) => u.s !== null && u.s !== undefined && Number(u.r) !== Number(u.s) && !u.a)
+    .map(([cod,u]) => ({cod, ...u, dif: Number(u.r) - Number(u.s)}))
+    .sort((a,b)=> new Date(a.f) - new Date(b.f));
+}
+function abrirAjustar(){
+  clearTimeout(tLista);
+  pintarAjustar();
+  ir("ajustar");
+}
+function pintarAjustar(){
+  const lista = porAjustar();
+  $("ajEstado").textContent = lista.length
+    ? `${lista.length} productos con diferencia sin ajustar. Sube la DIFERENCIA a Siigo y luego márcalos.`
+    : "";
+  const cont = $("ajItems");
+  if(!lista.length){
+    cont.innerHTML = `<div class="vacio">No hay nada pendiente de ajustar.<br>Todas las diferencias contadas ya están aplicadas en Siigo.</div>`;
+    return;
+  }
+  cont.replaceChildren(...lista.map(l=>{
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<span class="cod"></span>
+      <span class="nom"><span class="t"></span><small></small></span>
+      <span class="pre"><span class="${l.dif>0?"mas":"menos"}">${l.dif>0?"+":""}${num(l.dif)}</span><small>dif.</small></span>`;
+    b.querySelector(".cod").textContent = l.cod;
+    b.querySelector(".t").textContent = l.n || (buscar(l.cod) ? buscar(l.cod).n : "");
+    b.querySelector("small").textContent = `Siigo ${num(l.s)} · contado ${num(l.r)} · ${hace(l.f)}`;
+    b.onclick = ()=>{
+      if(confirm(`¿Marcar SOLO este producto como ajustado en Siigo?\n\n${b.querySelector(".t").textContent}`))
+        marcarAjustados([l.cod]);
+    };
+    return b;
+  }));
+}
+let plantilla = null;   // última plantilla generada {csv, archivo, url, filas}
+async function generarPlantilla(){
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  if(!porAjustar().length) return alert("No hay nada pendiente de ajustar.");
+  const btn = $("btnPlantilla"); btn.disabled = true; btn.textContent = "Generando…";
+  $("ajEstado").textContent = "Calculando con las cantidades actuales de Siigo…";
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({accion:"plantilla", quien})});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error || "error");
+    if(!d.filas) { $("ajEstado").textContent = "No hubo diferencias para incluir."; return; }
+    plantilla = d;
+    $("ajEstado").innerHTML = `Plantilla lista: <b>${d.filas} productos</b> · guardada en Drive como ${d.archivo}. ` +
+      `Impórtala en Siigo y vuelve a marcar como ajustados.`;
+    const acciones = document.createElement("div");
+    acciones.className = "acciones";
+    acciones.style.marginTop = "6px";
+    acciones.innerHTML = `<button class="sec chico" id="btnPlantAbrir">Abrir en Drive</button>
+      <button class="sec chico" id="btnPlantCompartir">Compartir</button>
+      <button class="sec chico" id="btnPlantDescargar">Descargar CSV</button>`;
+    $("ajEstado").after(acciones);
+    $("btnPlantAbrir").onclick = ()=>window.open(d.url, "_blank");
+    $("btnPlantCompartir").onclick = async ()=>{
+      if(!await compartirArchivo(d.csv, d.archivo.replace(".xlsx",".csv"), "text/csv"))
+        alert("Este celular no deja compartir archivos. Usa Abrir en Drive.");
+    };
+    $("btnPlantDescargar").onclick = ()=>{
+      const b = new Blob([d.csv], {type:"text/csv;charset=utf-8"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b); a.download = d.archivo.replace(".xlsx",".csv");
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    };
+  }catch(e){
+    $("ajEstado").textContent = "No se pudo generar: " + e.message;
+  }finally{ btn.disabled = false; btn.textContent = "Generar plantilla Siigo"; }
+}
+
+async function marcarAjustados(codigos){
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  const btn = $("btnAjMarcar"); btn.disabled = true; const txt = btn.textContent;
+  btn.textContent = "Marcando…";
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({accion:"ajustados", quien, codigos})});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error || "error");
+    codigos.forEach(c=>{ if(ultimos[c]) ultimos[c].a = new Date().toISOString(); });
+    guardar("ultimos", JSON.stringify(ultimos));
+    pintarAjustar(); pintarConteo();
+  }catch(e){
+    alert("No se pudo marcar: " + e.message);
+  }finally{ btn.disabled = false; btn.textContent = txt; }
+}
+function textoAjustes(){
+  const lista = porAjustar();
+  const lin = ["AJUSTES PENDIENTES PARA SIIGO", new Date().toLocaleString("es-CO"), ""];
+  lista.forEach(l=>{
+    lin.push((l.n || "") );
+    lin.push("  cod " + l.cod + "   Siigo " + num(l.s) + "  contado " + num(l.r) +
+             "   AJUSTE " + (l.dif > 0 ? "+" : "") + num(l.dif));
+    lin.push("");
+  });
+  return lin.join("\n");
+}
+function csvAjustes(){
+  const esc = t => `"${String(t??"").replace(/"/g,'""')}"`;
+  return "\uFEFF" + ["CODIGO,DESCRIPCION,CTD_SIIGO,CTD_REAL,AJUSTE",
+    ...porAjustar().map(l=>[esc(l.cod), esc(l.n||""), l.s, l.r, l.dif].join(","))].join("\r\n");
+}
+
 /* ---------- Eventos ---------- */
 $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
 $("btnInventario").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
@@ -633,11 +858,29 @@ $("btnConteoDigitar").addEventListener("click", ()=>{
 $("btnConteoCompartir").addEventListener("click", compartirConteo);
 $("btnConteoTxt").addEventListener("click", compartirTxt);
 $("btnConteoExportar").addEventListener("click", descargarConteo);
-$("btnConteoDrive").addEventListener("click", enviarConteo);
 $("btnConteoBorrar").addEventListener("click", ()=>{
-  if(conteo.length && confirm(`¿Borrar los ${conteo.length} productos contados?`)){
+  if(cola.length) return alert(`Faltan ${cola.length} por enviar a Drive. Espera a que diga "Todo guardado".`);
+  if(conteo.length && confirm("¿Limpiar la pantalla? Lo contado ya está guardado en Drive.")){
     conteo = []; guardarConteo(); pintarConteo();
   }
+});
+$("btnAjustar").addEventListener("click", abrirAjustar);
+$("btnPlantilla").addEventListener("click", generarPlantilla);
+$("btnVolverAjustar").addEventListener("click", abrirConteo);
+$("btnAjMarcar").addEventListener("click", ()=>{
+  const lista = porAjustar();
+  if(!lista.length) return alert("No hay nada pendiente.");
+  if(confirm(`¿Ya subiste estas ${lista.length} diferencias a Siigo?\n\nSe marcarán como ajustadas y dejarán de aparecer.`))
+    marcarAjustados(lista.map(l=>l.cod));
+});
+$("btnAjCompartir").addEventListener("click", async ()=>{
+  if(!porAjustar().length) return alert("No hay nada pendiente.");
+  const f = new Date().toISOString().slice(0,10);
+  if(await compartirArchivo(csvAjustes(), `ajustes_siigo_${f}.csv`, "text/csv")) return;
+  try{ await navigator.share({title:"Ajustes para Siigo", text: textoAjustes()}); }catch(e){}
+});
+$("btnPendientes").addEventListener("click", ()=>{
+  abrirLista(); filtroExtra = "pend"; pintarChips(); pintarLista();
 });
 $("btnGuardarConteo").addEventListener("click", ()=>{ if(guardarItemConteo()) abrirCamara("conteo"); });
 $("btnGuardarCerrar").addEventListener("click", ()=>{ if(guardarItemConteo()) abrirConteo(); });
@@ -660,8 +903,8 @@ $("btnActualizarSiigo").addEventListener("click", async ()=>{
   msg.textContent = "Trae el inventario de Siigo. Puede tardar varios minutos, no cierres la app.";
 
   // Se dispara la orden sin esperar respuesta (el proceso es largo)
-  fetch(url, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body: JSON.stringify({accion:"actualizar"})}).catch(()=>{});
+  fetch(url + (url.includes("?")?"&":"?") + "accion=actualizar&t=" + Date.now(),
+    {mode:"no-cors", cache:"no-store"}).catch(()=>{});
 
   // Y se revisa cada 15 segundos si el CSV ya cambió
   let listo = false;
@@ -700,7 +943,7 @@ entrada.addEventListener("keydown", async e=>{
 });
 setInterval(()=>{
   const act = document.querySelector(".pantalla.activa");
-  if(act && !["lista","conteoItem","ajustes"].includes(act.id) && document.activeElement !== entrada)
+  if(act && !["lista","conteoItem","ajustes","ajustar"].includes(act.id) && document.activeElement !== entrada)
     entrada.focus({preventScroll:true});
 }, 1000);
 
