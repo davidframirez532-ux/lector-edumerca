@@ -183,6 +183,8 @@
     <button class="ppal" id="btnActualizarSiigo">Actualizar inventario desde Siigo</button>
     <p id="msgAjustes" style="margin:0;text-align:center;opacity:.8;min-height:1.4em"></p>
     <button class="ghost" id="btnCambiarUrl">Cambiar URL de Apps Script</button>
+    <p id="verApp" style="margin:0;text-align:center;opacity:.55;font-size:.9rem"></p>
+    <button class="sec" id="btnForzar">Forzar actualización de la app</button>
   </div>
 </section>
 
@@ -221,6 +223,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
+const VERSION = "v9 · 30-sep-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycby4fJMxpy5woXq3AEI_kdakNoDyuS3KRT3cwJWP3qlAzVdgvwHau5j7mPqP2--CvdTv/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -663,7 +666,22 @@ $("marca").addEventListener("click", async ()=>{
     ir("ajustes");
   }
 });
+$("verApp").textContent = "Versión " + VERSION;
 $("btnCerrarAjustes").addEventListener("click", inicio);
+$("btnForzar").addEventListener("click", async ()=>{
+  $("msgAjustes").textContent = "Buscando versión nueva…";
+  try{
+    if("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if(window.caches){
+      const ks = await caches.keys();
+      await Promise.all(ks.map(k=>caches.delete(k)));
+    }
+  }catch(e){}
+  location.reload(true);
+});
 $("btnCambiarUrl").addEventListener("click", ()=>{
   const u = prompt("URL de la web app de precios:", apiUrl());
   if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
