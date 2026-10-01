@@ -15,80 +15,78 @@
 <style>
   :root{
     --verde:#0f3d2e; --verde2:#16573f; --verde3:#1f6b4f; --amarillo:#ffd23f;
-    --papel:#fbfaf5; --tinta:#1b1b1b; --gris:#6b7069; --rojo:#c0392b;
+    --papel:#fbfaf5; --tinta:#1b1b1b; --gris:#6b7069; --rojo:#c0392b; --azul:#2d8fd5;
     box-sizing:border-box;
   }
   *,*::before,*::after{box-sizing:inherit}
   html,body{height:100%;margin:0}
-  body{
-    background:var(--verde); color:var(--papel);
-    font-family:"Barlow",system-ui,sans-serif;
-    overflow:hidden; -webkit-user-select:none; user-select:none;
-    -webkit-tap-highlight-color:transparent;
-  }
+  body{background:var(--verde);color:var(--papel);font-family:"Barlow",system-ui,sans-serif;
+    overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   button{font-family:inherit}
-  .pantalla{position:fixed;inset:0;display:none;flex-direction:column;
+  .pantalla{position:fixed;inset:0;display:none;flex-direction:column;gap:12px;
     padding:calc(env(safe-area-inset-top,0px) + 56px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
   .pantalla.activa{display:flex}
-
   .marca{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:20px;
     font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;z-index:5}
   .estado{position:fixed;top:calc(env(safe-area-inset-top,0px) + 17px);right:20px;font-size:.8rem;opacity:.6;z-index:5}
 
-  /* ---------- Inicio ---------- */
-  #inicio{align-items:center;justify-content:center;gap:28px}
-  .boton-grande{
-    display:flex;flex-direction:column;align-items:center;gap:18px;width:min(88vw,460px);
-    background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;
-    padding:clamp(28px,6vh,56px) 24px;cursor:pointer;box-shadow:0 12px 0 var(--verde2);
-    animation:latido 2.2s ease-in-out infinite;
-  }
-  .boton-grande svg{width:clamp(80px,14vh,130px);height:auto}
-  .boton-grande span{font-family:"Barlow Condensed",sans-serif;font-weight:800;
-    font-size:clamp(2.8rem,8vh,4.6rem);line-height:.95;text-align:center}
-  .boton-lista{
-    width:min(88vw,460px);background:transparent;color:var(--papel);
-    border:2px solid rgba(251,250,245,.45);border-radius:12px;padding:16px 20px;
-    font-size:clamp(1.1rem,2.6vh,1.35rem);font-weight:600;cursor:pointer;
-  }
+  .cabeza{display:flex;align-items:center;gap:10px;flex:none}
+  .cabeza h2{margin:0;flex:1;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.8rem;line-height:1}
+  .sec{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;font-size:1.05rem;
+    font-weight:600;padding:12px 20px;cursor:pointer}
+  .sec.chico{padding:9px 14px;font-size:.95rem}
+  .ppal{background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;padding:16px;
+    font-size:1.25rem;font-weight:600;cursor:pointer}
+  .ghost{background:transparent;color:var(--papel);border:2px solid rgba(251,250,245,.45);
+    border-radius:12px;padding:16px;font-size:1.15rem;font-weight:600;cursor:pointer}
   button:focus-visible,input:focus-visible{outline:3px solid var(--amarillo);outline-offset:3px}
+
+  /* Inicio */
+  #inicio{align-items:center;justify-content:center;gap:24px}
+  .boton-grande{display:flex;flex-direction:column;align-items:center;gap:16px;width:min(88vw,460px);
+    background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;
+    padding:clamp(26px,5vh,52px) 24px;cursor:pointer;box-shadow:0 12px 0 var(--verde2);
+    animation:latido 2.2s ease-in-out infinite}
+  .boton-grande svg{width:clamp(76px,13vh,124px);height:auto}
+  .boton-grande span{font-family:"Barlow Condensed",sans-serif;font-weight:800;
+    font-size:clamp(2.6rem,7.5vh,4.4rem);line-height:.95;text-align:center}
+  #btnInventario{width:min(88vw,460px)}
   @keyframes latido{50%{transform:scale(1.03)}}
 
-  /* ---------- Cámara ---------- */
-  #escaneo{align-items:center;justify-content:center;gap:22px;text-align:center}
-  #camara{background:#000;border-radius:12px;overflow:hidden;width:min(92vw,58vh);aspect-ratio:3/4}
+  /* Cámara */
+  #escaneo{align-items:center;justify-content:center;text-align:center}
+  #camara{background:#000;border-radius:12px;overflow:hidden;width:min(92vw,54vh);aspect-ratio:3/4}
   #camara video{width:100%!important;height:100%!important;object-fit:cover}
-  #escaneo p{margin:0;font-size:clamp(1.1rem,2.6vh,1.4rem)}
-  .fila-cuenta{display:flex;align-items:center;gap:22px}
-  .cuenta{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(2.6rem,7vh,4rem);
-    color:var(--amarillo);line-height:1;min-width:2ch}
-  .sec{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;
-    font-size:1.1rem;font-weight:600;padding:12px 24px;cursor:pointer}
+  #escaneo p{margin:0;font-size:1.1rem}
+  .fila{display:flex;align-items:center;gap:18px;justify-content:center;flex-wrap:wrap}
+  .cuenta{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:2.6rem;color:var(--amarillo);min-width:2ch}
 
-  /* ---------- Resultado ---------- */
+  /* Resultado */
   #resultado{align-items:center;justify-content:center}
-  .etiqueta{
-    background:var(--papel);color:var(--tinta);border-radius:12px;width:min(92vw,560px);
-    padding:clamp(24px,5vh,44px) 24px;text-align:center;
-    box-shadow:0 14px 0 var(--amarillo);animation:entra .25s ease-out;
-  }
-  .etiqueta .nombre{margin:0 0 18px;font-weight:600;text-transform:uppercase;
-    font-size:clamp(1.6rem,4.6vh,2.6rem);line-height:1.1;overflow-wrap:anywhere}
+  .etiqueta{background:var(--papel);color:var(--tinta);border-radius:12px;width:min(92vw,560px);
+    padding:clamp(22px,4.5vh,40px) 24px;text-align:center;box-shadow:0 14px 0 var(--amarillo);
+    animation:entra .25s ease-out}
+  .etiqueta .nombre{margin:0 0 16px;font-weight:600;text-transform:uppercase;
+    font-size:clamp(1.5rem,4.4vh,2.4rem);line-height:1.1;overflow-wrap:anywhere}
   .etiqueta .precio{font-family:"Barlow Condensed",sans-serif;font-weight:800;color:var(--verde);
-    font-size:clamp(4.5rem,24vw,10rem);line-height:.85;white-space:nowrap}
+    font-size:clamp(4rem,22vw,9rem);line-height:.85;white-space:nowrap}
   .etiqueta .precio small{font-size:.4em;vertical-align:top;margin-right:6px}
-  .etiqueta.error .precio{font-size:clamp(2rem,10vw,3.4rem);color:var(--rojo);white-space:normal}
+  .etiqueta .cant{margin:14px 0 0;font-size:1.15rem;color:var(--gris)}
+  .etiqueta .cant b{color:var(--tinta);font-size:1.5rem}
+  .etiqueta .cod-chico{margin:12px 0 0;font-size:.85rem;color:var(--gris);letter-spacing:.04em}
+  .etiqueta.error .precio{font-size:clamp(2rem,9vw,3rem);color:var(--rojo);white-space:normal}
+  .etiqueta.error .cod-grande{margin:16px 0 0;font-family:"Barlow Condensed",sans-serif;font-weight:800;
+    font-size:clamp(1.8rem,8vw,2.6rem);color:var(--tinta);letter-spacing:.05em;overflow-wrap:anywhere}
   .barra{position:fixed;left:0;bottom:0;height:6px;background:var(--amarillo)}
   @keyframes entra{from{transform:scale(.96);opacity:0}}
   @keyframes baja{from{width:100%}to{width:0}}
 
-  /* ---------- Lista sin código de barras ---------- */
-  #lista{gap:12px}
-  .cabeza{display:flex;align-items:center;gap:10px}
-  .cabeza h2{margin:0;flex:1;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.8rem;line-height:1}
+  /* Listas */
   .buscador{width:100%;border:0;border-radius:10px;padding:14px 16px;font:500 1.15rem "Barlow",sans-serif;
-    background:var(--papel);color:var(--tinta);-webkit-user-select:text;user-select:text}
-  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;flex:none}
+    background:var(--papel);color:var(--tinta);-webkit-user-select:text;user-select:text;flex:none}
+  .codigo-manual{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:2.2rem;
+    letter-spacing:.04em;text-align:center}
+  .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;flex:none}
   .chips::-webkit-scrollbar{display:none}
   .chip{flex:none;border:1.5px solid rgba(251,250,245,.4);background:transparent;color:var(--papel);
     border-radius:999px;padding:8px 14px;font-size:.95rem;font-weight:600;cursor:pointer;text-transform:capitalize}
@@ -96,18 +94,32 @@
   .items{flex:1;overflow-y:auto;margin:0 -20px;padding:0 20px;-webkit-overflow-scrolling:touch}
   .item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;width:100%;
     background:transparent;border:0;border-bottom:1px solid rgba(251,250,245,.14);color:var(--papel);
-    padding:14px 2px;text-align:left;cursor:pointer}
-  .item .cod{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:1.05rem;
-    background:var(--verde3);border-radius:6px;padding:4px 8px;min-width:3.6em;text-align:center}
-  .item .nom{font-size:1.05rem;font-weight:600;line-height:1.2;text-transform:uppercase}
-  .item .pre{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;color:var(--amarillo);white-space:nowrap}
-  #digitar{gap:16px}
-  .ayuda{margin:4px 0 0;opacity:.8;font-size:1.05rem}
-  .codigo-manual{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:2.2rem;letter-spacing:.04em;text-align:center}
-  .boton-buscar{background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;
-    padding:18px;font-size:1.4rem;font-weight:600;cursor:pointer}
-  .vacio{opacity:.7;text-align:center;padding:32px 0;font-size:1.1rem}
+    padding:13px 2px;text-align:left;cursor:pointer}
+  .item .cod{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:1rem;
+    background:var(--verde3);border-radius:6px;padding:4px 7px;min-width:3.4em;text-align:center}
+  .item .nom{font-size:1.02rem;font-weight:600;line-height:1.2;text-transform:uppercase}
+  .item .nom small{display:block;font-size:.82rem;font-weight:500;opacity:.65;text-transform:none}
+  .item .pre{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.45rem;
+    color:var(--amarillo);white-space:nowrap;text-align:right}
+  .item .pre small{display:block;font-family:"Barlow",sans-serif;font-weight:600;font-size:.8rem;color:var(--papel);opacity:.7}
+  .item .pre .mas{color:var(--azul)} .item .pre .menos{color:var(--rojo)}
+  .vacio{opacity:.7;text-align:center;padding:30px 10px;font-size:1.05rem;line-height:1.5}
+  .menu{display:flex;flex-direction:column;gap:14px;justify-content:center;flex:1}
 
+  /* Conteo */
+  .resumen{display:flex;gap:10px;flex:none}
+  .caja{flex:1;background:var(--verde2);border-radius:10px;padding:10px;text-align:center}
+  .caja b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:1.7rem;line-height:1}
+  .caja span{font-size:.78rem;opacity:.8}
+  #conteoItem{justify-content:center;gap:16px}
+  .ficha{background:var(--papel);color:var(--tinta);border-radius:12px;padding:20px;text-align:center}
+  .ficha h3{margin:0 0 6px;font-size:1.3rem;text-transform:uppercase;line-height:1.15}
+  .ficha .meta{color:var(--gris);font-size:.9rem}
+  .ficha .siigo{margin-top:12px;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:3.2rem;
+    color:var(--verde);line-height:1}
+  .ficha .siigo span{display:block;font-family:"Barlow",sans-serif;font-size:.85rem;font-weight:600;color:var(--gris)}
+  .acciones{display:flex;gap:10px}
+  .acciones>*{flex:1}
   @media (prefers-reduced-motion:reduce){.boton-grande,.etiqueta{animation:none}}
   #entrada{position:absolute;left:-9999px;opacity:0}
 </style>
@@ -116,6 +128,7 @@
 <div class="marca" id="marca">EDUMERCA</div>
 <div class="estado" id="estado">Cargando precios…</div>
 
+<!-- ============ INICIO ============ -->
 <section class="pantalla activa" id="inicio">
   <button class="boton-grande" id="btnEscanear">
     <svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true">
@@ -126,68 +139,122 @@
     </svg>
     <span>ESCANEA TU<br>PRODUCTO</span>
   </button>
-  <button class="boton-lista" id="btnLista">Productos sin código de barras</button>
+  <button class="ghost" id="btnInventario">ENTRA AL INVENTARIO</button>
 </section>
 
+<!-- ============ CÁMARA ============ -->
 <section class="pantalla" id="escaneo">
-  <div id="camara"></div>
-  <p>Pon el código de barras frente a la cámara</p>
-  <div class="fila-cuenta">
-    <div class="cuenta" id="cuenta">30</div>
-    <button class="sec" id="btnCancelar">Cancelar</button>
+  <div class="cabeza"><h2 id="tituloEscaneo">Escanea el producto</h2></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+    <div id="camara"></div>
+    <p>Pon el código de barras frente a la cámara</p>
+    <div class="fila">
+      <div class="cuenta" id="cuenta">30</div>
+      <button class="sec" id="btnDigitarEsc">Digitar código</button>
+      <button class="sec" id="btnCancelar">Cancelar</button>
+    </div>
   </div>
 </section>
 
+<!-- ============ RESULTADO ============ -->
 <section class="pantalla" id="resultado"></section>
 
-<section class="pantalla" id="digitar">
-  <div class="cabeza">
-    <h2>Digitar código</h2>
-    <button class="sec" id="btnVolverDigitar">Volver</button>
+<!-- ============ MENÚ INVENTARIO ============ -->
+<section class="pantalla" id="inventario">
+  <div class="cabeza"><h2>Inventario</h2><button class="sec" id="btnSalirInv">Salir</button></div>
+  <div class="menu">
+    <button class="ppal" id="btnCatalogo">Catálogo completo</button>
+    <button class="ghost" id="btnSinCodigo">Productos sin código de barras</button>
+    <button class="ghost" id="btnDigitarInv">Digitar código</button>
+    <button class="ppal" id="btnConteo">Conteo físico</button>
   </div>
-  <p class="ayuda">Escribe el código de barras o el código del producto</p>
-  <input class="buscador codigo-manual" id="codigoManual" type="text" inputmode="numeric" pattern="[0-9]*"
-    placeholder="Ej: 7702032110278" autocomplete="off" enterkeyhint="search">
-  <button class="boton-buscar" id="btnBuscarCodigo">Buscar precio</button>
 </section>
 
+<!-- ============ LISTA (catálogo / sin código) ============ -->
 <section class="pantalla" id="lista">
-  <div class="cabeza">
-    <h2>Sin código de barras</h2>
-    <button class="sec" id="btnVolver">Volver</button>
-  </div>
-  <button class="boton-lista" id="btnDigitar" style="width:100%">Digitar código manualmente</button>
+  <div class="cabeza"><h2 id="tituloLista">Catálogo</h2><button class="sec" id="btnVolverLista">Volver</button></div>
   <input class="buscador" id="buscador" type="search" placeholder="Buscar por nombre o código" autocomplete="off" enterkeyhint="search">
   <div class="chips" id="chips"></div>
   <div class="items" id="items"></div>
 </section>
 
-<!-- Lector físico Bluetooth/USB, por si se conecta uno (no se ve) -->
+<!-- ============ DIGITAR CÓDIGO ============ -->
+<section class="pantalla" id="digitar">
+  <div class="cabeza"><h2>Digitar código</h2><button class="sec" id="btnVolverDigitar">Volver</button></div>
+  <p style="margin:0;opacity:.8">Escribe el código de barras o el código del producto</p>
+  <input class="buscador codigo-manual" id="codigoManual" type="text" inputmode="numeric" pattern="[0-9]*"
+    placeholder="Ej: 7702032110278" autocomplete="off" enterkeyhint="search">
+  <button class="ppal" id="btnBuscarCodigo">Buscar</button>
+</section>
+
+<!-- ============ AJUSTES (5 toques en el logo) ============ -->
+<section class="pantalla" id="ajustes">
+  <div class="cabeza"><h2>Ajustes</h2><button class="sec" id="btnCerrarAjustes">Cerrar</button></div>
+  <div class="menu">
+    <button class="ppal" id="btnActualizarSiigo">Actualizar inventario desde Siigo</button>
+    <p id="msgAjustes" style="margin:0;text-align:center;opacity:.8;min-height:1.4em"></p>
+    <button class="ghost" id="btnCambiarUrl">Cambiar URL de Apps Script</button>
+  </div>
+</section>
+
+<!-- ============ CONTEO FÍSICO ============ -->
+<section class="pantalla" id="conteo">
+  <div class="cabeza"><h2>Conteo físico</h2><button class="sec" id="btnVolverConteo">Volver</button></div>
+  <div class="resumen">
+    <div class="caja"><b id="cnTotal">0</b><span>contados</span></div>
+    <div class="caja"><b id="cnDif">0</b><span>con diferencia</span></div>
+  </div>
+  <div class="acciones">
+    <button class="ppal" id="btnConteoEscanear">Escanear</button>
+    <button class="sec" id="btnConteoDigitar">Digitar</button>
+  </div>
+  <div class="items" id="conteoItems"></div>
+  <div class="acciones">
+    <button class="sec chico" id="btnConteoExportar">Descargar CSV</button>
+    <button class="sec chico" id="btnConteoDrive">Guardar en Drive</button>
+    <button class="sec chico" id="btnConteoBorrar">Borrar todo</button>
+  </div>
+</section>
+
+<!-- ============ INGRESAR CANTIDAD ============ -->
+<section class="pantalla" id="conteoItem">
+  <div class="cabeza"><h2>Cantidad contada</h2><button class="sec" id="btnCancelarItem">Cancelar</button></div>
+  <div class="ficha" id="fichaConteo"></div>
+  <input class="buscador codigo-manual" id="cantidadReal" type="text" inputmode="decimal"
+    placeholder="0" autocomplete="off" enterkeyhint="done">
+  <button class="ppal" id="btnGuardarConteo">Guardar y escanear otro</button>
+  <button class="sec" id="btnGuardarCerrar">Guardar y terminar</button>
+</section>
+
 <input id="entrada" inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbz3szhpon8OQfnow67D7QhXtadcvl2X4Gm110wmroKCdeTYA_pCiFHr5NCEDnfI7WDy/exec";
-const SEGUNDOS_CAMARA = 30;       // tiempo máximo con la cámara abierta
-const SEGUNDOS_RESULTADO = 8;     // tiempo mostrando el precio
-const SEGUNDOS_LISTA = 60;        // sin tocar nada, la lista vuelve al inicio
-const MAX_DIGITOS_CORTO = 4;      // códigos de barras de hasta 4 dígitos (o vacíos) van a la lista
-const MINUTOS_REFRESCO = 30;      // cada cuánto se recargan los precios
+const SEGUNDOS_CAMARA = 30;
+const SEGUNDOS_RESULTADO = 8;
+const SEGUNDOS_LISTA = 90;
+const MAX_DIGITOS_CORTO = 4;
+const MINUTOS_REFRESCO = 30;
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
 const estado = $("estado"), entrada = $("entrada");
-let catalogo = new Map(), sinCodigo = [], categoria = "";
-let escaner = null, tCuenta = null, tResultado = null, tLista = null, ocupado = false;
+let catalogo = new Map(), productos = [], sinCodigo = [], categoria = "", modoLista = "todos";
+let escaner = null, modoCamara = "precio", pendiente = null;
+let tCuenta = null, tResultado = null, tLista = null, ocupado = false;
+let conteo = [];
 
 const guardar=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const leer=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const pesos=n=>Number(n).toLocaleString("es-CO",{maximumFractionDigits:0});
+const num=n=>Number(n).toLocaleString("es-CO",{maximumFractionDigits:2});
 const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
-  if(id !== "lista" && id !== "digitar") setTimeout(()=>entrada.focus({preventScroll:true}),50);
+  const escribible = ["lista","digitar","conteoItem","ajustes"].includes(id);
+  if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
 }
 
 /* ---------- Precios ---------- */
@@ -198,22 +265,24 @@ function apiUrl(){
   return q || (g !== null ? g : API_URL_DEFECTO);
 }
 function cargarEnMapa(lista){
-  catalogo = new Map(); sinCodigo = [];
+  catalogo = new Map(); productos = []; sinCodigo = [];
   for(const it of lista){
     if(!it.nombre || it.precio === "" || isNaN(Number(it.precio))) continue;
-    const item = {n:it.nombre, p:Number(it.precio), c:String(it.codigo||""), cat:it.categoria||""};
     const barras = String(it.barras||"").split(/[,;\s]+/).filter(Boolean);
+    const item = {n:it.nombre, p:Number(it.precio), c:String(it.codigo||""), cat:it.categoria||"",
+                  q:(it.cantidad === null || it.cantidad === undefined) ? null : Number(it.cantidad),
+                  b:barras[0] || String(it.codigo||"")};
     barras.forEach(b=>catalogo.set(b.replace(/^0+/,""), item));
     if(item.c) catalogo.set("#"+item.c, item);
-    const codigosCortos = barras.length ? barras : [item.c];
-    if(codigosCortos.length && codigosCortos.every(b=>b && b.length <= MAX_DIGITOS_CORTO)) sinCodigo.push(item);
+    productos.push(item);
+    const cortos = barras.length ? barras : [item.c];
+    if(cortos.length && cortos.every(b=>b && b.length <= MAX_DIGITOS_CORTO)) sinCodigo.push(item);
   }
-  sinCodigo.sort((a,b)=>a.n.localeCompare(b.n,"es"));
-  pintarChips();
-  if($("lista").classList.contains("activa")) pintarLista();
+  const porNombre = (a,b)=>a.n.localeCompare(b.n,"es");
+  productos.sort(porNombre); sinCodigo.sort(porNombre);
+  if($("lista").classList.contains("activa")){ pintarChips(); pintarLista(); }
 }
 async function pedirPrecios(url){
-  // Apps Script a veces tarda en "despertar" o responde un error suelto: se reintenta 3 veces
   let ultimoError;
   for(let intento = 1; intento <= 3; intento++){
     const ctrl = new AbortController();
@@ -223,10 +292,7 @@ async function pedirPrecios(url){
       clearTimeout(tt);
       if(!r.ok) throw new Error("HTTP " + r.status);
       return await r.json();
-    }catch(e){
-      clearTimeout(tt); ultimoError = e;
-      await new Promise(ok=>setTimeout(ok, intento * 4000));
-    }
+    }catch(e){ clearTimeout(tt); ultimoError = e; await new Promise(ok=>setTimeout(ok, intento*4000)); }
   }
   throw ultimoError;
 }
@@ -249,12 +315,11 @@ async function descargarCatalogo(){
     if(copia){
       if(!catalogo.size) cargarEnMapa(JSON.parse(copia));
       const f = new Date(leer("catalogo_fecha"));
-      const hoy = f.toDateString() === new Date().toDateString();
-      estado.textContent = hoy
+      estado.textContent = f.toDateString() === new Date().toDateString()
         ? `Precios de las ${f.toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"})}`
         : `Sin conexión · precios del ${f.toLocaleDateString("es-CO")}`;
     }else estado.textContent = "No se pudieron cargar los precios";
-    setTimeout(descargarCatalogo, 2*60*1000);   // vuelve a intentar en 2 minutos
+    setTimeout(descargarCatalogo, 2*60*1000);
   }finally{ descargando = false; }
 }
 function buscar(c){
@@ -263,23 +328,22 @@ function buscar(c){
 }
 
 /* ---------- Cámara ---------- */
-async function abrirCamara(){
+async function abrirCamara(modo){
   if(ocupado) return; ocupado = true;
-  clearTimeout(tResultado);
+  modoCamara = modo || "precio";
+  clearTimeout(tResultado); clearTimeout(tLista);
+  $("tituloEscaneo").textContent = modoCamara === "conteo" ? "Conteo · escanea el producto" : "Escanea el producto";
+  $("btnDigitarEsc").hidden = modoCamara !== "conteo";
   ir("escaneo");
   let quedan = SEGUNDOS_CAMARA;
   $("cuenta").textContent = quedan;
   tCuenta = setInterval(()=>{
     quedan--; $("cuenta").textContent = quedan;
-    if(quedan <= 0) cerrarCamara().then(inicio);
+    if(quedan <= 0) cerrarCamara().then(()=> modoCamara === "conteo" ? abrirConteo() : inicio());
   }, 1000);
-
   escaner = new Html5Qrcode("camara", {
-    formatsToSupport:[
-      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128
-    ],
+    formatsToSupport:[Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128],
     experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false
   });
   try{
@@ -288,8 +352,9 @@ async function abrirCamara(){
       async codigo=>{
         if(!escaner) return;
         if(navigator.vibrate) navigator.vibrate(80);
+        const m = modoCamara;
         await cerrarCamara();
-        mostrar(codigo);
+        if(m === "conteo") pedirCantidad(codigo); else mostrar(codigo);
       }, ()=>{});
   }catch(err){
     await cerrarCamara();
@@ -305,7 +370,6 @@ async function cerrarCamara(){
 
 /* ---------- Resultado ---------- */
 function inicio(){ clearTimeout(tResultado); clearTimeout(tLista); ir("inicio"); }
-
 function pintarEtiqueta(html, error, volverA){
   const div = document.createElement("div");
   div.className = "etiqueta" + (error ? " error" : "");
@@ -323,18 +387,29 @@ function pintarEtiqueta(html, error, volverA){
 function volverDeResultado(){
   clearTimeout(tResultado);
   const v = $("resultado").dataset.volver;
-  if(v === "lista") abrirLista(false);
-  else if(v === "digitar") abrirDigitar();
+  if(v === "lista") abrirLista(modoLista, false);
+  else if(v === "digitar") abrirDigitar($("digitar").dataset.volver);
   else inicio();
 }
-function mostrarItem(it, volverA){
-  const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>`, false, volverA);
+function mostrarItem(it, volverA, codigoUsado){
+  const conCantidad = volverA === "lista" || volverA === "digitar";
+  const div = pintarEtiqueta(
+    `<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>` +
+    (conCantidad && it.q !== null ? `<p class="cant">En Siigo: <b>${num(it.q)}</b></p>` : "") +
+    `<p class="cod-chico"></p>`, false, volverA);
   div.querySelector(".nombre").textContent = it.n;
+  div.querySelector(".cod-chico").textContent = "Código " + (codigoUsado || it.b || it.c);
 }
 function mostrar(codigo, volverA){
   const it = buscar(codigo);
-  if(!it) return mostrarError("Producto no encontrado", "Pregunte en caja", volverA);
-  mostrarItem(it, volverA);
+  if(!it) return mostrarNoEncontrado(codigo, volverA);
+  mostrarItem(it, volverA, String(codigo).trim());
+}
+function mostrarNoEncontrado(codigo, volverA){
+  const div = pintarEtiqueta(
+    `<p class="nombre">Producto no encontrado</p><div class="precio">Pregunte en caja</div>
+     <p class="cod-grande"></p>`, true, volverA);
+  div.querySelector(".cod-grande").textContent = String(codigo).trim();
 }
 function mostrarError(titulo, texto, volverA){
   const div = pintarEtiqueta(`<p class="nombre"></p><div class="precio"></div>`, true, volverA);
@@ -342,9 +417,10 @@ function mostrarError(titulo, texto, volverA){
   div.querySelector(".precio").textContent = texto;
 }
 
-/* ---------- Lista sin código de barras ---------- */
+/* ---------- Listas ---------- */
+function fuente(){ return modoLista === "sin" ? sinCodigo : productos; }
 function pintarChips(){
-  const cats = [...new Set(sinCodigo.map(i=>i.cat).filter(Boolean))].sort();
+  const cats = [...new Set(fuente().map(i=>i.cat).filter(Boolean))].sort();
   if(categoria && !cats.includes(categoria)) categoria = "";
   $("chips").replaceChildren(...["", ...cats].map(c=>{
     const b = document.createElement("button");
@@ -356,101 +432,252 @@ function pintarChips(){
 }
 function pintarLista(){
   const q = normal($("buscador").value.trim());
-  const res = sinCodigo.filter(i =>
+  const res = fuente().filter(i =>
     (!categoria || i.cat === categoria) &&
-    (!q || normal(i.n).includes(q) || i.c.includes(q)));
+    (!q || normal(i.n).includes(q) || i.c.includes(q) || i.b.includes(q))).slice(0, 400);
   const cont = $("items");
   if(!res.length){
-    cont.innerHTML = `<div class="vacio">${sinCodigo.length ? "No hay productos con esa búsqueda" : "Cargando productos…"}</div>`;
+    cont.innerHTML = `<div class="vacio">${fuente().length ? "No hay productos con esa búsqueda" : "Cargando productos…"}</div>`;
     return;
   }
   cont.replaceChildren(...res.map(i=>{
     const b = document.createElement("button");
     b.className = "item";
     b.innerHTML = `<span class="cod"></span><span class="nom"></span><span class="pre">$${pesos(i.p)}</span>`;
-    b.querySelector(".cod").textContent = i.c;
+    b.querySelector(".cod").textContent = i.c || i.b;
     b.querySelector(".nom").textContent = i.n;
     b.onclick = ()=>{ clearTimeout(tLista); mostrarItem(i, "lista"); };
     return b;
   }));
 }
-function abrirLista(limpiar = true){
-  if(limpiar){ $("buscador").value = ""; categoria = ""; pintarChips(); }
-  pintarLista();
-  ir("lista");
-  tocarLista();
+function abrirLista(modo, limpiar = true){
+  modoLista = modo || "todos";
+  $("tituloLista").textContent = modoLista === "sin" ? "Sin código de barras" : "Catálogo completo";
+  if(limpiar){ $("buscador").value = ""; categoria = ""; }
+  pintarChips(); pintarLista(); ir("lista"); tocarLista();
 }
-function tocarLista(){
-  clearTimeout(tLista);
-  tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
-}
+function tocarLista(){ clearTimeout(tLista); tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000); }
 
 /* ---------- Digitar código ---------- */
-function abrirDigitar(){
+function abrirDigitar(volverA){
+  $("digitar").dataset.volver = volverA || "inventario";
   $("codigoManual").value = "";
-  ir("digitar");
-  tocarLista();
+  ir("digitar"); tocarLista();
   setTimeout(()=>$("codigoManual").focus(), 80);
 }
 function buscarManual(){
   const v = $("codigoManual").value.replace(/\D/g,"");
   if(!v){ $("codigoManual").focus(); return; }
-  clearTimeout(tLista);
-  $("codigoManual").blur();
+  clearTimeout(tLista); $("codigoManual").blur();
   mostrar(v, "digitar");
 }
-$("btnDigitar").addEventListener("click", abrirDigitar);
-$("btnVolverDigitar").addEventListener("click", ()=>abrirLista(false));
+
+/* ---------- Conteo físico ---------- */
+function cargarConteo(){
+  try{ conteo = JSON.parse(leer("conteo") || "[]"); }catch(e){ conteo = []; }
+}
+function guardarConteo(){ guardar("conteo", JSON.stringify(conteo)); }
+function abrirConteo(){ clearTimeout(tLista); pintarConteo(); ir("conteo"); }
+function pintarConteo(){
+  $("cnTotal").textContent = conteo.length;
+  $("cnDif").textContent = conteo.filter(c=>c.siigo !== null && c.real !== c.siigo).length;
+  const cont = $("conteoItems");
+  if(!conteo.length){
+    cont.innerHTML = `<div class="vacio">Aún no has contado nada.<br>Toca Escanear y digita la cantidad real de cada producto.</div>`;
+    return;
+  }
+  cont.replaceChildren(...[...conteo].reverse().map(c=>{
+    const dif = c.siigo === null ? null : c.real - c.siigo;
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<span class="cod"></span>
+      <span class="nom"><span class="t"></span><small></small></span>
+      <span class="pre"></span>`;
+    b.querySelector(".cod").textContent = c.codigo;
+    b.querySelector(".t").textContent = c.nombre;
+    b.querySelector("small").textContent =
+      `Siigo ${c.siigo === null ? "?" : num(c.siigo)} · contado ${num(c.real)}`;
+    const pre = b.querySelector(".pre");
+    pre.innerHTML = dif === null ? "—"
+      : `<span class="${dif > 0 ? "mas" : dif < 0 ? "menos" : ""}">${dif > 0 ? "+" : ""}${num(dif)}</span><small>dif.</small>`;
+    b.onclick = ()=>{ if(confirm(`¿Borrar el conteo de ${c.nombre}?`)){ conteo = conteo.filter(x=>x!==c); guardarConteo(); pintarConteo(); } };
+    return b;
+  }));
+}
+function pedirCantidad(codigo){
+  const cod = String(codigo).trim();
+  const it = buscar(cod);
+  pendiente = {codigo: cod, nombre: it ? it.n : "PRODUCTO NO REGISTRADO", precio: it ? it.p : "",
+               siigo: it && it.q !== null ? it.q : null};
+  const previo = conteo.find(c=>c.codigo === cod);
+  $("fichaConteo").innerHTML =
+    `<h3></h3><div class="meta"></div>
+     <div class="siigo">${pendiente.siigo === null ? "?" : num(pendiente.siigo)}<span>cantidad en Siigo</span></div>` +
+    (previo ? `<div class="meta" style="margin-top:10px">Ya contado: ${num(previo.real)} · se reemplaza</div>` : "");
+  $("fichaConteo").querySelector("h3").textContent = pendiente.nombre;
+  $("fichaConteo").querySelector(".meta").textContent =
+    "Código " + cod + (pendiente.precio !== "" ? " · $" + pesos(pendiente.precio) : "");
+  $("cantidadReal").value = "";
+  ir("conteoItem");
+  setTimeout(()=>$("cantidadReal").focus(), 100);
+}
+function guardarItemConteo(){
+  const v = $("cantidadReal").value.replace(",",".").trim();
+  if(v === "" || isNaN(Number(v))){ $("cantidadReal").focus(); return false; }
+  conteo = conteo.filter(c=>c.codigo !== pendiente.codigo);
+  conteo.push({...pendiente, real: Number(v), hora: new Date().toISOString()});
+  guardarConteo();
+  $("cantidadReal").blur();
+  return true;
+}
+function csvConteo(){
+  const cab = "CODIGO,DESCRIPCION,PRECIO,CTD_SIIGO,CTD_REAL,DIFERENCIA,FECHA";
+  const esc = t => `"${String(t).replace(/"/g,'""')}"`;
+  const filas = conteo.map(c=>[
+    esc(c.codigo), esc(c.nombre), c.precio, c.siigo === null ? "" : c.siigo, c.real,
+    c.siigo === null ? "" : (c.real - c.siigo), esc(new Date(c.hora).toLocaleString("es-CO"))
+  ].join(","));
+  return "\uFEFF" + [cab, ...filas].join("\r\n");
+}
+function descargarConteo(){
+  if(!conteo.length) return alert("No hay nada contado todavía.");
+  const b = new Blob([csvConteo()], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = `conteo_${new Date().toISOString().slice(0,16).replace(/[:T]/g,"")}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+async function enviarConteo(){
+  if(!conteo.length) return alert("No hay nada contado todavía.");
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  const btn = $("btnConteoDrive"); btn.disabled = true; btn.textContent = "Guardando…";
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({sesion: new Date().toLocaleString("es-CO"), conteo})});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error || "error");
+    if(confirm(`Se guardaron ${d.guardadas} líneas en Drive.\n\n¿Borrar el conteo del celular?`)){
+      conteo = []; guardarConteo(); pintarConteo();
+    }
+  }catch(e){
+    alert("No se pudo guardar en Drive: " + e.message + "\nDescarga el CSV para no perder el conteo.");
+  }finally{ btn.disabled = false; btn.textContent = "Guardar en Drive"; }
+}
+
+/* ---------- Eventos ---------- */
+$("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
+$("btnInventario").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+$("btnSalirInv").addEventListener("click", inicio);
+$("btnCatalogo").addEventListener("click", ()=>abrirLista("todos"));
+$("btnSinCodigo").addEventListener("click", ()=>abrirLista("sin"));
+$("btnDigitarInv").addEventListener("click", ()=>abrirDigitar("inventario"));
+$("btnConteo").addEventListener("click", abrirConteo);
+$("btnVolverLista").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+$("btnVolverDigitar").addEventListener("click", ()=>{
+  const v = $("digitar").dataset.volver;
+  if(v === "lista") abrirLista(modoLista, false); else { ir("inventario"); tocarLista(); }
+});
 $("btnBuscarCodigo").addEventListener("click", buscarManual);
 $("codigoManual").addEventListener("keydown", e=>{ if(e.key === "Enter") buscarManual(); });
 $("codigoManual").addEventListener("input", tocarLista);
-
-/* ---------- Eventos ---------- */
-$("btnEscanear").addEventListener("click", abrirCamara);
-$("btnLista").addEventListener("click", ()=>abrirLista());
-$("btnVolver").addEventListener("click", inicio);
-$("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(inicio));
-$("resultado").addEventListener("click", volverDeResultado);
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
 $("items").addEventListener("scroll", tocarLista, {passive:true});
+$("resultado").addEventListener("click", volverDeResultado);
+$("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(()=> modoCamara === "conteo" ? abrirConteo() : inicio()));
+$("btnDigitarEsc").addEventListener("click", async ()=>{
+  await cerrarCamara();
+  const v = prompt("Código del producto:");
+  if(v && v.trim()) pedirCantidad(v.trim()); else abrirConteo();
+});
+$("btnVolverConteo").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+$("btnConteoEscanear").addEventListener("click", ()=>abrirCamara("conteo"));
+$("btnConteoDigitar").addEventListener("click", ()=>{
+  const v = prompt("Código del producto:");
+  if(v && v.trim()) pedirCantidad(v.trim());
+});
+$("btnConteoExportar").addEventListener("click", descargarConteo);
+$("btnConteoDrive").addEventListener("click", enviarConteo);
+$("btnConteoBorrar").addEventListener("click", ()=>{
+  if(conteo.length && confirm(`¿Borrar los ${conteo.length} productos contados?`)){
+    conteo = []; guardarConteo(); pintarConteo();
+  }
+});
+$("btnGuardarConteo").addEventListener("click", ()=>{ if(guardarItemConteo()) abrirCamara("conteo"); });
+$("btnGuardarCerrar").addEventListener("click", ()=>{ if(guardarItemConteo()) abrirConteo(); });
+$("btnCancelarItem").addEventListener("click", abrirConteo);
+$("cantidadReal").addEventListener("keydown", e=>{
+  if(e.key === "Enter"){ e.preventDefault(); if(guardarItemConteo()) abrirCamara("conteo"); }
+});
 
-// Lector físico: escribe el código y envía Enter
+// Lector físico Bluetooth/USB
 entrada.addEventListener("keydown", async e=>{
   if(e.key !== "Enter") return;
   const v = entrada.value.trim(); entrada.value = "";
   if(!v) return;
+  const enConteo = modoCamara === "conteo" && (escaner || $("conteo").classList.contains("activa"));
   if(escaner) await cerrarCamara();
-  mostrar(v);
+  if(enConteo) pedirCantidad(v); else mostrar(v);
 });
 setInterval(()=>{
-  if(!$("lista").classList.contains("activa") && !$("digitar").classList.contains("activa") && document.activeElement !== entrada)
+  const act = document.querySelector(".pantalla.activa");
+  if(act && !["lista","digitar","conteoItem","ajustes"].includes(act.id) && document.activeElement !== entrada)
     entrada.focus({preventScroll:true});
 }, 1000);
 
-// Configuración oculta: 5 toques en el logo
+/* ---------- Ajustes (5 toques en el logo) ---------- */
 let toques = 0, tToques;
-$("marca").addEventListener("click", ()=>{
+$("marca").addEventListener("click", async ()=>{
   toques++; clearTimeout(tToques); tToques = setTimeout(()=>toques=0, 1500);
   if(toques >= 5){
     toques = 0;
-    const u = prompt("URL de la web app de precios:", apiUrl());
-    if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
+    if(escaner) await cerrarCamara();
+    clearTimeout(tResultado); clearTimeout(tLista);
+    $("msgAjustes").textContent = "";
+    ir("ajustes");
   }
 });
-
-// Si el celular se bloquea o cambia de app, apaga la cámara
-document.addEventListener("visibilitychange", ()=>{ if(document.hidden && escaner) cerrarCamara().then(inicio); });
-
-/* ---------- App instalable ---------- */
+$("btnCerrarAjustes").addEventListener("click", inicio);
+$("btnCambiarUrl").addEventListener("click", ()=>{
+  const u = prompt("URL de la web app de precios:", apiUrl());
+  if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
+});
+$("btnActualizarSiigo").addEventListener("click", async ()=>{
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  const btn = $("btnActualizarSiigo"), msg = $("msgAjustes");
+  btn.disabled = true;
+  const t0 = Date.now();
+  const reloj = setInterval(()=>{
+    const s = Math.round((Date.now()-t0)/1000);
+    btn.textContent = `Actualizando… ${s}s`;
+  }, 1000);
+  btn.textContent = "Actualizando… 0s";
+  msg.textContent = "Trae el inventario de Siigo. Puede tardar 1 a 3 minutos, no cierres la app.";
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({accion:"actualizar"})});
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error || "error");
+    await descargarCatalogo();
+    msg.textContent = `Listo · ${productos.length} productos actualizados`;
+  }catch(e){
+    msg.textContent = "No se pudo actualizar: " + e.message;
+  }finally{
+    clearInterval(reloj);
+    btn.disabled = false; btn.textContent = "Actualizar inventario desde Siigo";
+  }
+});
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden && escaner) cerrarCamara().then(inicio);
+  if(!document.hidden && Date.now() - new Date(leer("catalogo_fecha")||0) > 10*60*1000) descargarCatalogo();
+});
+window.addEventListener("online", descargarCatalogo);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 
 /* ---------- Arranque ---------- */
-// Al volver internet o al volver a abrir la app, actualiza
-window.addEventListener("online", descargarCatalogo);
-document.addEventListener("visibilitychange", ()=>{
-  if(!document.hidden && Date.now() - new Date(leer("catalogo_fecha")||0) > 10*60*1000) descargarCatalogo();
-});
-// Muestra de una vez la copia guardada mientras llegan los precios nuevos
+cargarConteo();
 try{ const c = leer("catalogo"); if(c) cargarEnMapa(JSON.parse(c)); }catch(e){}
 descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
