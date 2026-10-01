@@ -108,9 +108,11 @@
 
   /* Conteo */
   .resumen{display:flex;gap:10px;flex:none}
-  .caja{flex:1;background:var(--verde2);border-radius:10px;padding:10px;text-align:center}
-  .caja b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:1.7rem;line-height:1}
-  .caja span{font-size:.78rem;opacity:.8}
+  .resumen{display:flex;gap:8px;flex:none}
+  .caja{flex:1;background:var(--verde2);border-radius:10px;padding:10px 6px;text-align:center;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0}
+  .caja b{font-family:"Barlow Condensed",sans-serif;font-size:1.6rem;line-height:1.05}
+  .caja span{font-size:.72rem;opacity:.8;line-height:1.15}
   #conteoItem{justify-content:center;gap:16px}
   .ficha{background:var(--papel);color:var(--tinta);border-radius:12px;padding:20px;text-align:center}
   .ficha h3{margin:0 0 6px;font-size:1.3rem;text-transform:uppercase;line-height:1.15}
@@ -194,9 +196,10 @@
 <section class="pantalla" id="conteo">
   <div class="cabeza"><h2>Conteo físico</h2><button class="sec" id="btnVolverConteo">Volver</button></div>
   <div class="resumen">
-    <div class="caja"><b id="cnHoy">0</b><span>contados hoy</span></div>
+    <div class="caja"><b id="cnHoy">0</b><span>hoy</span></div>
     <div class="caja"><b id="cnDif">0</b><span>con diferencia</span></div>
-    <div class="caja"><b id="cnAvance">0%</b><span>contados del catálogo</span></div>
+    <div class="caja"><b id="cnTotal">0</b><span>contados en total</span></div>
+    <div class="caja"><b id="cnAvance">0%</b><span>del catálogo</span></div>
   </div>
   <div class="acciones">
     <button class="ppal" id="btnConteoEscanear">Escanear</button>
@@ -240,7 +243,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.06 · 1-oct-2026";
+const VERSION = "v23 · 1-oct-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwgR53qzPQN0mRqma8y9xVB_rczm__8S2aTx1l66zX5iosGHcVwm_ifzooybkP7I9Uo/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -591,9 +594,8 @@ function pintarConteo(){
   $("cnHoy").textContent = conteo.length;
   $("cnDif").textContent = conteo.filter(c=>c.siigo !== null && c.real !== c.siigo).length;
   const hechos = productos.filter(i=>!!ultimoDe(i)).length;
-  $("cnAvance").innerHTML = productos.length
-    ? `${(hechos*100/productos.length).toFixed(1)}%<span style="font-size:.78rem;opacity:.8">${hechos} de ${productos.length}</span>`
-    : "0%";
+  $("cnTotal").textContent = hechos;
+  $("cnAvance").textContent = productos.length ? (hechos*100/productos.length).toFixed(1) + "%" : "0%";
   const porAj = porAjustar().length;
   $("btnAjustar").textContent = porAj ? `Ajustar (${porAj})` : "Ajustar en Siigo";
   const sinc = sincronizado
@@ -631,16 +633,15 @@ function pedirCantidad(codigo){
                siigo: it && it.q !== null ? it.q : null};
   const previo = conteo.find(c=>c.codigo === cod);
   const ult = it ? ultimoDe(it) : ultimos[cod];
-  const aviso = (previo || ult) ? (()=> {
-    const u = previo ? {f: previo.hora, r: previo.real, a: ""} : ult;
-    return `<div class="aviso">
-        <b>Ya contaste este producto</b>
-        ${fechaHora(u.f)} (${hace(u.f)})<br>
-        Cantidad registrada: <b>${num(u.r)}</b>
-        ${ult && ult.a ? `<br>Ajustado en Siigo el ${fechaHora(ult.a)}` : ""}
-        <br><span style="opacity:.75">Si guardas, se reemplaza por la nueva cantidad.</span>
-      </div>`;
-  })() : "";
+  const base = previo ? {f: previo.hora, r: previo.real} : ult;
+  const aviso = base ? `<div class="aviso">
+        <b>Ya contaste este producto</b><br>
+        ${fechaHora(base.f)} (${hace(base.f)}) · cantidad: <b>${num(base.r)}</b>
+        ${ult && ult.a
+          ? `<br><b style="color:#0f3d2e">Ya ajustado en Siigo</b> el ${fechaHora(ult.a)}`
+          : (ult && ult.s !== null && Number(ult.r) !== Number(ult.s) ? `<br>Diferencia pendiente de ajustar` : "")}
+        <br><span style="opacity:.75">Si guardas, se reemplaza y queda pendiente de ajustar otra vez.</span>
+      </div>` : "";
   $("fichaConteo").innerHTML =
     `<h3></h3><div class="meta"></div>
      <div class="siigo">${pendiente.siigo === null ? "?" : num(pendiente.siigo)}<span>cantidad en Siigo</span></div>`
@@ -760,9 +761,11 @@ async function enviarConteo(){
 function porAjustar(){
   return Object.entries(ultimos)
     .filter(([cod,u]) => u.s !== null && u.s !== undefined && Number(u.r) !== Number(u.s) && !u.a)
-    .map(([cod,u]) => ({cod, ...u, dif: Number(u.r) - Number(u.s)}))
+    .map(([cod,u]) => ({cod, ...u, dif: Number(u.r) - Number(u.s),
+                        enPlantilla: !!ultimaPlantilla && new Date(u.f) < new Date(ultimaPlantilla)}))
     .sort((a,b)=> new Date(a.f) - new Date(b.f));
 }
+function marcables(){ return porAjustar().filter(l=>l.enPlantilla); }
 function abrirAjustar(){
   clearTimeout(tLista);
   pintarAjustar();
@@ -775,15 +778,18 @@ function pintarAjustar(){
     .filter(u => u.s !== null && u.s !== undefined && Number(u.r) !== Number(u.s));
   const ajustados = conDif.filter(u => u.a).length;
   const pct = conDif.length ? (ajustados*100/conDif.length).toFixed(1) : "0.0";
+  const puede = marcables().length;
   const btn = $("btnAjMarcar");
-  btn.disabled = !lista.length || !ultimaPlantilla;
+  btn.disabled = !puede;
   btn.style.opacity = btn.disabled ? ".45" : "1";
+  btn.textContent = puede ? `Marcar ${puede} como ajustados` : "Marcar como ajustados";
   $("ajEstado").innerHTML =
     `<b>${ajustados} de ${conDif.length} ajustados (${pct}%)</b>` +
     (lista.length
       ? `<br>${lista.length} con diferencia sin ajustar.` +
         (ultimaPlantilla
-          ? ` Última plantilla: ${fechaHora(ultimaPlantilla)}.`
+          ? ` Última plantilla: ${fechaHora(ultimaPlantilla)}.` +
+            (lista.length > puede ? ` <b>${lista.length - puede}</b> se contaron después y no están en ella.` : "")
           : `<br><span style="opacity:.8">Genera primero la plantilla para poder marcarlos.</span>`)
       : "");
   const cont = $("ajItems");
@@ -800,9 +806,11 @@ function pintarAjustar(){
       <span class="pre"><span class="${l.dif>0?"mas":"menos"}">${l.dif>0?"+":""}${num(l.dif)}</span><small>dif.</small></span>`;
     b.querySelector(".cod").textContent = l.cod;
     b.querySelector(".t").textContent = l.n || (buscar(l.cod) ? buscar(l.cod).n : "");
-    b.querySelector("small").textContent = `Siigo ${num(l.s)} · contado ${num(l.r)} · ${hace(l.f)}`;
+    b.querySelector("small").textContent = `Siigo ${num(l.s)} · contado ${num(l.r)} · ${fechaHora(l.f)}` +
+      (l.enPlantilla ? "" : " · falta incluirlo en una plantilla");
+    if(!l.enPlantilla) b.style.opacity = ".6";
     b.onclick = ()=>{
-      if(!ultimaPlantilla) return alert("Primero genera la plantilla e impórtala en Siigo.");
+      if(!l.enPlantilla) return alert("Este producto se contó después de generar la plantilla. Genera una nueva, impórtala y luego márcalo.");
       if(confirm(`¿Marcar SOLO este producto como ajustado en Siigo?\n\n${b.querySelector(".t").textContent}`))
         marcarAjustados([l.cod]);
     };
@@ -824,28 +832,9 @@ async function generarPlantilla(){
     if(!d.filas) { $("ajEstado").textContent = "No hubo diferencias para incluir."; return; }
     plantilla = d;
     ultimaPlantilla = new Date().toISOString();
-    $("ajEstado").innerHTML = `Plantilla lista: <b>${d.filas} productos</b> · guardada en Drive como ${d.archivo}. ` +
-      `Impórtala en Siigo y vuelve a marcar como ajustados.`;
-    const acciones = document.createElement("div");
-    acciones.className = "acciones";
-    acciones.style.marginTop = "6px";
-    acciones.innerHTML = `<button class="sec chico" id="btnPlantAbrir">Abrir en Drive</button>
-      <button class="sec chico" id="btnPlantCompartir">Compartir</button>
-      <button class="sec chico" id="btnPlantDescargar">Descargar CSV</button>`;
-    $("ajEstado").after(acciones);
-    $("btnAjMarcar").disabled = false; $("btnAjMarcar").style.opacity = "1";
-    $("btnPlantAbrir").onclick = ()=>window.open(d.url, "_blank");
-    $("btnPlantCompartir").onclick = async ()=>{
-      if(!await compartirArchivo(d.csv, d.archivo.replace(".xlsx",".csv"), "text/csv"))
-        alert("Este celular no deja compartir archivos. Usa Abrir en Drive.");
-    };
-    $("btnPlantDescargar").onclick = ()=>{
-      const b = new Blob([d.csv], {type:"text/csv;charset=utf-8"});
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(b); a.download = d.archivo.replace(".xlsx",".csv");
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    };
+    alert(`Plantilla lista con ${d.filas} productos.\n\nGuardada en Drive:\n${d.archivo}\n\nImpórtala en Siigo y vuelve a marcar como ajustados.`);
+    await cargarUltimos();
+    pintarAjustar();
   }catch(e){
     $("ajEstado").textContent = "No se pudo generar: " + e.message;
   }finally{ btn.disabled = false; btn.textContent = "Generar plantilla Siigo"; }
@@ -924,9 +913,9 @@ $("btnAjustar").addEventListener("click", abrirAjustar);
 $("btnPlantilla").addEventListener("click", generarPlantilla);
 $("btnVolverAjustar").addEventListener("click", abrirConteo);
 $("btnAjMarcar").addEventListener("click", ()=>{
-  const lista = porAjustar();
-  if(!lista.length) return alert("No hay nada pendiente.");
-  if(confirm(`¿Ya subiste estas ${lista.length} diferencias a Siigo?\n\nSe marcarán como ajustadas y dejarán de aparecer.`))
+  const lista = marcables();
+  if(!lista.length) return alert("No hay productos incluidos en la última plantilla.");
+  if(confirm(`¿Ya importaste la plantilla en Siigo?\n\nSe marcarán ${lista.length} productos como ajustados.`))
     marcarAjustados(lista.map(l=>l.cod));
 });
 $("btnAjCompartir").addEventListener("click", async ()=>{
