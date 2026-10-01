@@ -118,7 +118,7 @@
   .ficha .siigo{margin-top:12px;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:3.2rem;
     color:var(--verde);line-height:1}
   .ficha .siigo span{display:block;font-family:"Barlow",sans-serif;font-size:.85rem;font-weight:600;color:var(--gris)}
-  .acciones{display:flex;gap:10px}
+  .acciones{display:flex;gap:10px;flex-wrap:wrap}
   .acciones>*{flex:1}
   @media (prefers-reduced-motion:reduce){.boton-grande,.etiqueta{animation:none}}
   #entrada{position:absolute;left:-9999px;opacity:0}
@@ -164,9 +164,7 @@
   <div class="cabeza"><h2>Inventario</h2><button class="sec" id="btnSalirInv">Salir</button></div>
   <div class="menu">
     <button class="ppal" id="btnCatalogo">Catálogo completo</button>
-    <button class="ghost" id="btnSinCodigo">Productos sin código de barras</button>
-    <button class="ghost" id="btnDigitarInv">Digitar código</button>
-    <button class="ppal" id="btnConteo">Conteo físico</button>
+    <button class="ghost" id="btnConteo">Conteo físico</button>
   </div>
 </section>
 
@@ -176,15 +174,6 @@
   <input class="buscador" id="buscador" type="search" placeholder="Buscar por nombre o código" autocomplete="off" enterkeyhint="search">
   <div class="chips" id="chips"></div>
   <div class="items" id="items"></div>
-</section>
-
-<!-- ============ DIGITAR CÓDIGO ============ -->
-<section class="pantalla" id="digitar">
-  <div class="cabeza"><h2>Digitar código</h2><button class="sec" id="btnVolverDigitar">Volver</button></div>
-  <p style="margin:0;opacity:.8">Escribe el código de barras o el código del producto</p>
-  <input class="buscador codigo-manual" id="codigoManual" type="text" inputmode="numeric" pattern="[0-9]*"
-    placeholder="Ej: 7702032110278" autocomplete="off" enterkeyhint="search">
-  <button class="ppal" id="btnBuscarCodigo">Buscar</button>
 </section>
 
 <!-- ============ AJUSTES (5 toques en el logo) ============ -->
@@ -210,7 +199,9 @@
   </div>
   <div class="items" id="conteoItems"></div>
   <div class="acciones">
-    <button class="sec chico" id="btnConteoExportar">Descargar CSV</button>
+    <button class="sec chico" id="btnConteoCompartir">Compartir CSV</button>
+    <button class="sec chico" id="btnConteoTxt">Compartir TXT</button>
+    <button class="sec chico" id="btnConteoExportar">Descargar</button>
     <button class="sec chico" id="btnConteoDrive">Guardar en Drive</button>
     <button class="sec chico" id="btnConteoBorrar">Borrar todo</button>
   </div>
@@ -230,17 +221,17 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbz3szhpon8OQfnow67D7QhXtadcvl2X4Gm110wmroKCdeTYA_pCiFHr5NCEDnfI7WDy/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxcb8Qzap4j-eQwQAgy2tuVdKf4rtoW4qIPDD_g59gBYGG0zXaAax9aVTS6TnZiQqDt/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
-const MAX_DIGITOS_CORTO = 4;
+const MAX_DIGITOS_CORTO = 5;
 const MINUTOS_REFRESCO = 30;
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
 const estado = $("estado"), entrada = $("entrada");
-let catalogo = new Map(), productos = [], sinCodigo = [], categoria = "", modoLista = "todos";
+let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", soloSinCodigo = false;
 let escaner = null, modoCamara = "precio", pendiente = null;
 let tCuenta = null, tResultado = null, tLista = null, ocupado = false;
 let conteo = [];
@@ -253,7 +244,7 @@ const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f
 
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
-  const escribible = ["lista","digitar","conteoItem","ajustes"].includes(id);
+  const escribible = ["lista","conteoItem","ajustes"].includes(id);
   if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
 }
 
@@ -276,10 +267,9 @@ function cargarEnMapa(lista){
     if(item.c) catalogo.set("#"+item.c, item);
     productos.push(item);
     const cortos = barras.length ? barras : [item.c];
-    if(cortos.length && cortos.every(b=>b && b.length <= MAX_DIGITOS_CORTO)) sinCodigo.push(item);
+    if(cortos.length && cortos.every(b=>b && b.length <= MAX_DIGITOS_CORTO)) sinCodigo.add(item);
   }
-  const porNombre = (a,b)=>a.n.localeCompare(b.n,"es");
-  productos.sort(porNombre); sinCodigo.sort(porNombre);
+  productos.sort((a,b)=>a.n.localeCompare(b.n,"es"));
   if($("lista").classList.contains("activa")){ pintarChips(); pintarLista(); }
 }
 async function pedirPrecios(url){
@@ -387,15 +377,13 @@ function pintarEtiqueta(html, error, volverA){
 function volverDeResultado(){
   clearTimeout(tResultado);
   const v = $("resultado").dataset.volver;
-  if(v === "lista") abrirLista(modoLista, false);
-  else if(v === "digitar") abrirDigitar($("digitar").dataset.volver);
+  if(v === "lista") abrirLista(false);
   else inicio();
 }
 function mostrarItem(it, volverA, codigoUsado){
-  const conCantidad = volverA === "lista" || volverA === "digitar";
   const div = pintarEtiqueta(
     `<p class="nombre"></p><div class="precio"><small>$</small>${pesos(it.p)}</div>` +
-    (conCantidad && it.q !== null ? `<p class="cant">En Siigo: <b>${num(it.q)}</b></p>` : "") +
+    (it.q !== null ? `<p class="cant">En Siigo: <b>${num(it.q)}</b></p>` : "") +
     `<p class="cod-chico"></p>`, false, volverA);
   div.querySelector(".nombre").textContent = it.n;
   div.querySelector(".cod-chico").textContent = "Código " + (codigoUsado || it.b || it.c);
@@ -418,13 +406,17 @@ function mostrarError(titulo, texto, volverA){
 }
 
 /* ---------- Listas ---------- */
-function fuente(){ return modoLista === "sin" ? sinCodigo : productos; }
+function fuente(){ return soloSinCodigo ? productos.filter(i=>sinCodigo.has(i)) : productos; }
 function pintarChips(){
-  const cats = [...new Set(fuente().map(i=>i.cat).filter(Boolean))].sort();
+  const cats = [...new Set(productos.map(i=>i.cat).filter(Boolean))].sort();
   if(categoria && !cats.includes(categoria)) categoria = "";
-  $("chips").replaceChildren(...["", ...cats].map(c=>{
+  const sin = document.createElement("button");
+  sin.className = "chip"; sin.textContent = "Sin código de barras";
+  sin.setAttribute("aria-pressed", soloSinCodigo);
+  sin.onclick = ()=>{ soloSinCodigo = !soloSinCodigo; pintarChips(); pintarLista(); tocarLista(); };
+  $("chips").replaceChildren(sin, ...["", ...cats].map(c=>{
     const b = document.createElement("button");
-    b.className = "chip"; b.textContent = c ? c.toLowerCase() : "Todos";
+    b.className = "chip"; b.textContent = c ? c.toLowerCase() : "Todas";
     b.setAttribute("aria-pressed", c === categoria);
     b.onclick = ()=>{ categoria = c; pintarChips(); pintarLista(); tocarLista(); };
     return b;
@@ -450,27 +442,12 @@ function pintarLista(){
     return b;
   }));
 }
-function abrirLista(modo, limpiar = true){
-  modoLista = modo || "todos";
-  $("tituloLista").textContent = modoLista === "sin" ? "Sin código de barras" : "Catálogo completo";
-  if(limpiar){ $("buscador").value = ""; categoria = ""; }
+function abrirLista(limpiar = true){
+  $("tituloLista").textContent = "Catálogo completo";
+  if(limpiar){ $("buscador").value = ""; categoria = ""; soloSinCodigo = false; }
   pintarChips(); pintarLista(); ir("lista"); tocarLista();
 }
 function tocarLista(){ clearTimeout(tLista); tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000); }
-
-/* ---------- Digitar código ---------- */
-function abrirDigitar(volverA){
-  $("digitar").dataset.volver = volverA || "inventario";
-  $("codigoManual").value = "";
-  ir("digitar"); tocarLista();
-  setTimeout(()=>$("codigoManual").focus(), 80);
-}
-function buscarManual(){
-  const v = $("codigoManual").value.replace(/\D/g,"");
-  if(!v){ $("codigoManual").focus(); return; }
-  clearTimeout(tLista); $("codigoManual").blur();
-  mostrar(v, "digitar");
-}
 
 /* ---------- Conteo físico ---------- */
 function cargarConteo(){
@@ -548,6 +525,61 @@ function descargarConteo(){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
+function txtConteo(){
+  const f = new Date().toLocaleString("es-CO");
+  const dif = conteo.filter(c=>c.siigo !== null && c.real !== c.siigo);
+  const lin = [];
+  lin.push("CONTEO FISICO - EDUMERCA");
+  lin.push(f);
+  lin.push("Contados: " + conteo.length + "   Con diferencia: " + dif.length);
+  lin.push("");
+  const bloque = (titulo, lista) => {
+    if(!lista.length) return;
+    lin.push(titulo);
+    lin.push("-".repeat(34));
+    lista.forEach(c=>{
+      const d = c.siigo === null ? null : c.real - c.siigo;
+      lin.push(c.nombre);
+      lin.push("  cod " + c.codigo + "   $" + pesos(c.precio || 0));
+      lin.push("  Siigo " + (c.siigo === null ? "?" : num(c.siigo)) +
+               "  |  contado " + num(c.real) +
+               "  |  dif " + (d === null ? "?" : (d > 0 ? "+" : "") + num(d)));
+      lin.push("");
+    });
+  };
+  bloque("CON DIFERENCIA", dif);
+  bloque("SIN DIFERENCIA", conteo.filter(c=>!dif.includes(c)));
+  return lin.join("\n");
+}
+async function compartirArchivo(contenido, nombre, tipo){
+  const archivo = new File([contenido], nombre, {type:tipo});
+  if(navigator.canShare && navigator.canShare({files:[archivo]})){
+    try{ await navigator.share({files:[archivo], title:"Conteo físico Edumerca"}); return true; }
+    catch(e){ if(e.name === "AbortError") return true; }
+  }
+  return false;
+}
+async function compartirTxt(){
+  if(!conteo.length) return alert("No hay nada contado todavía.");
+  const nombre = `conteo_${new Date().toISOString().slice(0,16).replace(/[:T]/g,"")}.txt`;
+  if(await compartirArchivo(txtConteo(), nombre, "text/plain")) return;
+  // Si no se puede compartir archivo, se manda como texto suelto
+  try{ await navigator.share({title:"Conteo físico Edumerca", text: txtConteo()}); }
+  catch(e){ if(e.name !== "AbortError") alert("Este celular no permite compartir desde la app."); }
+}
+async function compartirConteo(){
+  if(!conteo.length) return alert("No hay nada contado todavía.");
+  const nombre = `conteo_${new Date().toISOString().slice(0,16).replace(/[:T]/g,"")}.csv`;
+  const archivo = new File([csvConteo()], nombre, {type:"text/csv"});
+  if(navigator.canShare && navigator.canShare({files:[archivo]})){
+    try{
+      await navigator.share({files:[archivo], title:"Conteo físico Edumerca"});
+      return;
+    }catch(e){ if(e.name === "AbortError") return; }
+  }
+  alert("Este celular no deja compartir archivos directamente; se descargará.");
+  descargarConteo();
+}
 async function enviarConteo(){
   if(!conteo.length) return alert("No hay nada contado todavía.");
   const url = apiUrl();
@@ -570,18 +602,9 @@ async function enviarConteo(){
 $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
 $("btnInventario").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
 $("btnSalirInv").addEventListener("click", inicio);
-$("btnCatalogo").addEventListener("click", ()=>abrirLista("todos"));
-$("btnSinCodigo").addEventListener("click", ()=>abrirLista("sin"));
-$("btnDigitarInv").addEventListener("click", ()=>abrirDigitar("inventario"));
+$("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
 $("btnVolverLista").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
-$("btnVolverDigitar").addEventListener("click", ()=>{
-  const v = $("digitar").dataset.volver;
-  if(v === "lista") abrirLista(modoLista, false); else { ir("inventario"); tocarLista(); }
-});
-$("btnBuscarCodigo").addEventListener("click", buscarManual);
-$("codigoManual").addEventListener("keydown", e=>{ if(e.key === "Enter") buscarManual(); });
-$("codigoManual").addEventListener("input", tocarLista);
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
 $("items").addEventListener("scroll", tocarLista, {passive:true});
 $("resultado").addEventListener("click", volverDeResultado);
@@ -597,6 +620,8 @@ $("btnConteoDigitar").addEventListener("click", ()=>{
   const v = prompt("Código del producto:");
   if(v && v.trim()) pedirCantidad(v.trim());
 });
+$("btnConteoCompartir").addEventListener("click", compartirConteo);
+$("btnConteoTxt").addEventListener("click", compartirTxt);
 $("btnConteoExportar").addEventListener("click", descargarConteo);
 $("btnConteoDrive").addEventListener("click", enviarConteo);
 $("btnConteoBorrar").addEventListener("click", ()=>{
@@ -622,7 +647,7 @@ entrada.addEventListener("keydown", async e=>{
 });
 setInterval(()=>{
   const act = document.querySelector(".pantalla.activa");
-  if(act && !["lista","digitar","conteoItem","ajustes"].includes(act.id) && document.activeElement !== entrada)
+  if(act && !["lista","conteoItem","ajustes"].includes(act.id) && document.activeElement !== entrada)
     entrada.focus({preventScroll:true});
 }, 1000);
 
