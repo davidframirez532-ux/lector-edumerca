@@ -103,6 +103,8 @@
     color:var(--amarillo);white-space:nowrap;text-align:right}
   .item .pre small{display:block;font-family:"Barlow",sans-serif;font-weight:600;font-size:.8rem;color:var(--papel);opacity:.7}
   .item .pre .mas{color:var(--azul)} .item .pre .menos{color:var(--rojo)}
+  .item:has(.borrar){grid-template-columns:auto 1fr auto auto}
+  .item .borrar{color:var(--rojo);font-size:1.25rem;padding:6px 4px 6px 12px;line-height:1}
   .vacio{opacity:.7;text-align:center;padding:30px 10px;font-size:1.05rem;line-height:1.5}
   .menu{display:flex;flex-direction:column;gap:14px;justify-content:center;flex:1}
 
@@ -215,7 +217,7 @@
     <button class="sec chico" id="btnConteoCompartir">Compartir CSV</button>
     <button class="sec chico" id="btnConteoTxt">Compartir TXT</button>
     <button class="sec chico" id="btnConteoExportar">Descargar</button>
-    <button class="sec chico" id="btnConteoBorrar">Limpiar pantalla</button>
+    <button class="sec chico" id="btnConteoBorrar">Limpiar lista de hoy</button>
   </div>
 </section>
 
@@ -245,8 +247,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v24 · 1-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxZhlScc0bjfwcE079F9bHPaAfJ5eszNG07lLFA2rF5M3AWBV9t_6jIx-u-1Ll8idAA/exec";
+const VERSION = "v26 · 1-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwgR53qzPQN0mRqma8y9xVB_rczm__8S2aTx1l66zX5iosGHcVwm_ifzooybkP7I9Uo/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -617,7 +619,7 @@ function pintarConteo(){
     b.className = "item";
     b.innerHTML = `<span class="cod"></span>
       <span class="nom"><span class="t"></span><small></small></span>
-      <span class="pre"></span>`;
+      <span class="pre"></span><span class="borrar">✕</span>`;
     b.querySelector(".cod").textContent = c.codigo;
     b.querySelector(".t").textContent = c.nombre;
     b.querySelector("small").textContent =
@@ -625,7 +627,13 @@ function pintarConteo(){
     const pre = b.querySelector(".pre");
     pre.innerHTML = dif === null ? "—"
       : `<span class="${dif > 0 ? "mas" : dif < 0 ? "menos" : ""}">${dif > 0 ? "+" : ""}${num(dif)}</span><small>dif.</small>`;
-    b.onclick = ()=>{ if(confirm(`¿Borrar el conteo de ${c.nombre}?`)){ conteo = conteo.filter(x=>x!==c); guardarConteo(); pintarConteo(); } };
+    b.onclick = ()=>{
+      if(confirm(`${c.nombre}\n\nAceptar: quitar solo de MI lista (el conteo se conserva).\nCancelar: ver la opción de borrar el conteo para todos.`)){
+        conteo = conteo.filter(x=>x!==c); guardarConteo(); pintarConteo();
+      }else if(confirm(`¿Borrar el CONTEO de ${c.nombre}?\n\nSe elimina para todos los celulares y vuelve a quedar pendiente.`)){
+        borrarConteos([c.codigo], c.nombre, true);
+      }
+    };
     return b;
   }));
 }
@@ -806,12 +814,18 @@ function pintarAjustar(){
     b.className = "item";
     b.innerHTML = `<span class="cod"></span>
       <span class="nom"><span class="t"></span><small></small></span>
-      <span class="pre"><span class="${l.dif>0?"mas":"menos"}">${l.dif>0?"+":""}${num(l.dif)}</span><small>dif.</small></span>`;
+      <span class="pre"><span class="${l.dif>0?"mas":"menos"}">${l.dif>0?"+":""}${num(l.dif)}</span><small>dif.</small></span>
+      <span class="borrar">✕</span>`;
     b.querySelector(".cod").textContent = l.cod;
     b.querySelector(".t").textContent = l.n || (buscar(l.cod) ? buscar(l.cod).n : "");
     b.querySelector("small").textContent = `Siigo ${num(l.s)} · contado ${num(l.r)} · ${fechaHora(l.f)}` +
+      (l.q ? ` · ${l.q}` : "") +
       (l.enPlantilla ? "" : " · falta incluirlo en una plantilla");
     if(!l.enPlantilla) b.style.opacity = ".6";
+    b.querySelector(".borrar").onclick = (ev)=>{
+      ev.stopPropagation();
+      borrarConteos([l.cod], b.querySelector(".t").textContent || l.cod);
+    };
     b.onclick = ()=>{
       if(!l.enPlantilla) return alert("Este producto se contó después de generar la plantilla. Genera una nueva, impórtala y luego márcalo.");
       if(confirm(`¿Marcar SOLO este producto como ajustado en Siigo?\n\n${b.querySelector(".t").textContent}`))
@@ -841,6 +855,33 @@ async function generarPlantilla(){
   }catch(e){
     $("ajEstado").textContent = "No se pudo generar: " + e.message;
   }finally{ btn.disabled = false; btn.textContent = "Generar plantilla Siigo"; }
+}
+
+let claveAdmin = "";
+async function borrarConteos(codigos, nombre, yaConfirmado){
+  const url = apiUrl();
+  if(!url) return alert("Falta configurar la URL de Apps Script.");
+  if(!yaConfirmado &&
+     !confirm(`¿Borrar el conteo de ${nombre}?\n\nSe elimina para todos los celulares y queda registrado en Drive.`)) return;
+  if(!claveAdmin){
+    const c = prompt("Clave de administrador:");
+    if(c === null) return;
+    claveAdmin = c.trim();
+  }
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({accion:"borrar", quien, clave: claveAdmin, codigos})});
+    const d = await r.json();
+    if(!d.ok){ claveAdmin = ""; throw new Error(d.error || "error"); }
+    codigos.forEach(c=>{ delete ultimos[c]; });
+    conteo = conteo.filter(c=>codigos.indexOf(c.codigo) < 0);
+    guardar("ultimos", JSON.stringify(ultimos));
+    guardarConteo();
+    pintarConteo();
+    if($("ajustar").classList.contains("activa")) pintarAjustar();
+  }catch(e){
+    alert("No se pudo borrar: " + e.message);
+  }
 }
 
 async function marcarAjustados(codigos){
@@ -913,7 +954,7 @@ $("btnConteoTxt").addEventListener("click", compartirTxt);
 $("btnConteoExportar").addEventListener("click", descargarConteo);
 $("btnConteoBorrar").addEventListener("click", ()=>{
   if(cola.length) return alert(`Faltan ${cola.length} por enviar a Drive. Espera a que diga "Todo guardado".`);
-  if(conteo.length && confirm("¿Limpiar la pantalla? Lo contado ya está guardado en Drive.")){
+  if(conteo.length && confirm("¿Limpiar solo la lista de esta pantalla?\n\nLos conteos siguen guardados en Drive y los productos siguen apareciendo como contados.")){
     conteo = []; guardarConteo(); pintarConteo();
   }
 });
