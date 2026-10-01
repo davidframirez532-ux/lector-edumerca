@@ -186,6 +186,7 @@
   <div class="menu">
     <button class="ppal" id="btnActualizarSiigo">Actualizar inventario desde Siigo</button>
     <p id="msgAjustes" style="margin:0;text-align:center;opacity:.8;min-height:1.4em"></p>
+    <button class="ghost" id="btnCambiarQuien">Cambiar quién cuenta</button>
     <button class="ghost" id="btnCambiarUrl">Cambiar URL de Apps Script</button>
     <p id="verApp" style="margin:0;text-align:center;opacity:.55;font-size:.9rem"></p>
     <button class="sec" id="btnForzar">Forzar actualización de la app</button>
@@ -206,6 +207,7 @@
     <button class="sec" id="btnConteoDigitar">Digitar</button>
     <button class="sec" id="btnPendientes">Pendientes</button>
     <button class="sec" id="btnAjustar">Ajustar en Siigo</button>
+    <button class="sec" id="btnQuien">👤</button>
   </div>
   <p id="cnEstado" style="margin:0;font-size:.85rem;opacity:.7;text-align:center"></p>
   <div class="items" id="conteoItems"></div>
@@ -243,7 +245,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v23 · 1-oct-2026";
+const VERSION = "v24 · 1-oct-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwgR53qzPQN0mRqma8y9xVB_rczm__8S2aTx1l66zX5iosGHcVwm_ifzooybkP7I9Uo/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -598,6 +600,7 @@ function pintarConteo(){
   $("cnAvance").textContent = productos.length ? (hechos*100/productos.length).toFixed(1) + "%" : "0%";
   const porAj = porAjustar().length;
   $("btnAjustar").textContent = porAj ? `Ajustar (${porAj})` : "Ajustar en Siigo";
+  $("btnQuien").textContent = quien ? "👤 " + quien : "👤 ¿quién cuenta?";
   const sinc = sincronizado
     ? `· al día ${Math.max(0, Math.round((Date.now()-sincronizado)/1000))}s` : "";
   $("cnEstado").textContent = cola.length
@@ -895,6 +898,11 @@ $("btnDigitarEsc").addEventListener("click", async ()=>{
   if(v && v.trim()) pedirCantidad(v.trim()); else abrirConteo();
 });
 $("btnVolverConteo").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+$("btnQuien").addEventListener("click", ()=>{
+  const q = prompt("¿Quién está contando?", quien || "");
+  if(q === null) return;
+  quien = q.trim(); guardar("quien", quien); pintarConteo();
+});
 $("btnConteoEscanear").addEventListener("click", ()=>abrirCamara("conteo"));
 $("btnConteoDigitar").addEventListener("click", ()=>{
   const v = prompt("Código del producto:");
@@ -1019,6 +1027,13 @@ $("btnForzar").addEventListener("click", async ()=>{
     }
   }catch(e){}
   location.reload(true);
+});
+$("btnCambiarQuien").addEventListener("click", ()=>{
+  const q = prompt("¿Quién va a contar en este celular?", quien || "");
+  if(q === null) return;
+  quien = q.trim();
+  guardar("quien", quien);
+  $("msgAjustes").textContent = quien ? `Ahora cuenta: ${quien}` : "Se preguntará al entrar al conteo";
 });
 $("btnCambiarUrl").addEventListener("click", ()=>{
   const u = prompt("URL de la web app de precios:", apiUrl());
