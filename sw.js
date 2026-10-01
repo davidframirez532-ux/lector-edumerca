@@ -1,6 +1,6 @@
 // Service worker: permite instalar la app y abrirla aunque no haya internet.
 // Los precios NO se guardan aquí (los maneja la página con su copia local).
-const CACHE = "lector-edumerca-v21";
+const CACHE = "lector-edumerca-v22";
 const ARCHIVOS = ["./", "./index.html", "./manifest.webmanifest", "./icono-192.png", "./icono-512.png"];
 
 self.addEventListener("install", e => {
