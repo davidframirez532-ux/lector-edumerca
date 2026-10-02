@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f3d2e">
+<meta name="theme-color" content="#07323c">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icono-192.png">
@@ -14,8 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
-    --verde:#0f3d2e; --verde2:#16573f; --verde3:#1f6b4f; --amarillo:#ffd23f;
-    --papel:#fbfaf5; --tinta:#1b1b1b; --gris:#6b7069; --rojo:#c0392b; --azul:#2d8fd5;
+    --verde:#07323c; --verde2:#11525c; --verde3:#1a6b73; --amarillo:#3fd0c9;
+    --papel:#f4fbfa; --tinta:#10272c; --gris:#5c7177; --rojo:#e05a45; --azul:#6fb8ff;
     box-sizing:border-box;
   }
   *,*::before,*::after{box-sizing:inherit}
@@ -27,7 +27,9 @@
     padding:calc(env(safe-area-inset-top,0px) + 56px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
   .pantalla.activa{display:flex}
   .marca{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:20px;
-    font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;z-index:5}
+    font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;z-index:5;
+    display:flex;align-items:baseline;gap:6px}
+  .marca span{color:var(--amarillo);letter-spacing:.08em}
   .estado{position:fixed;top:calc(env(safe-area-inset-top,0px) + 17px);right:20px;font-size:.8rem;opacity:.6;z-index:5}
 
   .cabeza{display:flex;align-items:center;gap:10px;flex:none}
@@ -35,6 +37,9 @@
   .sec{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;font-size:1.05rem;
     font-weight:600;padding:12px 20px;cursor:pointer}
   .sec.chico{padding:9px 14px;font-size:.95rem}
+  .ppal.obra,.ghost.obra{opacity:.6}
+  .ppal.obra{background:var(--verde3);color:var(--papel)}
+  .ppal.obra::after{content:" · en obra";font-size:.8rem;opacity:.8}
   .ppal{background:var(--amarillo);color:var(--verde);border:0;border-radius:12px;padding:16px;
     font-size:1.25rem;font-weight:600;cursor:pointer}
   .ghost{background:transparent;color:var(--papel);border:2px solid rgba(251,250,245,.45);
@@ -119,8 +124,10 @@
   .ficha{background:var(--papel);color:var(--tinta);border-radius:12px;padding:20px;text-align:center}
   .ficha h3{margin:0 0 6px;font-size:1.3rem;text-transform:uppercase;line-height:1.15}
   .ficha .meta{color:var(--gris);font-size:.9rem}
-  .ficha .aviso{margin-top:14px;background:#fff3cd;border:2px solid var(--amarillo);border-radius:8px;
+  .ficha .aviso{margin-top:14px;background:#d9f5f2;border:2px solid var(--amarillo);border-radius:8px;
     padding:12px;font-size:.95rem;line-height:1.45;color:var(--tinta)}
+  .ficha .aviso.rojo{background:#ffe3dd;border-color:var(--rojo)}
+  .ficha .aviso.suave{background:#dff3f1;border-color:#1a8f87}
   .ficha .siigo{margin-top:12px;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:3.2rem;
     color:var(--verde);line-height:1}
   .ficha .siigo span{display:block;font-family:"Barlow",sans-serif;font-size:.85rem;font-weight:600;color:var(--gris)}
@@ -131,7 +138,7 @@
 </style>
 </head>
 <body>
-<div class="marca" id="marca">EDUMERCA</div>
+<div class="marca" id="marca">EDUMERCA<span>122</span></div>
 <div class="estado" id="estado">Cargando precios…</div>
 
 <!-- ============ INICIO ============ -->
@@ -145,7 +152,7 @@
     </svg>
     <span>ESCANEA TU<br>PRODUCTO</span>
   </button>
-  <button class="ghost" id="btnInventario">ENTRA AL INVENTARIO</button>
+  <button class="ghost" id="btnInventario">ENTRAR</button>
 </section>
 
 <!-- ============ CÁMARA ============ -->
@@ -165,12 +172,41 @@
 <!-- ============ RESULTADO ============ -->
 <section class="pantalla" id="resultado"></section>
 
-<!-- ============ MENÚ INVENTARIO ============ -->
+<!-- ============ MENÚ PRINCIPAL ============ -->
+<section class="pantalla" id="principal">
+  <div class="cabeza"><h2>Administración</h2><button class="sec" id="btnSalirPrin">Salir</button></div>
+  <div class="menu">
+    <button class="ppal" id="btnMenuInv">Inventario</button>
+    <button class="ghost" id="btnMenuCompras">Compras</button>
+    <button class="ppal" id="btnMenuVentas">Ventas</button>
+  </div>
+</section>
+
+<!-- ============ INVENTARIO ============ -->
 <section class="pantalla" id="inventario">
-  <div class="cabeza"><h2>Inventario</h2><button class="sec" id="btnSalirInv">Salir</button></div>
+  <div class="cabeza"><h2>Inventario</h2><button class="sec" id="btnSalirInv">Volver</button></div>
   <div class="menu">
     <button class="ppal" id="btnCatalogo">Catálogo completo</button>
     <button class="ghost" id="btnConteo">Conteo físico</button>
+  </div>
+</section>
+
+<!-- ============ COMPRAS ============ -->
+<section class="pantalla" id="compras">
+  <div class="cabeza"><h2>Compras</h2><button class="sec" id="btnSalirCompras">Volver</button></div>
+  <div class="menu">
+    <button class="ppal obra" id="btnPedidos">Pedidos sugeridos por proveedor</button>
+    <button class="ghost obra" id="btnAbastos">Lista de compra general</button>
+    <button class="ppal obra" id="btnAbastosPlaza">Lista de abastos</button>
+  </div>
+</section>
+
+<!-- ============ VENTAS ============ -->
+<section class="pantalla" id="ventas">
+  <div class="cabeza"><h2>Ventas</h2><button class="sec" id="btnSalirVentas">Volver</button></div>
+  <div class="menu">
+    <button class="ppal obra" id="btnVentasDia">Ventas del día</button>
+    <button class="ghost obra" id="btnVentasMes">Ventas mensuales</button>
   </div>
 </section>
 
@@ -188,7 +224,8 @@
   <div class="menu">
     <button class="ppal" id="btnActualizarSiigo">Actualizar inventario desde Siigo</button>
     <p id="msgAjustes" style="margin:0;text-align:center;opacity:.8;min-height:1.4em"></p>
-    <button class="ghost" id="btnCambiarQuien">Cambiar quién cuenta</button>
+    <button class="ghost" id="btnCambiarQuien">Cambiar usuario</button>
+    <button class="ghost" id="btnModoCliente">Salir del modo administración</button>
     <button class="ghost" id="btnCambiarUrl">Cambiar URL de Apps Script</button>
     <p id="verApp" style="margin:0;text-align:center;opacity:.55;font-size:.9rem"></p>
     <button class="sec" id="btnForzar">Forzar actualización de la app</button>
@@ -217,7 +254,7 @@
     <button class="sec chico" id="btnConteoCompartir">Compartir CSV</button>
     <button class="sec chico" id="btnConteoTxt">Compartir TXT</button>
     <button class="sec chico" id="btnConteoExportar">Descargar</button>
-    <button class="sec chico" id="btnConteoBorrar">Limpiar lista de hoy</button>
+    <button class="sec chico" id="btnConteoBorrar">Limpiar lista</button>
   </div>
 </section>
 
@@ -247,15 +284,17 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.15 · 1-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbz-uD3oZMEnFRBjyDS0ntMBwOSk5xD40drTfDHaI8MZ_xyoQ_iIv5whmSUIbY0iaqa8/exec";
+const VERSION = "v32 · 1-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwgR53qzPQN0mRqma8y9xVB_rczm__8S2aTx1l66zX5iosGHcVwm_ifzooybkP7I9Uo/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
 const MAX_DIGITOS_CORTO = 5;
 const MINUTOS_REFRESCO = 30;
 const SEGUNDOS_SINCRONIZAR = 25;  // refresco del conteo mientras estás en esas pantallas
-const DIAS_PENDIENTE = 30;        // un producto se considera pendiente pasados estos días
+const DIAS_RECIENTE = 7;     // contado hace poco: avisa fuerte si lo vas a recontar
+const DIAS_PENDIENTE = 30;   // a partir de aquí se considera pendiente
+const DIAS_VIEJO = 90;       // a partir de aquí, urgente        // un producto se considera pendiente pasados estos días
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
@@ -288,6 +327,14 @@ function hace(iso){
   if(d < 30) return `hace ${d} días`;
   const m = Math.floor(d/30);
   return m === 1 ? "hace 1 mes" : `hace ${m} meses`;
+}
+function dias(iso){ return Math.floor((Date.now() - new Date(iso)) / 86400000); }
+function nivel(iso){
+  const d = dias(iso);
+  if(d < DIAS_RECIENTE) return {k:"reciente", c:"#4fd6a8", t:"recién contado"};
+  if(d < DIAS_PENDIENTE) return {k:"ok", c:"#bcd9dc", t:"al día"};
+  if(d < DIAS_VIEJO) return {k:"toca", c:"#ffd23f", t:"toca recontar"};
+  return {k:"urgente", c:"#ff9a86", t:"urgente"};
 }
 function ultimoDe(it){
   return ultimos[it.c] || ultimos[it.b] || null;
@@ -488,7 +535,13 @@ function mostrarError(titulo, texto, volverA){
 /* ---------- Listas ---------- */
 function fuente(){
   if(filtroExtra === "sin") return productos.filter(i=>sinCodigo.has(i));
-  if(filtroExtra === "pend") return productos.filter(esPendiente);
+  if(filtroExtra === "pend") return productos.filter(esPendiente).sort((a,b)=>{
+    const ua = ultimoDe(a), ub = ultimoDe(b);
+    if(!ua && !ub) return a.n.localeCompare(b.n,"es");
+    if(!ua) return -1;
+    if(!ub) return 1;
+    return new Date(ua.f) - new Date(ub.f);
+  });
   if(filtroExtra === "cont") return productos.filter(i=>!!ultimoDe(i));
   return productos;
 }
@@ -506,13 +559,16 @@ const extras = [
     b.onclick = ()=>{ filtroExtra = filtroExtra === x.k ? "" : x.k; pintarChips(); pintarLista(); tocarLista(); };
     return b;
   });
-  $("chips").replaceChildren(...extras, ...["", ...cats].map(c=>{
+  const cats2 = ["", ...cats].map(c=>{
     const b = document.createElement("button");
     b.className = "chip"; b.textContent = c ? c.toLowerCase() : "Todas";
     b.setAttribute("aria-pressed", c === categoria);
     b.onclick = ()=>{ categoria = c; pintarChips(); pintarLista(); tocarLista(); };
     return b;
-  }));
+  });
+  const sep = document.createElement("span");
+  sep.style.cssText = "flex:none;width:1px;background:rgba(244,251,250,.25);margin:4px 2px";
+  $("chips").replaceChildren(...cats2, sep, ...extras);
 }
 function pintarLista(){
   const q = normal($("buscador").value.trim());
@@ -533,9 +589,17 @@ function pintarLista(){
       <span class="pre">$${pesos(i.p)}</span>`;
     b.querySelector(".cod").textContent = i.c || i.b;
     b.querySelector(".t").textContent = i.n;
-    b.querySelector("small").textContent = u
-      ? `✓ contado ${hace(u.f)}${u.a ? " · ajustado en Siigo" : (Number(u.r) !== Number(u.s) && u.s !== null ? " · falta ajustar" : "")}`
-      : "nunca contado";
+    const sm = b.querySelector("small");
+    if(u){
+      const n = nivel(u.f);
+      sm.style.color = n.c;
+      sm.textContent = `${n.k === "urgente" ? "⚠ " : "✓ "}contado ${hace(u.f)}` +
+        (u.a ? " · ajustado" : (u.s !== null && Number(u.r) !== Number(u.s) ? " · falta ajustar" : "")) +
+        (n.k === "toca" || n.k === "urgente" ? ` · ${n.t}` : "");
+    }else{
+      sm.style.color = "var(--rojo)";
+      sm.textContent = "⚠ nunca contado";
+    }
     b.onclick = ()=>{ clearTimeout(tLista); mostrarItem(i, "lista"); };
     return b;
   }));
@@ -560,9 +624,9 @@ function cargarConteo(){
   try{ ultimos = JSON.parse(leer("ultimos") || "{}"); }catch(e){ ultimos = {}; }
   quien = leer("quien") || "";
 }
-function pedirQuien(){
-  if(quien) return quien;
-  const q = (prompt("¿Quién va a contar? (nombre corto, se guarda en este celular)") || "").trim();
+function pedirQuien(forzar){
+  if(quien && !forzar) return quien;
+  const q = (prompt("Nombre de usuario (queda en el registro de conteos)", quien || "") || "").trim();
   if(q){ quien = q; guardar("quien", q); }
   return quien;
 }
@@ -645,14 +709,22 @@ function pedirCantidad(codigo){
   const previo = conteo.find(c=>c.codigo === cod);
   const ult = it ? ultimoDe(it) : ultimos[cod];
   const base = previo ? {f: previo.hora, r: previo.real} : ult;
-  const aviso = base ? `<div class="aviso">
-        <b>Ya contaste este producto</b><br>
+  let aviso = "";
+  if(base){
+    const n = nivel(base.f);
+    const clase = n.k === "reciente" ? "aviso rojo" : (n.k === "ok" ? "aviso" : "aviso suave");
+    const titulo = n.k === "reciente" ? "¡Ojo! Lo contaste hace muy poco"
+                 : n.k === "ok" ? "Ya contaste este producto"
+                 : `Toca recontarlo (${n.t})`;
+    aviso = `<div class="${clase}">
+        <b>${titulo}</b><br>
         ${fechaHora(base.f)} (${hace(base.f)}) · cantidad: <b>${num(base.r)}</b>
         ${ult && ult.a
-          ? `<br><b style="color:#0f3d2e">Ya ajustado en Siigo</b> el ${fechaHora(ult.a)}`
+          ? `<br>Ajustado en Siigo el ${fechaHora(ult.a)}`
           : (ult && ult.s !== null && Number(ult.r) !== Number(ult.s) ? `<br>Diferencia pendiente de ajustar` : "")}
         <br><span style="opacity:.75">Si guardas, se reemplaza y queda pendiente de ajustar otra vez.</span>
-      </div>` : "";
+      </div>`;
+  }
   $("fichaConteo").innerHTML =
     `<h3></h3><div class="meta"></div>
      <div class="siigo">${pendiente.siigo === null ? "?" : num(pendiente.siigo)}<span>cantidad en Siigo</span></div>`
@@ -785,19 +857,18 @@ function abrirAjustar(){
 }
 function pintarAjustar(){
   const lista = porAjustar();
-  const conDif = Object.values(ultimos)
-    .filter(u => u.s !== null && u.s !== undefined && Number(u.r) !== Number(u.s));
-  const ajustados = conDif.filter(u => u.a).length;
-  const pct = conDif.length ? (ajustados*100/conDif.length).toFixed(1) : "0.0";
   const puede = marcables().length;
+  const faltan = lista.reduce((t,l)=> t + Math.abs(l.dif), 0);
+  const plata = lista.reduce((t,l)=> t + Math.abs(l.dif) * (Number(l.p) || 0), 0);
+  const masViejo = lista.length ? lista[0] : null;
   const btn = $("btnAjMarcar");
   btn.disabled = !puede;
   btn.style.opacity = btn.disabled ? ".45" : "1";
   btn.textContent = puede ? `Marcar ${puede} como ajustados` : "Marcar como ajustados";
   $("ajEstado").innerHTML =
-    `<b>${ajustados} de ${conDif.length} ajustados (${pct}%)</b>` +
     (lista.length
-      ? `<br>${lista.length} con diferencia sin ajustar.` +
+      ? `<b>${lista.length} productos · ${num(faltan)} unidades · $${pesos(plata)}</b>` +
+        `<br>El más antiguo: ${hace(masViejo.f)}.` +
         (ultimaPlantilla
           ? ` Última plantilla: ${fechaHora(ultimaPlantilla)}.` +
             (lista.length > puede ? ` <b>${lista.length - puede}</b> se contaron después y no están en ella.` : "")
@@ -922,13 +993,46 @@ function csvAjustes(){
     ...porAjustar().map(l=>[esc(l.cod), esc(l.n||""), l.s, l.r, l.dif].join(","))].join("\r\n");
 }
 
+/* ---------- Modo administración ---------- */
+function esAdmin(){ return leer("admin") === VERSION; }
+async function entrar(){
+  if(esAdmin()){ irMenu("principal"); return; }
+  const c = prompt("Clave de administrador:");
+  if(c === null) return;
+  const url = apiUrl();
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({accion:"clave", clave:c.trim()})});
+    const d = await r.json();
+    if(!d.ok) return alert("Clave incorrecta.");
+    claveAdmin = c.trim();
+    guardar("admin", VERSION);
+    pedirQuien(true);
+    irMenu("principal");
+  }catch(e){ alert("No se pudo validar la clave: " + e.message); }
+}
+function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
+
 /* ---------- Eventos ---------- */
 $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
-$("btnInventario").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
-$("btnSalirInv").addEventListener("click", inicio);
+$("btnInventario").addEventListener("click", entrar);
+$("btnMenuInv").addEventListener("click", ()=>irMenu("inventario"));
+$("btnMenuCompras").addEventListener("click", ()=>irMenu("compras"));
+$("btnMenuVentas").addEventListener("click", ()=>irMenu("ventas"));
+$("btnSalirPrin").addEventListener("click", inicio);
+$("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
+$("btnSalirCompras").addEventListener("click", ()=>irMenu("principal"));
+$("btnSalirVentas").addEventListener("click", ()=>irMenu("principal"));
+const enObra = nombre => ()=> alert(nombre + "\n\nEn construcción.");
+$("btnPedidos").addEventListener("click", enObra("Pedidos sugeridos por proveedor"));
+$("btnAbastos").addEventListener("click", enObra("Lista de compra general"));
+$("btnVentasDia").addEventListener("click", enObra("Ventas del día"));
+$("btnVentasMes").addEventListener("click", enObra("Ventas mensuales"));
+$("btnAbastosPlaza").addEventListener("click", enObra("Lista de abastos"));
 $("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
-$("btnVolverLista").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+
+$("btnVolverLista").addEventListener("click", ()=>irMenu("inventario"));
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
 $("items").addEventListener("scroll", tocarLista, {passive:true});
 $("resultado").addEventListener("click", volverDeResultado);
@@ -938,7 +1042,7 @@ $("btnDigitarEsc").addEventListener("click", async ()=>{
   const v = prompt("Código del producto:");
   if(v && v.trim()) pedirCantidad(v.trim()); else abrirConteo();
 });
-$("btnVolverConteo").addEventListener("click", ()=>{ clearTimeout(tLista); ir("inventario"); tocarLista(); });
+$("btnVolverConteo").addEventListener("click", ()=>irMenu("inventario"));
 $("btnQuien").addEventListener("click", ()=>{
   const q = prompt("¿Quién está contando?", quien || "");
   if(q === null) return;
@@ -954,7 +1058,7 @@ $("btnConteoTxt").addEventListener("click", compartirTxt);
 $("btnConteoExportar").addEventListener("click", descargarConteo);
 $("btnConteoBorrar").addEventListener("click", ()=>{
   if(cola.length) return alert(`Faltan ${cola.length} por enviar a Drive. Espera a que diga "Todo guardado".`);
-  if(conteo.length && confirm("¿Limpiar solo la lista de esta pantalla?\n\nLos conteos siguen guardados en Drive y los productos siguen apareciendo como contados.")){
+  if(conteo.length && confirm("¿Limpiar la lista de esta pantalla?\n\nLos conteos siguen guardados en Drive y los productos siguen apareciendo como contados.")){
     conteo = []; guardarConteo(); pintarConteo();
   }
 });
@@ -1069,8 +1173,13 @@ $("btnForzar").addEventListener("click", async ()=>{
   }catch(e){}
   location.reload(true);
 });
+$("btnModoCliente").addEventListener("click", ()=>{
+  if(!confirm("¿Dejar este celular en modo cliente?\n\nPara volver a entrar se pedirá la clave.")) return;
+  guardar("admin", ""); claveAdmin = "";
+  inicio();
+});
 $("btnCambiarQuien").addEventListener("click", ()=>{
-  const q = prompt("¿Quién va a contar en este celular?", quien || "");
+  const q = prompt("Nombre de usuario:", quien || "");
   if(q === null) return;
   quien = q.trim();
   guardar("quien", quien);
