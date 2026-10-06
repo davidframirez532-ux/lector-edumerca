@@ -200,7 +200,7 @@
   .ab-cant b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;color:var(--amarillo);display:block;line-height:1}
   .ab-cant small{font-size:.8rem;opacity:.8}
   .ab-item.hecho .ab-nom,.ab-item.hecho .ab-cant{opacity:.4;text-decoration:line-through}
-  #abResumen .caja b{font-size:1.3rem}
+  #abResumen .caja b,#pdResumen .caja b{font-size:1.3rem}
   .fechas{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
   .fechas .campo input{padding:9px 10px;font-size:1rem}
   .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
@@ -248,7 +248,6 @@
     <button class="ppal" id="btnMenuKpis">KPIs del negocio</button>
     <button class="ghost" id="btnMenuInv">Inventario</button>
     <button class="ppal" id="btnMenuCompras">Compras</button>
-    <button class="ghost" id="btnMenuVentas">Ventas</button>
   </div>
 </section>
 
@@ -266,18 +265,8 @@
   <div class="cabeza"><h2>Compras</h2><button class="sec" id="btnSalirCompras">Volver</button></div>
   <div class="menu">
     <button class="ppal" id="btnProveedores">Proveedores</button>
-    <button class="ghost obra" id="btnPedidos">Pedidos sugeridos por proveedor</button>
-    <button class="ppal obra" id="btnAbastos">Lista de compra general</button>
-    <button class="ghost" id="btnAbastosPlaza">Lista de abastos</button>
-  </div>
-</section>
-
-<!-- ============ VENTAS ============ -->
-<section class="pantalla" id="ventas">
-  <div class="cabeza"><h2>Ventas</h2><button class="sec" id="btnSalirVentas">Volver</button></div>
-  <div class="menu">
-    <button class="ppal obra" id="btnVentasDia">Ventas del día</button>
-    <button class="ghost obra" id="btnVentasMes">Ventas mensuales</button>
+    <button class="ghost" id="btnPedidos">Pedidos sugeridos por proveedor</button>
+    <button class="ppal" id="btnAbastosPlaza">Lista de abastos</button>
   </div>
 </section>
 
@@ -413,6 +402,35 @@
   </div>
 </section>
 
+<!-- ============ PEDIDOS SUGERIDOS ============ -->
+<section class="pantalla" id="pedidos">
+  <div class="cabeza"><h2>Pedidos sugeridos</h2><button class="sec" id="btnVolverPedidos">Volver</button></div>
+  <p style="margin:0;font-size:.9rem;opacity:.8">Ordenados por el próximo día que pasa el vendedor. No incluye proveedores de abastos.</p>
+  <p id="pdEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center"></p>
+  <div class="items" id="pdItems"></div>
+</section>
+
+<!-- ============ PEDIDO A UN PROVEEDOR ============ -->
+<section class="pantalla" id="pedido">
+  <div class="cabeza"><h2 id="pdTitulo" style="font-size:1.45rem">Pedido</h2><button class="sec" id="btnVolverPedido">Volver</button></div>
+  <p id="pdInfo" style="margin:0;font-size:.9rem;opacity:.9"></p>
+  <div class="fechas">
+    <label class="campo">Pedido para el<input type="date" id="pdIda"></label>
+    <label class="campo">Siguiente visita<input type="date" id="pdProx"></label>
+  </div>
+  <div class="fechas">
+    <label class="campo">Días de reserva<input id="pdSeguridad" type="number" min="0" max="7" inputmode="numeric"></label>
+    <div class="campo">Productos<button class="chip" id="pdTodos" aria-pressed="false" style="padding:10px 12px;text-transform:none">Todo lo que le compro</button></div>
+  </div>
+  <div class="resumen" id="pdResumen"></div>
+  <div class="items" id="pdLista"></div>
+  <div class="acciones">
+    <button class="ppal chico" id="btnPdEnviar" style="flex:2">Enviar al vendedor</button>
+    <button class="sec chico" id="btnPdTxt">TXT</button>
+    <button class="sec chico" id="btnPdReiniciar" aria-label="Reiniciar">↺</button>
+  </div>
+</section>
+
 <!-- ============ FICHA DE PROVEEDOR ============ -->
 <section class="pantalla" id="proveedor">
   <div class="cabeza"><h2 id="provTitulo">Proveedor</h2><button class="sec" id="btnVolverProv">Volver</button></div>
@@ -424,8 +442,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.36 · 5-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbzqjca5CExdVVbGKg2xrD8hlYEufly2DO0rkzXFy8STnGhrr_NnxVZ-mdo4YHpuLVwy/exec";
+const VERSION = "v1.37 · 5-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxyrlhsNEfxB8BEWMDlU99PlBOqU4-rat7_YNL-qlc-SXDc_VW2ApRh81l4twNn7xi1/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -438,7 +456,7 @@ const DIAS_VIEJO = 90;       // a partir de aquí, urgente        // un producto
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
-const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos"];
+const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos","pedido"];
 const estado = $("estado"), entrada = $("entrada");
 let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
 let escaner = null, modoCamara = "precio", pendiente = null;
@@ -1458,7 +1476,7 @@ function pintarProveedores(){
     return `<button class="item" data-nit="${esc(p.nit)}">
       <span class="cod">${p.productos || 0}</span>
       <span class="nom">${esc(p.nombre)}${ab}
-        <small>${p.dias_visita ? "Visita: " + esc(p.dias_visita) + " · " : ""}${p.ultima_compra ? "Última compra " + fechaTxt(p.ultima_compra) : esc(p.origen || "")}${
+        <small>${p.contacto ? esc(p.contacto) + " · " : ""}${p.dias_visita ? "Pasa: " + esc(p.dias_visita) + " · " : ""}${p.ultima_compra ? "Última compra " + fechaTxt(p.ultima_compra) : esc(p.origen || "")}${
           prodQ.length ? "<br>" + prodQ.map(it => esc(it.producto) + " " + plata(it.ultimo_costo)).join(" · ") : ""}</small></span>
       <span class="pre">›</span></button>`;
   }).join("") : '<div class="vacio">Nada coincide.</div>';
@@ -1476,27 +1494,48 @@ $("provChips").addEventListener("click", e => {
 $("provBuscar").addEventListener("input", pintarProveedores);
 $("provItems").addEventListener("click", e => {
   const b = e.target.closest(".item"); if(!b) return;
-  abrirProveedor(provs.find(p => p.nit === b.dataset.nit));
+  abrirProveedor(provs.find(p => p.nit === b.dataset.nit), "proveedores");
 });
-$("btnProvNuevo").addEventListener("click", () => abrirProveedor(null));
+$("btnProvNuevo").addEventListener("click", () => abrirProveedor(null, "proveedores"));
 $("btnVolverProvs").addEventListener("click", () => irMenu("compras"));
-$("btnVolverProv").addEventListener("click", () => { ir("proveedores"); pintarProveedores(); });
 
-function abrirProveedor(p){
+const DIAS_SEM = ["DOM","LUN","MAR","MIE","JUE","VIE","SAB"];
+const FRECUENCIAS = [[1,"Cada semana"],[2,"Cada 15 días"],[4,"Cada mes"]];
+let provVolver = "proveedores";
+function abrirProveedor(p, volver){
+  provVolver = volver || "proveedores";
   provSel = p ? JSON.parse(JSON.stringify(p)) :
-    {nit:"", nombre:"", abastos:true, dias_visita:"", contacto:"", telefono:"", observaciones:"", items:[], nuevo:true};
+    {nit:"", nombre:"", abastos:true, dias_visita:"", contacto:"", telefono:"", observaciones:"",
+     frecuencia:1, pedido_minimo:0, items:[], nuevo:true};
+  provSel.dias = diasVisita(provSel.dias_visita);
   $("provTitulo").textContent = p ? "Proveedor" : "Nuevo proveedor";
   pintarProveedor();
   ir("proveedor");
   $("provFicha").scrollTop = 0;
 }
+/* "martes y viernes", "MAR, VIE" → [2,5] */
+function diasVisita(txt){
+  const t = normal(txt || "");
+  return [["dom",0],["lun",1],["mar",2],["mie",3],["jue",4],["vie",5],["sab",6]]
+    .filter(([k]) => new RegExp("(^|[^a-z])" + k).test(t)).map(([, i]) => i);
+}
+function telWa(t){
+  let d = String(t || "").replace(/\D/g, "");
+  if(d.length === 10 && d[0] === "3") d = "57" + d;
+  return d;
+}
 function pintarProveedor(){
   const p = provSel;
   const seg = [[true, "Abastos"], [false, "No abastos"], [null, "Sin definir"]].map(([v, t]) =>
     `<button data-ab="${v}" aria-pressed="${p.abastos === v}">${t}</button>`).join("");
+  const chipsDias = [1,2,3,4,5,6,0].map(i =>
+    `<button class="chip" data-dia="${i}" aria-pressed="${p.dias.includes(i)}">${DIAS_SEM[i].toLowerCase()}</button>`).join("");
+  const segFrec = FRECUENCIAS.map(([v, t]) =>
+    `<button data-frec="${v}" aria-pressed="${Number(p.frecuencia || 1) === v}">${t}</button>`).join("");
   const campo = (id, titulo, valor, extra) =>
     `<label class="campo">${titulo}<input id="${id}" value="${esc(valor || "")}" autocomplete="off" ${extra || ""}></label>`;
   const items = (p.items || []).slice().sort((a, b) => normal(a.producto).localeCompare(normal(b.producto)));
+  const wa = telWa(p.telefono);
   let h = "";
   if(p.nuevo){
     h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
@@ -1508,12 +1547,17 @@ function pintarProveedor(){
       ${p.documentos ? `${p.documentos} compras · desde ${fechaTxt(p.primera_compra)} · última ${fechaTxt(p.ultima_compra)}<br>Total comprado: ${plata(p.total_comprado)} sin IVA` : "Sin compras registradas en Siigo"}</p></div>`;
   }
   h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
-    <div class="seg" id="pvAbastos" style="background:var(--verde)">${seg}</div>
-    ${campo("pvDias", "Días de visita o de compra", p.dias_visita, 'placeholder="Ej: martes y viernes"')}
-    ${campo("pvContacto", "Contacto / vendedor", p.contacto)}
-    ${campo("pvTel", "Teléfono", p.telefono, 'inputmode="tel"')}
-    <label class="campo">Observaciones<textarea id="pvObs">${esc(p.observaciones || "")}</textarea></label>
-    ${p.telefono ? `<a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>` : ""}
+    <div class="seg" id="pvAbastos" style="background:var(--verde)">${seg}</div></div>
+  <div class="bloque" style="display:flex;flex-direction:column;gap:10px">
+    <h3 style="margin:0">Vendedor</h3>
+    ${campo("pvContacto", "Nombre", p.contacto, 'placeholder="Ej: Carlos"')}
+    ${campo("pvTel", "Celular", p.telefono, 'inputmode="tel" placeholder="300 123 4567"')}
+    ${wa ? `<div class="acciones"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>
+      <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a></div>` : ""}
+    <div class="campo">Días que pasa o que vas<div class="chips" id="pvDias" style="flex-wrap:wrap">${chipsDias}</div></div>
+    <div class="seg" id="pvFrec" style="background:var(--verde)">${segFrec}</div>
+    ${campo("pvMinimo", "Pedido mínimo ($)", p.pedido_minimo ? pesos(p.pedido_minimo) : "", 'inputmode="numeric" placeholder="0 = sin mínimo"')}
+    <label class="campo">Observaciones<textarea id="pvObs" placeholder="Ej: entrega al día siguiente, pago de contado">${esc(p.observaciones || "")}</textarea></label>
   </div>`;
   if(!p.nuevo){
     h += `<div class="bloque"><h3>Le compras ${items.length} productos <small>costo sin IVA</small></h3>` +
@@ -1525,16 +1569,31 @@ function pintarProveedor(){
   $("provFicha").innerHTML = h;
 }
 $("provFicha").addEventListener("click", e => {
-  const b = e.target.closest("#pvAbastos button"); if(!b) return;
+  const ab = e.target.closest("#pvAbastos button");
+  const dia = e.target.closest("#pvDias .chip");
+  const fr = e.target.closest("#pvFrec button");
+  if(!ab && !dia && !fr) return;
   leerFichaProveedor();
-  provSel.abastos = b.dataset.ab === "true" ? true : b.dataset.ab === "false" ? false : null;
+  if(ab) provSel.abastos = ab.dataset.ab === "true" ? true : ab.dataset.ab === "false" ? false : null;
+  if(dia){
+    const i = Number(dia.dataset.dia);
+    provSel.dias = provSel.dias.includes(i) ? provSel.dias.filter(x => x !== i) : provSel.dias.concat(i);
+  }
+  if(fr) provSel.frecuencia = Number(fr.dataset.frec);
   pintarProveedor();
+});
+$("provFicha").addEventListener("input", e => {
+  if(e.target.id === "pvMinimo"){
+    const n = Number(e.target.value.replace(/\D/g, "")) || 0;
+    e.target.value = n ? pesos(n) : "";
+  }
 });
 function leerFichaProveedor(){
   const v = id => $(id) ? $(id).value.trim() : "";
   if(provSel.nuevo) provSel.nombre = v("pvNombre").toUpperCase();
-  provSel.dias_visita = v("pvDias"); provSel.contacto = v("pvContacto");
-  provSel.telefono = v("pvTel"); provSel.observaciones = v("pvObs");
+  provSel.contacto = v("pvContacto"); provSel.telefono = v("pvTel"); provSel.observaciones = v("pvObs");
+  provSel.pedido_minimo = Number(v("pvMinimo").replace(/\D/g, "")) || 0;
+  provSel.dias_visita = [1,2,3,4,5,6,0].filter(i => provSel.dias.includes(i)).map(i => DIAS_SEM[i]).join(", ");
 }
 $("btnProvGuardar").addEventListener("click", async () => {
   leerFichaProveedor();
@@ -1542,26 +1601,186 @@ $("btnProvGuardar").addEventListener("click", async () => {
   const btn = $("btnProvGuardar"); btn.disabled = true; btn.textContent = "Guardando…";
   try{
     const p = provSel;
-    await postAdmin({accion:"proveedor_guardar", proveedor:{nit:p.nit, nombre:p.nombre, abastos:p.abastos,
-      dias_visita:p.dias_visita, contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones}});
-    await abrirProveedores();
+    const d = await postAdmin({accion:"proveedor_guardar", proveedor:{nit:p.nit, nombre:p.nombre, abastos:p.abastos,
+      dias_visita:p.dias_visita, contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones,
+      frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo}});
+    // refleja el cambio en los datos de compras sin esperar otra descarga
+    if(cmDatos){
+      const q = cmDatos.proveedores.find(x => x.nit === (d.nit || p.nit));
+      const nuevo = {nit:d.nit || p.nit, nombre:p.nombre, abastos:p.abastos, dias_visita:p.dias_visita,
+        contacto:p.contacto, telefono:p.telefono, frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo};
+      if(q) Object.assign(q, nuevo); else cmDatos.proveedores.push(nuevo);
+      guardar("compras_datos", JSON.stringify(cmDatos));
+    }
+    if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
+    else await abrirProveedores();
   }catch(e){ alert("No se pudo guardar: " + e.message); }
   finally{ btn.disabled = false; btn.textContent = "Guardar"; }
 });
+$("btnVolverProv").addEventListener("click", () => {
+  if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
+  else { ir("proveedores"); pintarProveedores(); }
+});
 
-/* ---------- Lista de abastos ---------- */
-let abDatos = null, abCambios = {}, abCalc = null;
+/* ---------- Datos de compras (abastos y pedidos) ---------- */
+let cmDatos = null;
 const AB_DIA = 86400000;
 function hoyISO(){ const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
 function sumarDiasISO(f, n){ const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
 function difDias(a, b){ return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / AB_DIA); }
-function abCfg(){
-  let c = {};
-  try{ c = JSON.parse(leer("abastos_cfg") || "{}"); }catch(e){}
+function diaSemana(f){ return new Date(f + "T12:00:00").getDay(); }
+function provPorNit(){ const m = {}; ((cmDatos && cmDatos.proveedores) || []).forEach(p => m[p.nit] = p); return m; }
+async function cargarComprasDatos(estadoId){
+  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){ cmDatos = null; }
+  $(estadoId).textContent = "Actualizando datos…";
+  try{
+    const d = await postAdmin({accion:"compras_datos"});
+    cmDatos = d; guardar("compras_datos", JSON.stringify(d));
+    $(estadoId).textContent = "";
+  }catch(e){
+    $(estadoId).textContent = (cmDatos ? "Usando la última copia · " : "") + "No se pudo actualizar: " + e.message;
+  }
+}
+/* Próximo día de visita desde una fecha (incluida). null si no tiene días definidos. */
+function proximaVisita(prov, desde){
+  const dias = diasVisita(prov.dias_visita);
+  if(!dias.length) return null;
+  for(let i = 0; i < 14; i++){ const f = sumarDiasISO(desde, i); if(dias.includes(diaSemana(f))) return f; }
+  return null;
+}
+function siguienteVisita(prov, fecha){
+  const frec = Number(prov.frecuencia) || 1;
+  if(frec > 1) return sumarDiasISO(fecha, 7 * frec);
+  const dias = diasVisita(prov.dias_visita);
+  if(dias.length) for(let i = 1; i <= 7; i++){ const f = sumarDiasISO(fecha, i); if(dias.includes(diaSemana(f))) return f; }
+  return sumarDiasISO(fecha, 7);
+}
+
+/* Cálculo común: cuánto comprar para llegar a la próxima compra, y en qué orden */
+function calcCompra(items, cfg, cambios){
   const hoy = hoyISO();
-  const intervalo = c.intervalo || 7;
+  const hastaIda = Math.max(0, difDias(hoy, cfg.ida));
+  const ciclo = Math.max(1, difDias(cfg.ida, cfg.prox));
+  const lista = [], sinVenta = [], cubiertos = [];
+  items.forEach(base => {
+    const manual = cambios[base.codigo];
+    if(!base.prom || base.prom <= 0){
+      if(manual > 0) lista.push(Object.assign(base, {cant: manual, minimo: manual, manual: true, prioridad: 3, valorDia: 0}));
+      else sinVenta.push(base);
+      return;
+    }
+    const stockIda = Math.max(0, (base.existencias || 0) - base.prom * hastaIda);
+    const necesario = Math.ceil(base.prom * (ciclo + cfg.seguridad) - stockIda);
+    const minimo = Math.max(0, Math.ceil(base.prom * ciclo - stockIda));
+    const cant = manual !== undefined ? manual : necesario;
+    if(cant <= 0){ cubiertos.push(base); return; }
+    const diasAlIr = stockIda / base.prom;
+    lista.push(Object.assign(base, {cant, minimo: manual !== undefined ? manual : minimo, manual: manual !== undefined,
+      prioridad: stockIda <= 0 ? 1 : diasAlIr < ciclo / 2 ? 2 : 3, valorDia: base.prom * (base.precio || 0)}));
+  });
+  // Lo que se acaba primero va primero; a igual urgencia, lo que más plata mueve al día
+  lista.sort((a, b) => a.prioridad - b.prioridad || b.valorDia - a.valorDia);
+
+  const presupuesto = cfg.presupuesto || 0;
+  let total = 0;
+  const dentro = [], fuera = [];
+  lista.forEach(it => {
+    const sub = it.cant * it.costo;
+    if(!presupuesto || total + sub <= presupuesto){ it.sub = sub; total += sub; dentro.push(it); return; }
+    const subMin = it.minimo * it.costo;
+    if(it.minimo > 0 && it.minimo < it.cant && total + subMin <= presupuesto){
+      it.reducido = it.cant; it.cant = it.minimo; it.sub = subMin; total += subMin; dentro.push(it); return;
+    }
+    const alcanza = it.costo ? Math.floor((presupuesto - total) / it.costo) : 0;
+    if(alcanza > 0){
+      const resto = Object.assign({}, it, {cant: it.cant - alcanza, sub: (it.cant - alcanza) * it.costo});
+      it.reducido = it.cant; it.cant = alcanza; it.sub = alcanza * it.costo; total += it.sub;
+      dentro.push(it); fuera.push(resto); return;
+    }
+    it.sub = sub; fuera.push(it);
+  });
+  return {cfg, hastaIda, ciclo, dentro, fuera, sinVenta, cubiertos, total, presupuesto,
+    totalFuera: fuera.reduce((s, x) => s + x.sub, 0)};
+}
+const PRIO = {1:["agotado al comprar", "#ff9a86"], 2:["se acaba pronto", "#ffd23f"], 3:["reponer", "#bcd9dc"]};
+function htmlItem(it, chk, conProveedorAlterno){
+  const pr = PRIO[it.prioridad], hecho = chk[it.codigo];
+  const alterno = conProveedorAlterno && it.otro && it.costo && it.otro.costo < it.costo
+    ? `<br><span style="color:#ffd23f">${esc(it.otro.nombre)} lo tiene a ${plata(it.otro.costo)}</span>` : "";
+  return `<div class="ab-item${hecho ? " hecho" : ""}" data-cod="${esc(it.codigo)}">
+    <button class="ab-check" aria-pressed="${!!hecho}" aria-label="Listo">${hecho ? "✓" : ""}</button>
+    <span class="ab-nom">${esc(it.nombre)}
+      <small><span style="color:${pr[1]}">● ${pr[0]}</span> · quedan ${num(Math.max(0, it.existencias || 0))}${
+        it.prom ? ` · vende ${num(Math.round(it.prom * 10) / 10)}/día` : ""}${
+        it.reducido ? ` · <b>reducido de ${num(it.reducido)}</b>` : ""}${it.manual ? " · cantidad tuya" : ""}${alterno}</small></span>
+    <span class="ab-cant"><b>${num(it.cant)}</b><small>${it.costo ? plata(it.sub) : "sin costo"}</small></span></div>`;
+}
+function htmlExtras(r){
+  let h = "";
+  if(r.fuera.length){
+    h += `<div class="bloque" style="margin-top:10px;border:2px solid var(--rojo)"><h3>Se queda por fuera<small>${plata(r.totalFuera)}</small></h3>` +
+      r.fuera.map(it => `<div class="fila-dato"><span>${esc(it.nombre)}<small style="display:block;opacity:.65">${PRIO[it.prioridad][0]}${it.prov ? " · " + esc(it.prov.nombre) : ""}</small></span>
+        <b>${num(it.cant)} · ${plata(it.sub)}</b></div>`).join("") +
+      `<p class="nota">Te faltan ${plata(r.total + r.totalFuera - r.presupuesto)} para llevar todo.</p></div>`;
+  }
+  if(r.sinVenta.length){
+    h += `<details class="alerta" style="margin-top:10px"><summary><span>Sin ventas recientes (no se incluyen)</span><span class="num-alerta gris">${r.sinVenta.length}</span></summary>` +
+      r.sinVenta.map(it => `<div class="fila-dato cm-agregar" data-cod="${esc(it.codigo)}" style="cursor:pointer"><span>${esc(it.nombre)}</span><b>quedan ${num(Math.max(0, it.existencias || 0))} · +</b></div>`).join("") +
+      `<p class="nota">Toca uno para agregarlo con la cantidad que quieras.</p></details>`;
+  }
+  if(r.cubiertos.length) h += `<p class="nota" style="text-align:center">${prod_(r.cubiertos.length)} ${r.cubiertos.length === 1 ? "alcanza" : "alcanzan"} hasta la próxima compra.</p>`;
+  return h;
+}
+/* Clics comunes de las listas: chulear, cambiar cantidad, agregar sin ventas */
+function clicLista(e, r, claveChk, claveCambios, cambios, repintar){
+  if(!r) return;
+  const add = e.target.closest(".cm-agregar");
+  if(add){
+    const p = r.sinVenta.find(x => x.codigo === add.dataset.cod); if(!p) return;
+    const v = prompt(`${p.nombre}\nCantidad a comprar:`, "");
+    if(v === null || !(Number(v.replace(",", ".")) > 0)) return;
+    cambios[p.codigo] = Number(v.replace(",", "."));
+    guardar(claveCambios, JSON.stringify(cambios)); repintar(); return;
+  }
+  const fila = e.target.closest(".ab-item"); if(!fila) return;
+  const cod = fila.dataset.cod;
+  if(e.target.closest(".ab-check")){
+    let chk = {}; try{ chk = JSON.parse(leer(claveChk) || "{}"); }catch(x){}
+    if(chk[cod]) delete chk[cod]; else chk[cod] = 1;
+    guardar(claveChk, JSON.stringify(chk)); repintar(); return;
+  }
+  const it = r.dentro.find(x => x.codigo === cod); if(!it) return;
+  const v = prompt(`${it.nombre}\nCantidad (vacío = la que calcula la app, 0 = no comprar):`, it.cant);
+  if(v === null) return;
+  if(v.trim() === "") delete cambios[cod];
+  else cambios[cod] = Math.max(0, Number(v.replace(",", ".")) || 0);
+  guardar(claveCambios, JSON.stringify(cambios)); repintar();
+}
+const prod_ = n => n === 1 ? "1 producto" : n + " productos";
+function leerJSON(k, def){ try{ return JSON.parse(leer(k) || "null") || def; }catch(e){ return def; } }
+function fechaLarga(f){ return new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"long", day:"numeric", month:"short"}); }
+async function compartirTexto(t){
+  if(navigator.share){ try{ await navigator.share({text: t}); return; }catch(e){ if(e.name === "AbortError") return; } }
+  location.href = "https://wa.me/?text=" + encodeURIComponent(t);
+}
+async function compartirTxtArchivo(texto, nombre, titulo){
+  const archivo = new File([texto], nombre, {type:"text/plain"});
+  if(navigator.canShare && navigator.canShare({files:[archivo]})){
+    try{ await navigator.share({files:[archivo], title:titulo}); return; }
+    catch(e){ if(e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\uFEFF" + texto], {type:"text/plain"}));
+  a.download = nombre; a.click();
+}
+
+/* ---------- Lista de abastos ---------- */
+let abCambios = {}, abCalc = null;
+function abCfg(){
+  const c = leerJSON("abastos_cfg", {});
+  const hoy = hoyISO();
   if(!c.ida || c.ida < hoy) c.ida = hoy;
-  if(!c.prox || c.prox <= c.ida) c.prox = sumarDiasISO(c.ida, intervalo);
+  if(!c.prox || c.prox <= c.ida) c.prox = sumarDiasISO(c.ida, c.intervalo || 7);
   if(c.seguridad === undefined) c.seguridad = 1;
   if(!c.modo) c.modo = "libre";
   return c;
@@ -1581,18 +1800,11 @@ async function abrirAbastos(){
   $("abPresupuesto").value = c.presupuesto ? pesos(c.presupuesto) : "";
   $("abSeguridad").value = c.seguridad;
   abModo(c.modo, true);
-  try{ abDatos = JSON.parse(leer("abastos_datos") || "null"); }catch(e){ abDatos = null; }
-  try{ abCambios = JSON.parse(leer("abastos_cambios") || "{}"); }catch(e){ abCambios = {}; }
+  abCambios = leerJSON("abastos_cambios", {});
   ir("abastos");
+  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){}
   pintarAbastos();
-  $("abEstado").textContent = "Actualizando datos…";
-  try{
-    const d = await postAdmin({accion:"abastos"});
-    abDatos = d; guardar("abastos_datos", JSON.stringify(d));
-    $("abEstado").textContent = "";
-  }catch(e){
-    $("abEstado").textContent = (abDatos ? "Usando la última copia · " : "") + "No se pudo actualizar: " + e.message;
-  }
+  await cargarComprasDatos("abEstado");
   pintarAbastos();
 }
 function abModo(m, sinPintar){
@@ -1602,190 +1814,89 @@ function abModo(m, sinPintar){
   $("abPresWrap").style.display = m === "presupuesto" ? "" : "none";
   if(!sinPintar){ abGuardarCfg(); pintarAbastos(); }
 }
-
-/* Cálculo: cuánto comprar para llegar a la próxima ida, y en qué orden */
-function calcularAbastos(){
-  const c = abGuardarCfg();
-  const hoy = hoyISO();
-  const hastaIda = Math.max(0, difDias(hoy, c.ida));
-  const ciclo = Math.max(1, difDias(c.ida, c.prox));
-  const items = [], sinVenta = [], cubiertos = [];
-  ((abDatos && abDatos.productos) || []).forEach(p => {
-    const prov = p.proveedores[0] || {};
-    const base = {codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, prov: prov,
-      costo: prov.costo || 0, existencias: p.existencias, prom: p.prom_dia, precio: p.precio,
-      otro: p.costo_otro};
-    if(!p.prom_dia || p.prom_dia <= 0){
-      const m = abCambios[p.codigo];
-      if(m > 0) items.push(Object.assign(base, {cant: m, minimo: m, manual: true, stockIda: p.existencias || 0,
-        diasAlIr: Infinity, prioridad: 3, valorDia: 0, prom: 0}));
-      else sinVenta.push(base);
-      return;
-    }
-    const stockIda = Math.max(0, (p.existencias || 0) - p.prom_dia * hastaIda);
-    const necesario = Math.ceil(p.prom_dia * (ciclo + c.seguridad) - stockIda);
-    const minimo = Math.max(0, Math.ceil(p.prom_dia * ciclo - stockIda));
-    const manual = abCambios[p.codigo];
-    let cant = manual !== undefined ? manual : necesario;
-    if(cant <= 0){ cubiertos.push(base); return; }
-    const diasAlIr = stockIda / p.prom_dia;
-    const prioridad = stockIda <= 0 ? 1 : diasAlIr < ciclo / 2 ? 2 : 3;
-    items.push(Object.assign(base, {cant, minimo: manual !== undefined ? manual : minimo, manual: manual !== undefined,
-      stockIda, diasAlIr, prioridad, valorDia: p.prom_dia * (p.precio || 0)}));
+function itemsAbastos(){
+  const pm = provPorNit();
+  const out = [];
+  ((cmDatos && cmDatos.productos) || []).forEach(p => {
+    const ab = p.proveedores.filter(x => pm[x.nit] && pm[x.nit].abastos === true);
+    if(!ab.length) return;
+    const otro = p.proveedores.find(x => !(pm[x.nit] && pm[x.nit].abastos === true) && x.costo);
+    const pv = pm[ab[0].nit];
+    out.push({codigo:p.codigo, nombre:p.nombre, categoria:p.categoria, existencias:p.existencias,
+      prom:p.prom_dia, precio:p.precio, costo:ab[0].costo || 0,
+      prov:{nit:pv.nit, nombre:pv.nombre, dias_visita:pv.dias_visita},
+      otro: otro ? {nombre:(pm[otro.nit] || {}).nombre || "", costo:otro.costo} : null});
   });
-  // Lo que se acaba primero va primero; a igual urgencia, lo que más plata mueve al día
-  items.sort((a, b) => a.prioridad - b.prioridad || b.valorDia - a.valorDia);
-
-  const presupuesto = c.modo === "presupuesto" ? c.presupuesto : 0;
-  let total = 0;
-  const dentro = [], fuera = [];
-  items.forEach(it => {
-    const sub = it.cant * it.costo;
-    if(!presupuesto || total + sub <= presupuesto){ it.sub = sub; total += sub; dentro.push(it); return; }
-    // No cabe completo: se intenta con lo justo para llegar a la próxima ida
-    const subMin = it.minimo * it.costo;
-    if(it.minimo > 0 && it.minimo < it.cant && total + subMin <= presupuesto){
-      it.reducido = it.cant; it.cant = it.minimo; it.sub = subMin; total += subMin; dentro.push(it); return;
-    }
-    // Ni eso cabe: se lleva lo que alcance y el resto queda por fuera
-    const alcanza = it.costo ? Math.floor((presupuesto - total) / it.costo) : 0;
-    if(alcanza > 0){
-      const resto = Object.assign({}, it, {cant: it.cant - alcanza, sub: (it.cant - alcanza) * it.costo});
-      it.reducido = it.cant; it.cant = alcanza; it.sub = alcanza * it.costo; total += it.sub;
-      dentro.push(it); fuera.push(resto); return;
-    }
-    it.sub = sub; fuera.push(it);
-  });
-  return {c, hastaIda, ciclo, dentro, fuera, sinVenta, cubiertos, total, presupuesto,
-    totalFuera: fuera.reduce((s, x) => s + x.sub, 0)};
+  return out;
 }
-const AB_PRIO = {1:["agotado al ir", "#ff9a86"], 2:["se acaba pronto", "#ffd23f"], 3:["reponer", "#bcd9dc"]};
 function pintarAbastos(){
   const box = $("abItems");
-  if(!abDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
-  if(!abDatos.productos.length){
+  if(!cmDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  const items = itemsAbastos();
+  if(!items.length){
     box.innerHTML = `<div class="vacio">Todavía no hay productos de abastos.<br><br>
       1. Marca tus proveedores de abastos en <b>Compras → Proveedores</b>.<br>
       2. Registra sus compras en Siigo como <b>documento soporte</b>.<br><br>
       Con eso la app sabe qué le compras a cada uno y a cuánto.</div>`;
     $("abResumen").innerHTML = ""; abCalc = null; return;
   }
-  const r = abCalc = calcularAbastos();
-  let chk = {};
-  try{ chk = JSON.parse(leer("abastos_check_" + r.c.ida) || "{}"); }catch(e){}
+  const c = abGuardarCfg();
+  const r = abCalc = calcCompra(items, {ida:c.ida, prox:c.prox, seguridad:c.seguridad,
+    presupuesto: c.modo === "presupuesto" ? c.presupuesto : 0}, abCambios);
+  const chk = leerJSON("abastos_check_" + c.ida, {});
   const provsUsados = new Set(r.dentro.map(i => i.prov.nit));
   $("abResumen").innerHTML = `
     <div class="caja"><b>${plata(r.total)}</b><span>${r.presupuesto ? "de " + plata(r.presupuesto) : "estimado"}</span></div>
     <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
     <div class="caja"><b>${provsUsados.size}</b><span>proveedores</span></div>
     ${r.presupuesto ? `<div class="caja"><b style="color:${r.fuera.length ? "#ff9a86" : "inherit"}">${r.fuera.length}</b><span>por fuera</span></div>` : ""}`;
-
-  let h = `<p class="nota" style="margin:0 0 4px">Compra para ${r.ciclo} días${r.c.seguridad ? ` + ${r.c.seguridad} de reserva` : ""}${
+  let h = `<p class="nota" style="margin:0 0 4px">Compra para ${r.ciclo} días${c.seguridad ? ` + ${c.seguridad} de reserva` : ""}${
     r.hastaIda ? ` · descuenta lo que se vende en los ${r.hastaIda} días antes de ir` : ""}. Toca un producto para cambiar la cantidad.</p>`;
   const grupos = {};
   r.dentro.forEach(it => { (grupos[it.prov.nit] = grupos[it.prov.nit] || {prov: it.prov, items: [], sub: 0}).items.push(it); grupos[it.prov.nit].sub += it.sub; });
   Object.values(grupos).sort((a, b) => b.sub - a.sub).forEach(g => {
     h += `<div class="bloque" style="margin-top:10px"><h3>${esc(g.prov.nombre || "Sin proveedor")}<small>${g.prov.dias_visita ? esc(g.prov.dias_visita) + " · " : ""}${plata(g.sub)}</small></h3>` +
-      g.items.map(it => {
-        const pr = AB_PRIO[it.prioridad], hecho = chk[it.codigo];
-        const masBarato = it.otro && it.costo && it.otro.costo < it.costo
-          ? `<br><span style="color:#ffd23f">${esc(it.otro.nombre)} lo tiene a ${plata(it.otro.costo)}</span>` : "";
-        return `<div class="ab-item${hecho ? " hecho" : ""}" data-cod="${esc(it.codigo)}">
-          <button class="ab-check" aria-pressed="${!!hecho}" aria-label="Comprado">${hecho ? "✓" : ""}</button>
-          <span class="ab-nom">${esc(it.nombre)}
-            <small><span style="color:${pr[1]}">● ${pr[0]}</span> · quedan ${num(Math.max(0, it.existencias || 0))}${it.prom ? ` · vende ${num(Math.round(it.prom * 10) / 10)}/día` : ""}${
-              it.reducido ? ` · <b>reducido de ${num(it.reducido)}</b>` : ""}${it.manual ? " · cantidad tuya" : ""}${masBarato}</small></span>
-          <span class="ab-cant"><b>${num(it.cant)}</b><small>${it.costo ? plata(it.sub) : "sin costo"}</small></span></div>`;
-      }).join("") + `</div>`;
+      g.items.map(it => htmlItem(it, chk, true)).join("") + `</div>`;
   });
   if(!r.dentro.length) h += `<div class="vacio">Con estas fechas no hace falta comprar nada.</div>`;
-  if(r.fuera.length){
-    h += `<div class="bloque" style="margin-top:10px;border:2px solid var(--rojo)"><h3>Se queda por fuera<small>${plata(r.totalFuera)}</small></h3>` +
-      r.fuera.map(it => `<div class="fila-dato"><span>${esc(it.nombre)}<small style="display:block;opacity:.65">${AB_PRIO[it.prioridad][0]} · ${esc(it.prov.nombre)}</small></span>
-        <b>${num(it.cant)} · ${plata(it.sub)}</b></div>`).join("") +
-      `<p class="nota">Te faltan ${plata(r.total + r.totalFuera - r.presupuesto)} para llevar todo.</p></div>`;
-  }
-  if(r.sinVenta.length){
-    h += `<details class="alerta" style="margin-top:10px"><summary><span>Sin ventas recientes (no se incluyen)</span><span class="num-alerta gris">${r.sinVenta.length}</span></summary>` +
-      r.sinVenta.map(it => `<div class="fila-dato ab-agregar" data-cod="${esc(it.codigo)}" style="cursor:pointer"><span>${esc(it.nombre)}</span><b>quedan ${num(Math.max(0, it.existencias || 0))} · +</b></div>`).join("") +
-      `<p class="nota">Toca uno para agregarlo con la cantidad que quieras.</p></details>`;
-  }
-  if(r.cubiertos.length)
-    h += `<p class="nota" style="text-align:center">${r.cubiertos.length} productos de abastos alcanzan hasta la próxima ida.</p>`;
-  box.innerHTML = h;
+  box.innerHTML = h + htmlExtras(r);
 }
-$("abItems").addEventListener("click", e => {
-  const add = e.target.closest(".ab-agregar");
-  if(add){
-    const p = abCalc.sinVenta.find(x => x.codigo === add.dataset.cod); if(!p) return;
-    const v = prompt(`${p.nombre}\nCantidad a comprar:`, "");
-    if(v === null || !(Number(v.replace(",", ".")) > 0)) return;
-    abCambios[p.codigo] = Number(v.replace(",", "."));
-    guardar("abastos_cambios", JSON.stringify(abCambios)); pintarAbastos(); return;
-  }
-  const fila = e.target.closest(".ab-item"); if(!fila || !abCalc) return;
-  const cod = fila.dataset.cod;
-  if(e.target.closest(".ab-check")){
-    const k = "abastos_check_" + abCalc.c.ida;
-    let chk = {}; try{ chk = JSON.parse(leer(k) || "{}"); }catch(x){}
-    if(chk[cod]) delete chk[cod]; else chk[cod] = 1;
-    guardar(k, JSON.stringify(chk)); pintarAbastos(); return;
-  }
-  const it = abCalc.dentro.find(x => x.codigo === cod); if(!it) return;
-  const v = prompt(`${it.nombre}\nCantidad a comprar (vacío = la que calcula la app, 0 = no comprar):`, it.cant);
-  if(v === null) return;
-  if(v.trim() === "") delete abCambios[cod];
-  else abCambios[cod] = Math.max(0, Number(v.replace(",", ".")) || 0);
-  guardar("abastos_cambios", JSON.stringify(abCambios)); pintarAbastos();
-});
+$("abItems").addEventListener("click", e =>
+  clicLista(e, abCalc, "abastos_check_" + (abCalc ? abCalc.cfg.ida : ""), "abastos_cambios", abCambios, pintarAbastos));
 function textoAbastos(){
   const r = abCalc; if(!r) return "";
-  const fecha = f => new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"long", day:"numeric", month:"short"});
   const lin = ["🛒 *LISTA DE ABASTOS · EDUMERCA*",
-    `Ida: ${fecha(r.c.ida)} · Próxima: ${fecha(r.c.prox)}`,
+    `Ida: ${fechaLarga(r.cfg.ida)} · Próxima: ${fechaLarga(r.cfg.prox)}`,
     r.presupuesto ? `Presupuesto: ${plata(r.presupuesto)} · Estimado: ${plata(r.total)}` : `Estimado: ${plata(r.total)}`, ""];
   const grupos = {};
-  r.dentro.forEach(it => (grupos[it.prov.nit] = grupos[it.prov.nit] || {prov: it.prov, items: [], sub: 0}).items.push(it));
-  Object.values(grupos).forEach(g => g.sub = g.items.reduce((s, x) => s + x.sub, 0));
-  Object.values(grupos).sort((a, b) => b.sub - a.sub).forEach(g => {
-    lin.push(`*${g.prov.nombre}*${g.prov.dias_visita ? " (" + g.prov.dias_visita + ")" : ""} — ${plata(g.sub)}`);
-    g.items.forEach(it => lin.push(`• ${it.nombre} — ${num(it.cant)}${it.costo ? " · ~" + plata(it.sub) : ""}`));
-    lin.push("");
-  });
+  r.dentro.forEach(it => (grupos[it.prov.nit] = grupos[it.prov.nit] || {prov: it.prov, items: []}).items.push(it));
+  Object.values(grupos).map(g => Object.assign(g, {sub: g.items.reduce((s, x) => s + x.sub, 0)}))
+    .sort((a, b) => b.sub - a.sub).forEach(g => {
+      lin.push(`*${g.prov.nombre}*${g.prov.dias_visita ? " (" + g.prov.dias_visita + ")" : ""} — ${plata(g.sub)}`);
+      g.items.forEach(it => lin.push(`• ${it.nombre} — ${num(it.cant)}${it.costo ? " · ~" + plata(it.sub) : ""}`));
+      lin.push("");
+    });
   if(r.fuera.length){
     lin.push(`*Por fuera del presupuesto* — ${plata(r.totalFuera)}`);
     r.fuera.forEach(it => lin.push(`• ${it.nombre} — ${num(it.cant)} · ~${plata(it.sub)}`));
-    lin.push("");
   }
   return lin.join("\n").trim();
 }
-function abGuardarEnDrive(texto){
-  postAdmin({accion:"abastos_guardar", ida: abCalc.c.ida, texto}).catch(() => {});
-}
-$("btnAbMensaje").addEventListener("click", async () => {
+$("btnAbMensaje").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
-  abGuardarEnDrive(t);
-  if(navigator.share){ try{ await navigator.share({text: t}); return; }catch(e){ if(e.name === "AbortError") return; } }
-  location.href = "https://wa.me/?text=" + encodeURIComponent(t);
+  postAdmin({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
+  compartirTexto(t);
 });
-$("btnAbTxt").addEventListener("click", async () => {
+$("btnAbTxt").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
-  abGuardarEnDrive(t);
-  const plano = t.replace(/\*/g, "");
-  const nombre = `lista_abastos_${abCalc.c.ida}.txt`;
-  const archivo = new File([plano], nombre, {type:"text/plain"});
-  if(navigator.canShare && navigator.canShare({files:[archivo]})){
-    try{ await navigator.share({files:[archivo], title:"Lista de abastos"}); return; }
-    catch(e){ if(e.name === "AbortError") return; }
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob(["\uFEFF" + plano], {type:"text/plain"}));
-  a.download = nombre; a.click();
+  postAdmin({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
+  compartirTxtArchivo(t.replace(/\*/g, ""), `lista_abastos_${abCalc.cfg.ida}.txt`, "Lista de abastos");
 });
 $("btnAbReiniciar").addEventListener("click", () => {
   if(!confirm("¿Volver a las cantidades calculadas y desmarcar lo comprado?")) return;
-  abCambios = {}; guardar("abastos_cambios", "{}");
-  if(abCalc) guardar("abastos_check_" + abCalc.c.ida, "{}");
+  for(const k in abCambios) delete abCambios[k];
+  guardar("abastos_cambios", "{}");
+  if(abCalc) guardar("abastos_check_" + abCalc.cfg.ida, "{}");
   pintarAbastos();
 });
 ["abIda", "abProx", "abSeguridad"].forEach(id => $(id).addEventListener("change", () => {
@@ -1800,6 +1911,176 @@ $("abModoLibre").addEventListener("click", () => abModo("libre"));
 $("abModoPres").addEventListener("click", () => { abModo("presupuesto"); $("abPresupuesto").focus(); });
 $("btnVolverAbastos").addEventListener("click", () => irMenu("compras"));
 
+/* ---------- Pedidos sugeridos por proveedor ---------- */
+let pdNit = null, pdCalc = null, pdCambios = {}, pdFechas = {};
+function pdSeguridad(){ const v = leer("pedidos_seguridad"); return v === null ? 1 : Number(v) || 0; }
+/* Productos de un proveedor: los que él vende más barato, o todos los que le compras */
+function itemsPedido(nit, todos){
+  const pm = provPorNit();
+  const out = [];
+  ((cmDatos && cmDatos.productos) || []).forEach(p => {
+    const mio = p.proveedores.find(x => x.nit === nit); if(!mio) return;
+    const mejor = p.proveedores.find(x => x.costo) || p.proveedores[0];
+    if(!todos && mejor && mejor.nit !== nit) return;
+    const otro = p.proveedores.find(x => x.nit !== nit && x.costo);
+    out.push({codigo:p.codigo, nombre:p.nombre, categoria:p.categoria, existencias:p.existencias,
+      prom:p.prom_dia, precio:p.precio, costo:mio.costo || 0, prov:null,
+      otro: otro ? {nombre:(pm[otro.nit] || {}).nombre || "", costo:otro.costo} : null});
+  });
+  return out;
+}
+function fechasPedido(prov){
+  const hoy = hoyISO();
+  const g = pdFechas[prov.nit];
+  if(g && g.ida >= hoy && g.prox > g.ida) return g;
+  const ida = proximaVisita(prov, hoy) || hoy;
+  return {ida, prox: siguienteVisita(prov, ida)};
+}
+function calcPedido(prov, todos){
+  const f = fechasPedido(prov);
+  const cambios = leerJSON("pedido_cambios_" + prov.nit, {});
+  return calcCompra(itemsPedido(prov.nit, todos), {ida:f.ida, prox:f.prox, seguridad:pdSeguridad(), presupuesto:0}, cambios);
+}
+function cuandoTxt(f){
+  const d = difDias(hoyISO(), f);
+  return d === 0 ? "hoy" : d === 1 ? "mañana" : fechaTxt(f);
+}
+async function abrirPedidos(){
+  clearTimeout(tLista);
+  pdFechas = leerJSON("pedidos_fechas", {});
+  ir("pedidos");
+  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){}
+  pintarPedidos();
+  await cargarComprasDatos("pdEstado");
+  pintarPedidos();
+}
+function pintarPedidos(){
+  const box = $("pdItems");
+  if(!cmDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  const provs = cmDatos.proveedores.filter(p => p.abastos !== true);
+  if(!provs.length){
+    box.innerHTML = `<div class="vacio">Todavía no hay proveedores.<br>Aparecen solos cuando registres facturas de compra en Siigo.</div>`;
+    return;
+  }
+  const filas = provs.map(p => {
+    const r = calcPedido(p, false);
+    return {p, r, f: fechasPedido(p), sinDias: !diasVisita(p.dias_visita).length};
+  }).sort((a, b) => a.sinDias - b.sinDias || a.f.ida.localeCompare(b.f.ida) || b.r.total - a.r.total);
+  box.innerHTML = filas.map(({p, r, f, sinDias}) => {
+    const urg = r.dentro.filter(x => x.prioridad === 1).length;
+    return `<button class="item" data-nit="${esc(p.nit)}">
+      <span class="cod" style="${!sinDias && difDias(hoyISO(), f.ida) <= 1 ? "background:var(--amarillo);color:var(--verde)" : ""}">${sinDias ? "?" : cuandoTxt(f.ida)}</span>
+      <span class="nom">${esc(p.nombre)}
+        <small>${p.contacto ? esc(p.contacto) + " · " : ""}${sinDias ? "sin días de visita" : esc(p.dias_visita)}${
+          r.dentro.length ? ` · ${prod_(r.dentro.length)}${urg ? `, <span style="color:#ff9a86">${urg} urgentes</span>` : ""}` : " · nada por pedir"}</small></span>
+      <span class="pre">${r.dentro.length ? plata(r.total) : ""}<small>›</small></span></button>`;
+  }).join("");
+}
+$("pdItems").addEventListener("click", e => {
+  const b = e.target.closest(".item"); if(!b) return;
+  abrirPedido(b.dataset.nit);
+});
+$("btnVolverPedidos").addEventListener("click", () => irMenu("compras"));
+
+function abrirPedido(nit){
+  pdNit = nit;
+  pdCambios = leerJSON("pedido_cambios_" + nit, {});
+  const prov = provPorNit()[nit];
+  const f = fechasPedido(prov);
+  $("pdTitulo").textContent = prov.nombre;
+  $("pdIda").value = f.ida; $("pdProx").value = f.prox;
+  $("pdSeguridad").value = pdSeguridad();
+  $("pdTodos").setAttribute("aria-pressed", leer("pedido_todos_" + nit) === "1");
+  ir("pedido");
+  pintarPedido();
+  $("pdLista").scrollTop = 0;
+}
+function pintarPedido(){
+  const prov = provPorNit()[pdNit]; if(!prov) return;
+  pdFechas[pdNit] = {ida: $("pdIda").value, prox: $("pdProx").value};
+  guardar("pedidos_fechas", JSON.stringify(pdFechas));
+  guardar("pedidos_seguridad", String(Number($("pdSeguridad").value) || 0));
+  const todos = $("pdTodos").getAttribute("aria-pressed") === "true";
+  const r = pdCalc = calcPedido(prov, todos);
+  const chk = leerJSON("pedido_check_" + pdNit + "_" + r.cfg.ida, {});
+  const min = Number(prov.pedido_minimo) || 0;
+  const wa = telWa(prov.telefono);
+  $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}${
+    prov.dias_visita ? "Pasa: " + esc(prov.dias_visita) : "Sin días de visita"}${
+    (Number(prov.frecuencia) || 1) > 1 ? " · cada " + (prov.frecuencia == 2 ? "15 días" : prov.frecuencia + " semanas") : ""}
+    · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar</a>`;
+  $("btnPdEnviar").textContent = wa ? "Enviar al vendedor" : "Enviar por WhatsApp";
+  $("pdResumen").innerHTML = `
+    <div class="caja"><b>${plata(r.total)}</b><span>estimado sin IVA</span></div>
+    <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
+    ${min ? `<div class="caja"><b style="color:${r.total >= min ? "#4fd6a8" : "#ff9a86"}">${r.total >= min ? "✓" : plata(min - r.total)}</b><span>${r.total >= min ? "pasa el mínimo" : "falta para el mínimo"}</span></div>` : ""}`;
+  let h = `<p class="nota" style="margin:0 0 4px">Pedido para ${r.ciclo} días hasta la siguiente visita${
+    r.cfg.seguridad ? ` + ${r.cfg.seguridad} de reserva` : ""}. ${todos ? "Todo lo que le compras." : "Solo lo que él te vende más barato."} Toca un producto para cambiar la cantidad.</p>`;
+  h += r.dentro.length ? `<div class="bloque" style="margin-top:6px">` + r.dentro.map(it => htmlItem(it, chk, true)).join("") + `</div>`
+    : `<div class="vacio">No hace falta pedirle nada para estas fechas.</div>`;
+  $("pdLista").innerHTML = h + htmlExtras(r);
+  const fl = $("pdFicha");
+  if(fl) fl.addEventListener("click", ev => { ev.preventDefault(); abrirFichaDesdePedido(); });
+}
+async function abrirFichaDesdePedido(){
+  let p = (provs || []).find(x => x.nit === pdNit);
+  if(!p){
+    try{ const d = await postAdmin({accion:"proveedores"}); provs = d.proveedores || []; guardar("proveedores", JSON.stringify(provs)); }catch(e){}
+    p = (provs || []).find(x => x.nit === pdNit);
+  }
+  if(!p){ const b = provPorNit()[pdNit]; p = Object.assign({items:[]}, b); }
+  abrirProveedor(p, "pedido");
+}
+$("pdLista").addEventListener("click", e =>
+  clicLista(e, pdCalc, "pedido_check_" + pdNit + "_" + (pdCalc ? pdCalc.cfg.ida : ""), "pedido_cambios_" + pdNit, pdCambios, pintarPedido));
+["pdIda", "pdProx", "pdSeguridad"].forEach(id => $(id).addEventListener("change", () => {
+  if(id === "pdIda") $("pdProx").value = siguienteVisita(provPorNit()[pdNit], $("pdIda").value);
+  if($("pdProx").value <= $("pdIda").value) $("pdProx").value = sumarDiasISO($("pdIda").value, 7);
+  pintarPedido();
+}));
+$("pdTodos").addEventListener("click", () => {
+  const v = $("pdTodos").getAttribute("aria-pressed") !== "true";
+  $("pdTodos").setAttribute("aria-pressed", v);
+  guardar("pedido_todos_" + pdNit, v ? "1" : "0");
+  pintarPedido();
+});
+function textoPedido(conPrecios){
+  const r = pdCalc, prov = provPorNit()[pdNit];
+  const lin = [];
+  if(conPrecios){
+    lin.push(`📦 *PEDIDO ${prov.nombre}*`, `Para ${fechaLarga(r.cfg.ida)} · Estimado ${plata(r.total)} sin IVA`, "");
+    r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}${it.costo ? " · ~" + plata(it.sub) : ""}`));
+  }else{
+    lin.push(`Hola${prov.contacto ? " " + prov.contacto.split(" ")[0] : ""}, buen día. Este es el pedido de *Edumerca 122*` +
+      `${difDias(hoyISO(), r.cfg.ida) > 0 ? " para el " + fechaLarga(r.cfg.ida) : ""}:`, "");
+    r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}`));
+    lin.push("", "Muchas gracias.");
+  }
+  return lin.join("\n").trim();
+}
+$("btnPdEnviar").addEventListener("click", () => {
+  if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
+  const prov = provPorNit()[pdNit];
+  postAdmin({accion:"abastos_guardar", tipo:"pedido", proveedor: prov.nombre, ida: pdCalc.cfg.ida, texto: textoPedido(true)}).catch(() => {});
+  const wa = telWa(prov.telefono), t = textoPedido(false);
+  if(wa) location.href = `https://wa.me/${wa}?text=${encodeURIComponent(t)}`;
+  else compartirTexto(t);
+});
+$("btnPdTxt").addEventListener("click", () => {
+  if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
+  const prov = provPorNit()[pdNit], t = textoPedido(true);
+  postAdmin({accion:"abastos_guardar", tipo:"pedido", proveedor: prov.nombre, ida: pdCalc.cfg.ida, texto: t}).catch(() => {});
+  compartirTxtArchivo(t.replace(/\*/g, ""), `pedido_${prov.nombre.replace(/\W+/g, "_")}_${pdCalc.cfg.ida}.txt`, "Pedido");
+});
+$("btnPdReiniciar").addEventListener("click", () => {
+  if(!confirm("¿Volver a las cantidades calculadas y desmarcar todo?")) return;
+  for(const k in pdCambios) delete pdCambios[k];
+  guardar("pedido_cambios_" + pdNit, "{}");
+  if(pdCalc) guardar("pedido_check_" + pdNit + "_" + pdCalc.cfg.ida, "{}");
+  pintarPedido();
+});
+$("btnVolverPedido").addEventListener("click", () => { ir("pedidos"); pintarPedidos(); });
+
 /* ---------- Eventos de KPIs ---------- */
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
 $("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
@@ -1811,18 +2092,13 @@ $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
 $("btnInventario").addEventListener("click", entrar);
 $("btnMenuInv").addEventListener("click", ()=>irMenu("inventario"));
 $("btnMenuCompras").addEventListener("click", ()=>irMenu("compras"));
-$("btnMenuVentas").addEventListener("click", ()=>irMenu("ventas"));
 $("btnMenuKpis").addEventListener("click", abrirKpis);
 $("btnProveedores").addEventListener("click", abrirProveedores);
 $("btnSalirPrin").addEventListener("click", inicio);
 $("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
 $("btnSalirCompras").addEventListener("click", ()=>irMenu("principal"));
-$("btnSalirVentas").addEventListener("click", ()=>irMenu("principal"));
 const enObra = nombre => ()=> alert(nombre + "\n\nEn construcción.");
-$("btnPedidos").addEventListener("click", enObra("Pedidos sugeridos por proveedor"));
-$("btnAbastos").addEventListener("click", enObra("Lista de compra general"));
-$("btnVentasDia").addEventListener("click", enObra("Ventas del día"));
-$("btnVentasMes").addEventListener("click", enObra("Ventas mensuales"));
+$("btnPedidos").addEventListener("click", abrirPedidos);
 $("btnAbastosPlaza").addEventListener("click", abrirAbastos);
 $("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
