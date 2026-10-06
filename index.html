@@ -135,6 +135,60 @@
   .acciones>*{flex:1}
   @media (prefers-reduced-motion:reduce){.boton-grande,.etiqueta{animation:none}}
   #entrada{position:absolute;left:-9999px;opacity:0}
+
+  /* KPIs */
+  .panel{flex:1;overflow-y:auto;margin:0 -20px;padding:0 20px 24px;-webkit-overflow-scrolling:touch;
+    display:flex;flex-direction:column;gap:12px}
+  .bloque{background:var(--verde2);border-radius:12px;padding:14px;flex:none}
+  .bloque h3{margin:0 0 10px;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.3rem;
+    display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .bloque h3 small{font-family:"Barlow",sans-serif;font-weight:500;font-size:.8rem;opacity:.7;text-align:right}
+  .grilla{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dato{background:var(--verde);border-radius:10px;padding:10px 12px;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .dato>span{font-size:.78rem;opacity:.8}
+  .dato b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;line-height:1.05;
+    color:var(--amarillo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dato .sub{font-size:.8rem;opacity:.85}
+  .sube{color:#4fd6a8;font-style:normal;font-weight:600}.baja{color:#ff9a86;font-style:normal;font-weight:600}
+  .fila-dato{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
+    border-bottom:1px solid rgba(251,250,245,.12);font-size:.95rem;line-height:1.25}
+  .fila-dato:last-child{border-bottom:0}
+  .fila-dato b{font-weight:600;white-space:nowrap;text-align:right}
+  .barra-h{height:8px;border-radius:4px;background:var(--amarillo);margin-top:5px}
+  details.alerta{background:var(--verde);border-radius:10px;padding:11px 12px}
+  details.alerta summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center}
+  details.alerta summary::-webkit-details-marker{display:none}
+  details.alerta[open] summary{margin-bottom:6px}
+  .num-alerta{background:var(--rojo);color:#fff;border-radius:999px;padding:1px 10px;font-size:.9rem}
+  .num-alerta.amarillo{background:#ffd23f;color:var(--tinta)}
+  .num-alerta.gris{background:var(--verde3);color:var(--papel)}
+  .num-alerta.cero{background:transparent;border:1px solid rgba(251,250,245,.35);color:var(--papel)}
+  .nota{font-size:.85rem;opacity:.75;margin:8px 0 0;line-height:1.4}
+  .seg{display:flex;background:var(--verde2);border-radius:10px;padding:4px;gap:4px;flex:none}
+  .seg button{flex:1;border:0;border-radius:8px;padding:9px;background:transparent;color:var(--papel);
+    font-weight:600;font-size:1rem;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--amarillo);color:var(--verde)}
+  .etq{display:inline-block;border-radius:6px;padding:1px 7px;font-size:.72rem;font-weight:600;
+    background:var(--amarillo);color:var(--verde);margin-left:6px;vertical-align:middle;text-transform:uppercase}
+  .etq.gris{background:var(--verde3);color:var(--papel)}
+
+  /* Formularios */
+  .campo{display:flex;flex-direction:column;gap:5px;font-size:.85rem}
+  .campo input,.campo textarea{border:0;border-radius:8px;padding:11px 12px;font:500 1.05rem "Barlow",sans-serif;
+    background:var(--papel);color:var(--tinta);-webkit-user-select:text;user-select:text;width:100%}
+  .campo textarea{min-height:5em;resize:vertical}
+  .fijo{display:grid;grid-template-columns:1fr 7.5em auto auto;gap:6px;align-items:center;padding:7px 0;
+    border-bottom:1px solid rgba(251,250,245,.12)}
+  .fijo input{border:0;border-radius:8px;padding:10px;font:500 .95rem "Barlow",sans-serif;background:var(--papel);
+    color:var(--tinta);width:100%;min-width:0;-webkit-user-select:text;user-select:text}
+  .fijo input.valor{text-align:right}
+  .fijo.inactivo input{opacity:.5}
+  .sw{border:0;border-radius:8px;padding:10px 8px;font-weight:600;background:var(--verde3);color:var(--papel);
+    min-width:3.2em;cursor:pointer}
+  .sw.on{background:var(--amarillo);color:var(--verde)}
+  .bloque .sec{background:var(--verde3)}
+  #btnFijoAgregar{white-space:nowrap}
+  .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -176,9 +230,10 @@
 <section class="pantalla" id="principal">
   <div class="cabeza"><h2>Administración</h2><button class="sec" id="btnSalirPrin">Salir</button></div>
   <div class="menu">
-    <button class="ppal" id="btnMenuInv">Inventario</button>
-    <button class="ghost" id="btnMenuCompras">Compras</button>
-    <button class="ppal" id="btnMenuVentas">Ventas</button>
+    <button class="ppal" id="btnMenuKpis">KPIs del negocio</button>
+    <button class="ghost" id="btnMenuInv">Inventario</button>
+    <button class="ppal" id="btnMenuCompras">Compras</button>
+    <button class="ghost" id="btnMenuVentas">Ventas</button>
   </div>
 </section>
 
@@ -195,9 +250,10 @@
 <section class="pantalla" id="compras">
   <div class="cabeza"><h2>Compras</h2><button class="sec" id="btnSalirCompras">Volver</button></div>
   <div class="menu">
-    <button class="ppal obra" id="btnPedidos">Pedidos sugeridos por proveedor</button>
-    <button class="ghost obra" id="btnAbastos">Lista de compra general</button>
-    <button class="ppal obra" id="btnAbastosPlaza">Lista de abastos</button>
+    <button class="ppal" id="btnProveedores">Proveedores</button>
+    <button class="ghost obra" id="btnPedidos">Pedidos sugeridos por proveedor</button>
+    <button class="ppal obra" id="btnAbastos">Lista de compra general</button>
+    <button class="ghost obra" id="btnAbastosPlaza">Lista de abastos</button>
   </div>
 </section>
 
@@ -280,11 +336,55 @@
   <button class="sec" id="btnGuardarCerrar">Guardar y terminar</button>
 </section>
 
+<!-- ============ KPIs ============ -->
+<section class="pantalla" id="kpis">
+  <div class="cabeza"><h2>KPIs</h2>
+    <button class="sec" id="btnKpiActualizar">Actualizar</button>
+    <button class="sec" id="btnVolverKpis">Volver</button></div>
+  <div class="seg">
+    <button id="segHoy" aria-pressed="false">Hoy</button>
+    <button id="segAyer" aria-pressed="true">Ayer</button>
+  </div>
+  <p id="kpiEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="kpiPanel"></div>
+</section>
+
+<!-- ============ COSTOS FIJOS ============ -->
+<section class="pantalla" id="fijos">
+  <div class="cabeza"><h2>Costos fijos</h2><button class="sec" id="btnVolverFijos">Volver</button></div>
+  <p style="margin:0;font-size:.9rem;opacity:.8">Valores mensuales. Con <b>NO</b> el concepto no se cuenta, sin borrarlo.</p>
+  <div class="items" id="fijosItems"></div>
+  <div class="resumen">
+    <div class="caja"><b id="fijosTotal">$0</b><span>total mensual</span></div>
+    <div class="caja"><b id="fijosDia">$0</b><span>por día</span></div>
+  </div>
+  <div class="acciones">
+    <button class="sec" id="btnFijoAgregar">+ Concepto</button>
+    <button class="ppal" id="btnFijosGuardar" style="flex:2">Guardar</button>
+  </div>
+</section>
+
+<!-- ============ PROVEEDORES ============ -->
+<section class="pantalla" id="proveedores">
+  <div class="cabeza"><h2>Proveedores</h2><button class="sec" id="btnVolverProvs">Volver</button></div>
+  <input class="buscador" id="provBuscar" type="search" placeholder="Buscar proveedor o producto" autocomplete="off" enterkeyhint="search">
+  <div class="chips" id="provChips"></div>
+  <div class="items" id="provItems"></div>
+  <div class="acciones"><button class="sec" id="btnProvNuevo">+ Proveedor sin documento</button></div>
+</section>
+
+<!-- ============ FICHA DE PROVEEDOR ============ -->
+<section class="pantalla" id="proveedor">
+  <div class="cabeza"><h2 id="provTitulo">Proveedor</h2><button class="sec" id="btnVolverProv">Volver</button></div>
+  <div class="panel" id="provFicha"></div>
+  <div class="acciones"><button class="ppal" id="btnProvGuardar">Guardar</button></div>
+</section>
+
 <input id="entrada" inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.34 · 1-oct-2026";
+const VERSION = "v1.35 · 5-oct-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxyrlhsNEfxB8BEWMDlU99PlBOqU4-rat7_YNL-qlc-SXDc_VW2ApRh81l4twNn7xi1/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -298,6 +398,7 @@ const DIAS_VIEJO = 90;       // a partir de aquí, urgente        // un producto
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
+const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor"];
 const estado = $("estado"), entrada = $("entrada");
 let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
 let escaner = null, modoCamara = "precio", pendiente = null;
@@ -312,7 +413,7 @@ const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f
 
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
-  const escribible = ["lista","conteoItem","ajustes","ajustar"].includes(id);
+  const escribible = ESCRIBIBLES.includes(id);
   if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
 }
 
@@ -1013,12 +1114,415 @@ async function entrar(){
 }
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
 
+/* ---------- Llamadas de administración (piden la clave una vez por sesión) ---------- */
+const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const plata = n => (n === null || n === undefined || n === "" || isNaN(Number(n))) ? "—" : (Number(n) < 0 ? "-$" : "$") + pesos(Math.abs(Number(n)));
+function pedirClave(){
+  if(claveAdmin) return claveAdmin;
+  const c = prompt("Clave de administrador:");
+  if(c === null) return null;
+  claveAdmin = c.trim();
+  return claveAdmin;
+}
+async function postAdmin(cuerpo){
+  const url = apiUrl();
+  if(!url) throw new Error("Falta configurar la URL de Apps Script.");
+  const clave = pedirClave();
+  if(clave === null) throw new Error("Cancelado");
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body: JSON.stringify(Object.assign({}, cuerpo, {clave, quien}))});
+  const d = await r.json();
+  if(!d.ok){ if(/clave|pin/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
+  return d;
+}
+
+/* ---------- KPIs ---------- */
+let kpis = null, diaKpi = "ayer", cargandoKpis = false;
+function abrirKpis(){
+  clearTimeout(tLista);
+  try{ kpis = JSON.parse(leer("kpis") || "null"); }catch(e){ kpis = null; }
+  pintarKpis();
+  ir("kpis");
+  cargarKpis(false);
+}
+async function cargarKpis(actualizar){
+  if(cargandoKpis) return;
+  const url = apiUrl();
+  if(!url) return;
+  const clave = pedirClave();
+  if(clave === null) return;
+  cargandoKpis = true;
+  const btn = $("btnKpiActualizar"), msg = $("kpiEstado");
+  btn.disabled = true;
+  const t0 = Date.now();
+  const texto = actualizar ? "Recalculando con Siigo… " : "Cargando… ";
+  msg.textContent = texto;
+  const reloj = setInterval(()=>{ msg.textContent = texto + Math.round((Date.now()-t0)/1000) + "s"; }, 1000);
+  try{
+    const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=kpis&pin=" + encodeURIComponent(clave) +
+      (actualizar ? "&actualizar=1" : "") + "&t=" + Date.now(), {cache:"no-store"});
+    const d = await r.json();
+    if(!d.ok){ if(/pin|clave/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
+    kpis = d;
+    guardar("kpis", JSON.stringify(d));
+    msg.textContent = "";
+  }catch(e){
+    msg.textContent = (kpis ? "Mostrando la última copia · " : "") + "No se pudo cargar: " + e.message;
+  }finally{
+    clearInterval(reloj); btn.disabled = false; cargandoKpis = false;
+    pintarKpis();
+  }
+}
+function dato(titulo, valor, sub){
+  return `<div class="dato"><span>${titulo}</span><b>${valor}</b>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+}
+function varPct(v){
+  if(v === null || v === undefined) return "";
+  const n = Math.abs(v).toLocaleString("es-CO", {maximumFractionDigits:1});
+  return `<em class="${v >= 0 ? "sube" : "baja"}">${v >= 0 ? "▲" : "▼"} ${n}%</em>`;
+}
+function fechaTxt(f){
+  if(!f) return "";
+  return new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"short", day:"numeric", month:"short"});
+}
+function pintarKpis(){
+  const p = $("kpiPanel");
+  $("segHoy").setAttribute("aria-pressed", diaKpi === "hoy");
+  $("segAyer").setAttribute("aria-pressed", diaKpi === "ayer");
+  if(!kpis){
+    p.innerHTML = '<div class="vacio">Todavía no hay KPIs calculados.<br>Toca <b>Actualizar</b> para calcularlos.</div>';
+    return;
+  }
+  const k = kpis, d = k[diaKpi] || {}, det = k[diaKpi + "_detalle"] || {};
+  let h = `<div class="bloque"><h3>${diaKpi === "hoy" ? "Hoy" : "Ayer"}
+      <small>${fechaTxt(d.fecha)}${d.parcial ? " · hasta " + esc(String(k.generado || "").slice(11)) : ""}</small></h3>
+    <div class="grilla">
+      ${dato("Ventas", plata(d.ventas))}
+      ${dato("Tickets", d.transacciones ?? "—")}
+      ${dato("Ticket promedio", plata(d.ticket_promedio))}
+      ${dato("Margen bruto", d.margen == null ? "—" : plata(d.margen),
+             d.margen_pct == null ? "sin costos de compra aún" : d.margen_pct + "% · cubre " + d.cobertura_costos_pct + "% de la venta")}
+    </div>
+    ${d.devoluciones ? `<p class="nota">Devoluciones: ${plata(d.devoluciones)}</p>` : ""}</div>`;
+  h += bloqueComparacion("Últimos 7 días", k.semana, "vs. 7 días anteriores");
+  h += bloqueComparacion("Mes a la fecha", k.mes, "vs. mismo corte del mes pasado");
+  h += bloqueTendencia(k.tendencia_30d);
+  h += bloqueUtilidad(k.utilidad);
+  h += bloqueAlertas(k);
+  h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer");
+  h += bloqueTop30(k.reposicion);
+  h += `<p class="nota" style="text-align:center">Calculado ${esc(k.generado)}</p>`;
+  p.innerHTML = h;
+  const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
+}
+function bloqueComparacion(titulo, c, sub){
+  if(!c) return "";
+  const a = c.actual || {}, b = c.anterior || {};
+  return `<div class="bloque"><h3>${titulo} <small>${sub}</small></h3><div class="grilla">
+    ${dato("Ventas", plata(a.ventas), varPct(c.var_ventas_pct) + (b.ventas ? ` <span style="opacity:.7">antes ${plata(b.ventas)}</span>` : ""))}
+    ${dato("Tickets", pesos(a.transacciones || 0), varPct(c.var_transacciones_pct))}
+    ${dato("Venta diaria", plata(a.venta_diaria_prom), "promedio")}
+    ${dato("Ticket promedio", plata(a.ticket_promedio), b.ticket_promedio ? "antes " + plata(b.ticket_promedio) : "")}
+  </div>${a.margen ? `<p class="nota">Margen bruto: ${plata(a.margen)}</p>` : ""}</div>`;
+}
+function bloqueTendencia(t){
+  if(!t || !t.length) return "";
+  const max = Math.max(...t.map(x => x.ventas || 0), 1);
+  const W = 300, H = 90, bw = W / t.length;
+  const barras = t.map((x, i) => {
+    const bh = Math.max(1, (x.ventas || 0) / max * (H - 4));
+    const domingo = new Date(x.fecha + "T12:00:00").getDay() === 0;
+    return `<rect x="${(i*bw + 1).toFixed(1)}" y="${(H - bh).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}"
+      height="${bh.toFixed(1)}" rx="1.5" fill="${domingo ? "#6fb8ff" : "#3fd0c9"}"></rect>`;
+  }).join("");
+  const prom = t.reduce((s, x) => s + (x.ventas || 0), 0) / t.length;
+  const mejor = t.reduce((a, x) => (x.ventas || 0) > (a.ventas || 0) ? x : a, t[0]);
+  return `<div class="bloque"><h3>Ventas 30 días <small>promedio ${plata(prom)}/día</small></h3>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:90px">${barras}</svg>
+    <p class="nota">Mejor día: ${fechaTxt(mejor.fecha)} con ${plata(mejor.ventas)} · domingos en azul</p></div>`;
+}
+function bloqueUtilidad(u){
+  let h = `<div class="bloque"><h3>Utilidad del mes <button class="sec chico" id="btnFijos">Costos fijos</button></h3>`;
+  if(!u || u.error){
+    h += `<p class="nota" style="margin:0">${esc((u && u.error) || "Sin datos todavía.")}</p>`;
+  }else if(u.utilidad_a_la_fecha == null){
+    h += `<div class="grilla">${dato("Costos fijos / mes", plata(u.costos_fijos_mes))}${dato("Fijos a la fecha", plata(u.fijos_a_la_fecha))}</div>
+      <p class="nota">El margen y la utilidad aparecen cuando registres facturas de compra en Siigo.</p>`;
+  }else{
+    h += `<div class="grilla">
+      ${dato("Utilidad a la fecha", plata(u.utilidad_a_la_fecha))}
+      ${dato("Proyección del mes", plata(u.proyeccion_utilidad_mes))}
+      ${dato("Margen bruto del mes", plata(u.margen_bruto_mes))}
+      ${dato("Costos fijos / mes", plata(u.costos_fijos_mes))}
+      ${dato("Venta mínima diaria", plata(u.punto_equilibrio_diario), "para cubrir fijos (con IVA)")}
+      ${dato("Venta diaria actual", plata(u.venta_diaria_actual))}
+    </div>${u.nota ? `<p class="nota">⚠ ${esc(u.nota)}</p>` : ""}`;
+  }
+  return h + "</div>";
+}
+function bloqueAlertas(k){
+  const r = k.reposicion || {}, inv = k.inventario || {};
+  const fila = (n, der) => `<div class="fila-dato"><span>${esc(n)}</span><b>${der}</b></div>`;
+  const lista = (arr, fmt) => arr && arr.length ? arr.map(fmt).join("") : '<p class="nota" style="margin:0">Nada por aquí.</p>';
+  const mas = (n, m) => n > m ? `<p class="nota">… y ${n - m} más</p>` : "";
+  const det = (titulo, n, clase, cuerpo) =>
+    `<details class="alerta"${n && clase === "" ? " open" : ""}><summary><span>${titulo}</span>
+      <span class="num-alerta ${n ? clase : "cero"}">${n}</span></summary>${cuerpo}</details>`;
+  const rep = r.reponer_ya || [], sem = r.esta_semana || [];
+  let h = `<div class="bloque"><h3>Alertas</h3><div style="display:flex;flex-direction:column;gap:8px">`;
+  h += det("Reponer ya", rep.length, "", lista(rep, x => fila(x.nombre, `${num(x.existencias ?? 0)} und · ${num(x.dias_cobertura)} días`)));
+  h += det("Reponer esta semana", sem.length, "amarillo", lista(sem, x => fila(x.nombre, `${num(x.existencias ?? 0)} und · ${num(x.dias_cobertura)} días`)));
+  h += det("Agotados", inv.n_agotados || 0, "", lista(inv.agotados, x => fila(x.nombre, esc(x.categoria))) + mas(inv.n_agotados, (inv.agotados || []).length));
+  h += det("Bajo el mínimo", inv.n_bajo_minimo || 0, "amarillo", lista(inv.bajo_minimo, x => fila(x.nombre, `${num(x.stock)} / mín. ${num(x.minimo)}`)) + mas(inv.n_bajo_minimo, (inv.bajo_minimo || []).length));
+  h += det("Sin venta en 30 días", inv.n_sin_movimiento || 0, "gris",
+    (inv.sin_movimiento_nota ? `<p class="nota" style="margin:0 0 6px">${esc(inv.sin_movimiento_nota)}</p>` : "") +
+    lista(inv.sin_movimiento, x => fila(x.nombre, `${num(x.stock)} und · ${esc(x.ultima_venta)}`)) + mas(inv.n_sin_movimiento, (inv.sin_movimiento || []).length));
+  h += `</div>`;
+  if(inv.valor_costo != null) h += `<p class="nota">Inventario a costo: ${plata(inv.valor_costo)}${inv.dias_inventario != null ? ` · alcanza para ${inv.dias_inventario} días` : ""}</p>`;
+  return h + "</div>";
+}
+function bloqueDetalle(det, dia){
+  const cats = det.por_categoria || [], top = det.top_productos || [], horas = det.por_hora || [];
+  if(!cats.length && !top.length)
+    return `<div class="bloque"><h3>Detalle <small>${dia}</small></h3><p class="nota" style="margin:0">Sin ventas registradas ${dia}.</p></div>`;
+  const maxC = Math.max(...cats.map(c => c.ventas), 1);
+  let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>` + cats.map(c =>
+    `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
+      <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null ? ` · ${c.margen_pct}%` : ""}</b></div>
+      <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
+  if(horas.length){
+    const maxH = Math.max(...horas.map(x => x.ventas), 1);
+    h += `<div class="bloque"><h3>Por hora <small>${dia}</small></h3>` + horas.map(x =>
+      `<div style="display:grid;grid-template-columns:3.4em 1fr 6.5em;align-items:center;gap:8px;font-size:.9rem;padding:3px 0">
+        <span>${x.hora}:00</span><div class="barra-h" style="margin:0;width:${Math.max(2, x.ventas / maxH * 100)}%"></div>
+        <b style="text-align:right;font-weight:600">${plata(x.ventas)}</b></div>`).join("") + `</div>`;
+  }
+  h += `<div class="bloque"><h3>Más vendidos <small>${dia}</small></h3>` + top.map((p, i) =>
+    `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)} <small style="opacity:.65">× ${num(p.unidades)}</small></span>
+     <b>${plata(p.ventas)}</b></div>`).join("") + `</div>`;
+  return h;
+}
+function bloqueTop30(r){
+  const t = (r && r.top_30d) || [];
+  if(!t.length) return "";
+  return `<div class="bloque"><h3>Más vendidos 30 días <small>por unidades</small></h3>` + t.map((p, i) =>
+    `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)}</span><b>${num(p.unidades)} und · ${num(p.por_dia)}/día</b></div>`).join("") + `</div>`;
+}
+
+/* ---------- Costos fijos ---------- */
+let fijos = [], fijosCambios = false;
+function diasDelMes(){ const h = new Date(); return new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate(); }
+async function abrirFijos(){
+  clearTimeout(tLista);
+  ir("fijos");
+  $("fijosItems").innerHTML = '<div class="vacio">Cargando…</div>';
+  try{
+    const d = await postAdmin({accion:"fijos_leer"});
+    fijos = d.items || []; fijosCambios = false;
+    pintarFijos();
+  }catch(e){
+    $("fijosItems").innerHTML = `<div class="vacio">No se pudo cargar: ${esc(e.message)}</div>`;
+  }
+}
+function pintarFijos(){
+  $("fijosItems").innerHTML = fijos.length ? fijos.map((f, i) =>
+    `<div class="fijo${f.activo ? "" : " inactivo"}" data-i="${i}">
+      <input class="concepto" value="${esc(f.concepto)}" placeholder="Concepto" autocomplete="off">
+      <input class="valor" inputmode="numeric" value="${f.valor ? pesos(f.valor) : ""}" placeholder="0" autocomplete="off">
+      <button class="sw${f.activo ? " on" : ""}" aria-pressed="${f.activo}">${f.activo ? "SI" : "NO"}</button>
+      <button class="quitar" aria-label="Quitar">×</button></div>`).join("")
+    : '<div class="vacio">Sin conceptos. Toca <b>+ Concepto</b>.</div>';
+  totalFijos();
+}
+function totalFijos(){
+  const t = fijos.filter(f => f.activo).reduce((s, f) => s + (Number(f.valor) || 0), 0);
+  $("fijosTotal").textContent = plata(t);
+  $("fijosDia").textContent = plata(t / diasDelMes());
+}
+$("fijosItems").addEventListener("input", e => {
+  const fila = e.target.closest(".fijo"); if(!fila) return;
+  const f = fijos[Number(fila.dataset.i)];
+  if(e.target.classList.contains("concepto")) f.concepto = e.target.value.toUpperCase();
+  if(e.target.classList.contains("valor")) f.valor = Number(e.target.value.replace(/\D/g, "")) || 0;
+  fijosCambios = true; totalFijos();
+});
+$("fijosItems").addEventListener("focusout", e => {
+  if(e.target.classList.contains("valor")){
+    const f = fijos[Number(e.target.closest(".fijo").dataset.i)];
+    e.target.value = f.valor ? pesos(f.valor) : "";
+  }
+});
+$("fijosItems").addEventListener("click", e => {
+  const fila = e.target.closest(".fijo"); if(!fila) return;
+  const i = Number(fila.dataset.i);
+  if(e.target.classList.contains("sw")){ fijos[i].activo = !fijos[i].activo; fijosCambios = true; pintarFijos(); }
+  if(e.target.classList.contains("quitar")){
+    if(!confirm(`¿Quitar "${fijos[i].concepto || "este concepto"}"?`)) return;
+    fijos.splice(i, 1); fijosCambios = true; pintarFijos();
+  }
+});
+$("btnFijoAgregar").addEventListener("click", () => {
+  fijos.push({concepto:"", valor:0, activo:true}); fijosCambios = true; pintarFijos();
+  const ins = $("fijosItems").querySelectorAll(".concepto");
+  if(ins.length){ ins[ins.length - 1].focus(); $("fijosItems").scrollTop = $("fijosItems").scrollHeight; }
+});
+$("btnFijosGuardar").addEventListener("click", async () => {
+  if(fijos.some(f => !String(f.concepto).trim() && f.valor)) return alert("Hay un valor sin concepto.");
+  const btn = $("btnFijosGuardar"); btn.disabled = true; btn.textContent = "Guardando…";
+  try{
+    const d = await postAdmin({accion:"fijos_guardar", items: fijos.filter(f => String(f.concepto).trim())});
+    fijos = d.items || []; fijosCambios = false; pintarFijos();
+    alert(`Guardado. Total mensual: ${plata(d.total)}.\n\nLa utilidad se recalcula al tocar Actualizar en KPIs.`);
+  }catch(e){ alert("No se pudo guardar: " + e.message); }
+  finally{ btn.disabled = false; btn.textContent = "Guardar"; }
+});
+$("btnVolverFijos").addEventListener("click", () => {
+  if(fijosCambios && !confirm("Hay cambios sin guardar. ¿Salir igual?")) return;
+  fijosCambios = false; abrirKpis();
+});
+
+/* ---------- Proveedores ---------- */
+let provs = [], provFiltro = "", provSel = null;
+async function abrirProveedores(){
+  clearTimeout(tLista);
+  ir("proveedores");
+  try{ provs = JSON.parse(leer("proveedores") || "[]"); }catch(e){ provs = []; }
+  pintarProveedores();
+  if(!provs.length) $("provItems").innerHTML = '<div class="vacio">Cargando…</div>';
+  try{
+    const d = await postAdmin({accion:"proveedores"});
+    provs = d.proveedores || [];
+    guardar("proveedores", JSON.stringify(provs));
+    pintarProveedores();
+  }catch(e){
+    if(!provs.length) $("provItems").innerHTML = `<div class="vacio">No se pudo cargar: ${esc(e.message)}</div>`;
+  }
+}
+function pintarProveedores(){
+  const filtros = [["", "Todos"], ["si", "Abastos"], ["no", "No abastos"], ["?", "Sin definir"]];
+  $("provChips").innerHTML = filtros.map(([k, t]) => {
+    const n = provs.filter(p => provPasa(p, k)).length;
+    return `<button class="chip" data-f="${k}" aria-pressed="${provFiltro === k}">${t} · ${n}</button>`;
+  }).join("");
+  const q = normal($("provBuscar").value.trim());
+  const lista = provs.filter(p => provPasa(p, provFiltro)).filter(p => !q ||
+    normal(p.nombre + " " + p.nit).includes(q) ||
+    (p.items || []).some(it => normal(it.producto + " " + it.codigo).includes(q)));
+  if(!provs.length){
+    $("provItems").innerHTML = '<div class="vacio">Aún no hay proveedores.<br>Aparecen solos cuando registres facturas de compra o documentos soporte en Siigo.</div>';
+    return;
+  }
+  $("provItems").innerHTML = lista.length ? lista.map(p => {
+    const ab = p.abastos === true ? '<span class="etq">abastos</span>' : p.abastos === null ? '<span class="etq gris">sin definir</span>' : "";
+    const prodQ = q ? (p.items || []).filter(it => normal(it.producto + " " + it.codigo).includes(q)).slice(0, 3) : [];
+    return `<button class="item" data-nit="${esc(p.nit)}">
+      <span class="cod">${p.productos || 0}</span>
+      <span class="nom">${esc(p.nombre)}${ab}
+        <small>${p.dias_visita ? "Visita: " + esc(p.dias_visita) + " · " : ""}${p.ultima_compra ? "Última compra " + fechaTxt(p.ultima_compra) : esc(p.origen || "")}${
+          prodQ.length ? "<br>" + prodQ.map(it => esc(it.producto) + " " + plata(it.ultimo_costo)).join(" · ") : ""}</small></span>
+      <span class="pre">›</span></button>`;
+  }).join("") : '<div class="vacio">Nada coincide.</div>';
+}
+function provPasa(p, f){
+  if(f === "si") return p.abastos === true;
+  if(f === "no") return p.abastos === false;
+  if(f === "?") return p.abastos === null || p.abastos === undefined;
+  return true;
+}
+$("provChips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if(!b) return;
+  provFiltro = b.dataset.f; pintarProveedores();
+});
+$("provBuscar").addEventListener("input", pintarProveedores);
+$("provItems").addEventListener("click", e => {
+  const b = e.target.closest(".item"); if(!b) return;
+  abrirProveedor(provs.find(p => p.nit === b.dataset.nit));
+});
+$("btnProvNuevo").addEventListener("click", () => abrirProveedor(null));
+$("btnVolverProvs").addEventListener("click", () => irMenu("compras"));
+$("btnVolverProv").addEventListener("click", () => { ir("proveedores"); pintarProveedores(); });
+
+function abrirProveedor(p){
+  provSel = p ? JSON.parse(JSON.stringify(p)) :
+    {nit:"", nombre:"", abastos:true, dias_visita:"", contacto:"", telefono:"", observaciones:"", items:[], nuevo:true};
+  $("provTitulo").textContent = p ? "Proveedor" : "Nuevo proveedor";
+  pintarProveedor();
+  ir("proveedor");
+  $("provFicha").scrollTop = 0;
+}
+function pintarProveedor(){
+  const p = provSel;
+  const seg = [[true, "Abastos"], [false, "No abastos"], [null, "Sin definir"]].map(([v, t]) =>
+    `<button data-ab="${v}" aria-pressed="${p.abastos === v}">${t}</button>`).join("");
+  const campo = (id, titulo, valor, extra) =>
+    `<label class="campo">${titulo}<input id="${id}" value="${esc(valor || "")}" autocomplete="off" ${extra || ""}></label>`;
+  const items = (p.items || []).slice().sort((a, b) => normal(a.producto).localeCompare(normal(b.producto)));
+  let h = "";
+  if(p.nuevo){
+    h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
+      ${campo("pvNombre", "Nombre del proveedor", p.nombre, 'placeholder="Ej: DON PEDRO - PLAZA LAS FLORES"')}
+      <p class="nota" style="margin:0">Para proveedores sin factura ni documento soporte. Si después registras sus compras en Siigo como documento soporte, aparecerá también con su NIT y sus productos.</p></div>`;
+  }else{
+    h += `<div class="bloque"><h3 style="margin-bottom:6px">${esc(p.nombre)}</h3>
+      <p class="nota" style="margin:0">NIT ${esc(p.nit)} · ${esc(p.origen || "")}<br>
+      ${p.documentos ? `${p.documentos} compras · desde ${fechaTxt(p.primera_compra)} · última ${fechaTxt(p.ultima_compra)}<br>Total comprado: ${plata(p.total_comprado)} sin IVA` : "Sin compras registradas en Siigo"}</p></div>`;
+  }
+  h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
+    <div class="seg" id="pvAbastos" style="background:var(--verde)">${seg}</div>
+    ${campo("pvDias", "Días de visita o de compra", p.dias_visita, 'placeholder="Ej: martes y viernes"')}
+    ${campo("pvContacto", "Contacto / vendedor", p.contacto)}
+    ${campo("pvTel", "Teléfono", p.telefono, 'inputmode="tel"')}
+    <label class="campo">Observaciones<textarea id="pvObs">${esc(p.observaciones || "")}</textarea></label>
+    ${p.telefono ? `<a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>` : ""}
+  </div>`;
+  if(!p.nuevo){
+    h += `<div class="bloque"><h3>Le compras ${items.length} productos <small>costo sin IVA</small></h3>` +
+      (items.length ? items.map(it => `<div class="fila-dato"><span>${esc(it.producto)}${it.mas_barato ? '<span class="etq">más barato</span>' : ""}
+        <small style="display:block;opacity:.65">${esc(it.codigo)} · ${it.compras} compras · prom. ${plata(it.costo_promedio)}</small></span>
+        <b>${plata(it.ultimo_costo)}<small style="display:block;font-weight:500;opacity:.65">${fechaTxt(it.fecha)}</small></b></div>`).join("")
+      : '<p class="nota" style="margin:0">Sin productos registrados.</p>') + `</div>`;
+  }
+  $("provFicha").innerHTML = h;
+}
+$("provFicha").addEventListener("click", e => {
+  const b = e.target.closest("#pvAbastos button"); if(!b) return;
+  leerFichaProveedor();
+  provSel.abastos = b.dataset.ab === "true" ? true : b.dataset.ab === "false" ? false : null;
+  pintarProveedor();
+});
+function leerFichaProveedor(){
+  const v = id => $(id) ? $(id).value.trim() : "";
+  if(provSel.nuevo) provSel.nombre = v("pvNombre").toUpperCase();
+  provSel.dias_visita = v("pvDias"); provSel.contacto = v("pvContacto");
+  provSel.telefono = v("pvTel"); provSel.observaciones = v("pvObs");
+}
+$("btnProvGuardar").addEventListener("click", async () => {
+  leerFichaProveedor();
+  if(provSel.nuevo && !provSel.nombre) return alert("Escribe el nombre del proveedor.");
+  const btn = $("btnProvGuardar"); btn.disabled = true; btn.textContent = "Guardando…";
+  try{
+    const p = provSel;
+    await postAdmin({accion:"proveedor_guardar", proveedor:{nit:p.nit, nombre:p.nombre, abastos:p.abastos,
+      dias_visita:p.dias_visita, contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones}});
+    await abrirProveedores();
+  }catch(e){ alert("No se pudo guardar: " + e.message); }
+  finally{ btn.disabled = false; btn.textContent = "Guardar"; }
+});
+
+/* ---------- Eventos de KPIs ---------- */
+$("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
+$("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
+$("segHoy").addEventListener("click", () => { diaKpi = "hoy"; pintarKpis(); $("kpiPanel").scrollTop = 0; });
+$("segAyer").addEventListener("click", () => { diaKpi = "ayer"; pintarKpis(); $("kpiPanel").scrollTop = 0; });
+
 /* ---------- Eventos ---------- */
 $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
 $("btnInventario").addEventListener("click", entrar);
 $("btnMenuInv").addEventListener("click", ()=>irMenu("inventario"));
 $("btnMenuCompras").addEventListener("click", ()=>irMenu("compras"));
 $("btnMenuVentas").addEventListener("click", ()=>irMenu("ventas"));
+$("btnMenuKpis").addEventListener("click", abrirKpis);
+$("btnProveedores").addEventListener("click", abrirProveedores);
 $("btnSalirPrin").addEventListener("click", inicio);
 $("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
 $("btnSalirCompras").addEventListener("click", ()=>irMenu("principal"));
@@ -1141,7 +1645,7 @@ entrada.addEventListener("keydown", async e=>{
 });
 setInterval(()=>{
   const act = document.querySelector(".pantalla.activa");
-  if(act && !["lista","conteoItem","ajustes","ajustar"].includes(act.id) && document.activeElement !== entrada)
+  if(act && !ESCRIBIBLES.includes(act.id) && document.activeElement !== entrada)
     entrada.focus({preventScroll:true});
 }, 1000);
 
