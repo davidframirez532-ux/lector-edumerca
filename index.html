@@ -188,6 +188,21 @@
   .sw.on{background:var(--amarillo);color:var(--verde)}
   .bloque .sec{background:var(--verde3)}
   #btnFijoAgregar{white-space:nowrap}
+  .ab-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;
+    border-bottom:1px solid rgba(251,250,245,.12);cursor:pointer}
+  .ab-item:last-child{border-bottom:0}
+  .ab-check{width:30px;height:30px;border-radius:8px;border:2px solid rgba(251,250,245,.5);background:transparent;
+    color:var(--verde);font-weight:800;font-size:1.1rem;cursor:pointer;padding:0}
+  .ab-check[aria-pressed="true"]{background:var(--amarillo);border-color:var(--amarillo)}
+  .ab-nom{font-weight:600;font-size:.98rem;line-height:1.2;text-transform:uppercase}
+  .ab-nom small{display:block;text-transform:none;font-weight:500;font-size:.8rem;opacity:.85;margin-top:2px}
+  .ab-cant{text-align:right;white-space:nowrap}
+  .ab-cant b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.5rem;color:var(--amarillo);display:block;line-height:1}
+  .ab-cant small{font-size:.8rem;opacity:.8}
+  .ab-item.hecho .ab-nom,.ab-item.hecho .ab-cant{opacity:.4;text-decoration:line-through}
+  #abResumen .caja b{font-size:1.3rem}
+  .fechas{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
+  .fechas .campo input{padding:9px 10px;font-size:1rem}
   .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
 </style>
 </head>
@@ -253,7 +268,7 @@
     <button class="ppal" id="btnProveedores">Proveedores</button>
     <button class="ghost obra" id="btnPedidos">Pedidos sugeridos por proveedor</button>
     <button class="ppal obra" id="btnAbastos">Lista de compra general</button>
-    <button class="ghost obra" id="btnAbastosPlaza">Lista de abastos</button>
+    <button class="ghost" id="btnAbastosPlaza">Lista de abastos</button>
   </div>
 </section>
 
@@ -373,6 +388,31 @@
   <div class="acciones"><button class="sec" id="btnProvNuevo">+ Proveedor sin documento</button></div>
 </section>
 
+<!-- ============ LISTA DE ABASTOS ============ -->
+<section class="pantalla" id="abastos">
+  <div class="cabeza"><h2>Lista de abastos</h2><button class="sec" id="btnVolverAbastos">Volver</button></div>
+  <div class="fechas">
+    <label class="campo">Voy a comprar el<input type="date" id="abIda"></label>
+    <label class="campo">Próxima ida (aprox.)<input type="date" id="abProx"></label>
+  </div>
+  <div class="seg" id="abModo" data-modo="libre">
+    <button id="abModoLibre" aria-pressed="true">Sin límite</button>
+    <button id="abModoPres" aria-pressed="false">Con presupuesto</button>
+  </div>
+  <div class="fechas">
+    <label class="campo" id="abPresWrap" style="display:none">Presupuesto ($)<input id="abPresupuesto" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    <label class="campo">Días de reserva<input id="abSeguridad" type="number" min="0" max="7" inputmode="numeric"></label>
+  </div>
+  <p id="abEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center"></p>
+  <div class="resumen" id="abResumen"></div>
+  <div class="items" id="abItems"></div>
+  <div class="acciones">
+    <button class="ppal chico" id="btnAbMensaje" style="flex:2">Enviar por WhatsApp</button>
+    <button class="sec chico" id="btnAbTxt">Archivo TXT</button>
+    <button class="sec chico" id="btnAbReiniciar" aria-label="Reiniciar">↺</button>
+  </div>
+</section>
+
 <!-- ============ FICHA DE PROVEEDOR ============ -->
 <section class="pantalla" id="proveedor">
   <div class="cabeza"><h2 id="provTitulo">Proveedor</h2><button class="sec" id="btnVolverProv">Volver</button></div>
@@ -385,7 +425,7 @@
 <script>
 /* =========== CONFIGURACIÓN =========== */
 const VERSION = "v1.36 · 5-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbw2XausBLiBhRHQLW3NMuMBxT-bk5MWlPR9FPdSw0BauuqbxUa5sHWHmxpq2ODAxNkd/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxyrlhsNEfxB8BEWMDlU99PlBOqU4-rat7_YNL-qlc-SXDc_VW2ApRh81l4twNn7xi1/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -398,7 +438,7 @@ const DIAS_VIEJO = 90;       // a partir de aquí, urgente        // un producto
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
-const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor"];
+const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos"];
 const estado = $("estado"), entrada = $("entrada");
 let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
 let escaner = null, modoCamara = "precio", pendiente = null;
@@ -1509,6 +1549,257 @@ $("btnProvGuardar").addEventListener("click", async () => {
   finally{ btn.disabled = false; btn.textContent = "Guardar"; }
 });
 
+/* ---------- Lista de abastos ---------- */
+let abDatos = null, abCambios = {}, abCalc = null;
+const AB_DIA = 86400000;
+function hoyISO(){ const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+function sumarDiasISO(f, n){ const d = new Date(f + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function difDias(a, b){ return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / AB_DIA); }
+function abCfg(){
+  let c = {};
+  try{ c = JSON.parse(leer("abastos_cfg") || "{}"); }catch(e){}
+  const hoy = hoyISO();
+  const intervalo = c.intervalo || 7;
+  if(!c.ida || c.ida < hoy) c.ida = hoy;
+  if(!c.prox || c.prox <= c.ida) c.prox = sumarDiasISO(c.ida, intervalo);
+  if(c.seguridad === undefined) c.seguridad = 1;
+  if(!c.modo) c.modo = "libre";
+  return c;
+}
+function abGuardarCfg(){
+  const c = {ida: $("abIda").value, prox: $("abProx").value, modo: $("abModo").dataset.modo,
+    presupuesto: Number($("abPresupuesto").value.replace(/\D/g, "")) || 0,
+    seguridad: Number($("abSeguridad").value) || 0};
+  if(c.ida && c.prox) c.intervalo = Math.max(1, difDias(c.ida, c.prox));
+  guardar("abastos_cfg", JSON.stringify(c));
+  return c;
+}
+async function abrirAbastos(){
+  clearTimeout(tLista);
+  const c = abCfg();
+  $("abIda").value = c.ida; $("abProx").value = c.prox;
+  $("abPresupuesto").value = c.presupuesto ? pesos(c.presupuesto) : "";
+  $("abSeguridad").value = c.seguridad;
+  abModo(c.modo, true);
+  try{ abDatos = JSON.parse(leer("abastos_datos") || "null"); }catch(e){ abDatos = null; }
+  try{ abCambios = JSON.parse(leer("abastos_cambios") || "{}"); }catch(e){ abCambios = {}; }
+  ir("abastos");
+  pintarAbastos();
+  $("abEstado").textContent = "Actualizando datos…";
+  try{
+    const d = await postAdmin({accion:"abastos"});
+    abDatos = d; guardar("abastos_datos", JSON.stringify(d));
+    $("abEstado").textContent = "";
+  }catch(e){
+    $("abEstado").textContent = (abDatos ? "Usando la última copia · " : "") + "No se pudo actualizar: " + e.message;
+  }
+  pintarAbastos();
+}
+function abModo(m, sinPintar){
+  $("abModo").dataset.modo = m;
+  $("abModoLibre").setAttribute("aria-pressed", m === "libre");
+  $("abModoPres").setAttribute("aria-pressed", m === "presupuesto");
+  $("abPresWrap").style.display = m === "presupuesto" ? "" : "none";
+  if(!sinPintar){ abGuardarCfg(); pintarAbastos(); }
+}
+
+/* Cálculo: cuánto comprar para llegar a la próxima ida, y en qué orden */
+function calcularAbastos(){
+  const c = abGuardarCfg();
+  const hoy = hoyISO();
+  const hastaIda = Math.max(0, difDias(hoy, c.ida));
+  const ciclo = Math.max(1, difDias(c.ida, c.prox));
+  const items = [], sinVenta = [], cubiertos = [];
+  ((abDatos && abDatos.productos) || []).forEach(p => {
+    const prov = p.proveedores[0] || {};
+    const base = {codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, prov: prov,
+      costo: prov.costo || 0, existencias: p.existencias, prom: p.prom_dia, precio: p.precio,
+      otro: p.costo_otro};
+    if(!p.prom_dia || p.prom_dia <= 0){
+      const m = abCambios[p.codigo];
+      if(m > 0) items.push(Object.assign(base, {cant: m, minimo: m, manual: true, stockIda: p.existencias || 0,
+        diasAlIr: Infinity, prioridad: 3, valorDia: 0, prom: 0}));
+      else sinVenta.push(base);
+      return;
+    }
+    const stockIda = Math.max(0, (p.existencias || 0) - p.prom_dia * hastaIda);
+    const necesario = Math.ceil(p.prom_dia * (ciclo + c.seguridad) - stockIda);
+    const minimo = Math.max(0, Math.ceil(p.prom_dia * ciclo - stockIda));
+    const manual = abCambios[p.codigo];
+    let cant = manual !== undefined ? manual : necesario;
+    if(cant <= 0){ cubiertos.push(base); return; }
+    const diasAlIr = stockIda / p.prom_dia;
+    const prioridad = stockIda <= 0 ? 1 : diasAlIr < ciclo / 2 ? 2 : 3;
+    items.push(Object.assign(base, {cant, minimo: manual !== undefined ? manual : minimo, manual: manual !== undefined,
+      stockIda, diasAlIr, prioridad, valorDia: p.prom_dia * (p.precio || 0)}));
+  });
+  // Lo que se acaba primero va primero; a igual urgencia, lo que más plata mueve al día
+  items.sort((a, b) => a.prioridad - b.prioridad || b.valorDia - a.valorDia);
+
+  const presupuesto = c.modo === "presupuesto" ? c.presupuesto : 0;
+  let total = 0;
+  const dentro = [], fuera = [];
+  items.forEach(it => {
+    const sub = it.cant * it.costo;
+    if(!presupuesto || total + sub <= presupuesto){ it.sub = sub; total += sub; dentro.push(it); return; }
+    // No cabe completo: se intenta con lo justo para llegar a la próxima ida
+    const subMin = it.minimo * it.costo;
+    if(it.minimo > 0 && it.minimo < it.cant && total + subMin <= presupuesto){
+      it.reducido = it.cant; it.cant = it.minimo; it.sub = subMin; total += subMin; dentro.push(it); return;
+    }
+    // Ni eso cabe: se lleva lo que alcance y el resto queda por fuera
+    const alcanza = it.costo ? Math.floor((presupuesto - total) / it.costo) : 0;
+    if(alcanza > 0){
+      const resto = Object.assign({}, it, {cant: it.cant - alcanza, sub: (it.cant - alcanza) * it.costo});
+      it.reducido = it.cant; it.cant = alcanza; it.sub = alcanza * it.costo; total += it.sub;
+      dentro.push(it); fuera.push(resto); return;
+    }
+    it.sub = sub; fuera.push(it);
+  });
+  return {c, hastaIda, ciclo, dentro, fuera, sinVenta, cubiertos, total, presupuesto,
+    totalFuera: fuera.reduce((s, x) => s + x.sub, 0)};
+}
+const AB_PRIO = {1:["agotado al ir", "#ff9a86"], 2:["se acaba pronto", "#ffd23f"], 3:["reponer", "#bcd9dc"]};
+function pintarAbastos(){
+  const box = $("abItems");
+  if(!abDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  if(!abDatos.productos.length){
+    box.innerHTML = `<div class="vacio">Todavía no hay productos de abastos.<br><br>
+      1. Marca tus proveedores de abastos en <b>Compras → Proveedores</b>.<br>
+      2. Registra sus compras en Siigo como <b>documento soporte</b>.<br><br>
+      Con eso la app sabe qué le compras a cada uno y a cuánto.</div>`;
+    $("abResumen").innerHTML = ""; abCalc = null; return;
+  }
+  const r = abCalc = calcularAbastos();
+  let chk = {};
+  try{ chk = JSON.parse(leer("abastos_check_" + r.c.ida) || "{}"); }catch(e){}
+  const provsUsados = new Set(r.dentro.map(i => i.prov.nit));
+  $("abResumen").innerHTML = `
+    <div class="caja"><b>${plata(r.total)}</b><span>${r.presupuesto ? "de " + plata(r.presupuesto) : "estimado"}</span></div>
+    <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
+    <div class="caja"><b>${provsUsados.size}</b><span>proveedores</span></div>
+    ${r.presupuesto ? `<div class="caja"><b style="color:${r.fuera.length ? "#ff9a86" : "inherit"}">${r.fuera.length}</b><span>por fuera</span></div>` : ""}`;
+
+  let h = `<p class="nota" style="margin:0 0 4px">Compra para ${r.ciclo} días${r.c.seguridad ? ` + ${r.c.seguridad} de reserva` : ""}${
+    r.hastaIda ? ` · descuenta lo que se vende en los ${r.hastaIda} días antes de ir` : ""}. Toca un producto para cambiar la cantidad.</p>`;
+  const grupos = {};
+  r.dentro.forEach(it => { (grupos[it.prov.nit] = grupos[it.prov.nit] || {prov: it.prov, items: [], sub: 0}).items.push(it); grupos[it.prov.nit].sub += it.sub; });
+  Object.values(grupos).sort((a, b) => b.sub - a.sub).forEach(g => {
+    h += `<div class="bloque" style="margin-top:10px"><h3>${esc(g.prov.nombre || "Sin proveedor")}<small>${g.prov.dias_visita ? esc(g.prov.dias_visita) + " · " : ""}${plata(g.sub)}</small></h3>` +
+      g.items.map(it => {
+        const pr = AB_PRIO[it.prioridad], hecho = chk[it.codigo];
+        const masBarato = it.otro && it.costo && it.otro.costo < it.costo
+          ? `<br><span style="color:#ffd23f">${esc(it.otro.nombre)} lo tiene a ${plata(it.otro.costo)}</span>` : "";
+        return `<div class="ab-item${hecho ? " hecho" : ""}" data-cod="${esc(it.codigo)}">
+          <button class="ab-check" aria-pressed="${!!hecho}" aria-label="Comprado">${hecho ? "✓" : ""}</button>
+          <span class="ab-nom">${esc(it.nombre)}
+            <small><span style="color:${pr[1]}">● ${pr[0]}</span> · quedan ${num(Math.max(0, it.existencias || 0))}${it.prom ? ` · vende ${num(Math.round(it.prom * 10) / 10)}/día` : ""}${
+              it.reducido ? ` · <b>reducido de ${num(it.reducido)}</b>` : ""}${it.manual ? " · cantidad tuya" : ""}${masBarato}</small></span>
+          <span class="ab-cant"><b>${num(it.cant)}</b><small>${it.costo ? plata(it.sub) : "sin costo"}</small></span></div>`;
+      }).join("") + `</div>`;
+  });
+  if(!r.dentro.length) h += `<div class="vacio">Con estas fechas no hace falta comprar nada.</div>`;
+  if(r.fuera.length){
+    h += `<div class="bloque" style="margin-top:10px;border:2px solid var(--rojo)"><h3>Se queda por fuera<small>${plata(r.totalFuera)}</small></h3>` +
+      r.fuera.map(it => `<div class="fila-dato"><span>${esc(it.nombre)}<small style="display:block;opacity:.65">${AB_PRIO[it.prioridad][0]} · ${esc(it.prov.nombre)}</small></span>
+        <b>${num(it.cant)} · ${plata(it.sub)}</b></div>`).join("") +
+      `<p class="nota">Te faltan ${plata(r.total + r.totalFuera - r.presupuesto)} para llevar todo.</p></div>`;
+  }
+  if(r.sinVenta.length){
+    h += `<details class="alerta" style="margin-top:10px"><summary><span>Sin ventas recientes (no se incluyen)</span><span class="num-alerta gris">${r.sinVenta.length}</span></summary>` +
+      r.sinVenta.map(it => `<div class="fila-dato ab-agregar" data-cod="${esc(it.codigo)}" style="cursor:pointer"><span>${esc(it.nombre)}</span><b>quedan ${num(Math.max(0, it.existencias || 0))} · +</b></div>`).join("") +
+      `<p class="nota">Toca uno para agregarlo con la cantidad que quieras.</p></details>`;
+  }
+  if(r.cubiertos.length)
+    h += `<p class="nota" style="text-align:center">${r.cubiertos.length} productos de abastos alcanzan hasta la próxima ida.</p>`;
+  box.innerHTML = h;
+}
+$("abItems").addEventListener("click", e => {
+  const add = e.target.closest(".ab-agregar");
+  if(add){
+    const p = abCalc.sinVenta.find(x => x.codigo === add.dataset.cod); if(!p) return;
+    const v = prompt(`${p.nombre}\nCantidad a comprar:`, "");
+    if(v === null || !(Number(v.replace(",", ".")) > 0)) return;
+    abCambios[p.codigo] = Number(v.replace(",", "."));
+    guardar("abastos_cambios", JSON.stringify(abCambios)); pintarAbastos(); return;
+  }
+  const fila = e.target.closest(".ab-item"); if(!fila || !abCalc) return;
+  const cod = fila.dataset.cod;
+  if(e.target.closest(".ab-check")){
+    const k = "abastos_check_" + abCalc.c.ida;
+    let chk = {}; try{ chk = JSON.parse(leer(k) || "{}"); }catch(x){}
+    if(chk[cod]) delete chk[cod]; else chk[cod] = 1;
+    guardar(k, JSON.stringify(chk)); pintarAbastos(); return;
+  }
+  const it = abCalc.dentro.find(x => x.codigo === cod); if(!it) return;
+  const v = prompt(`${it.nombre}\nCantidad a comprar (vacío = la que calcula la app, 0 = no comprar):`, it.cant);
+  if(v === null) return;
+  if(v.trim() === "") delete abCambios[cod];
+  else abCambios[cod] = Math.max(0, Number(v.replace(",", ".")) || 0);
+  guardar("abastos_cambios", JSON.stringify(abCambios)); pintarAbastos();
+});
+function textoAbastos(){
+  const r = abCalc; if(!r) return "";
+  const fecha = f => new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"long", day:"numeric", month:"short"});
+  const lin = ["🛒 *LISTA DE ABASTOS · EDUMERCA*",
+    `Ida: ${fecha(r.c.ida)} · Próxima: ${fecha(r.c.prox)}`,
+    r.presupuesto ? `Presupuesto: ${plata(r.presupuesto)} · Estimado: ${plata(r.total)}` : `Estimado: ${plata(r.total)}`, ""];
+  const grupos = {};
+  r.dentro.forEach(it => (grupos[it.prov.nit] = grupos[it.prov.nit] || {prov: it.prov, items: [], sub: 0}).items.push(it));
+  Object.values(grupos).forEach(g => g.sub = g.items.reduce((s, x) => s + x.sub, 0));
+  Object.values(grupos).sort((a, b) => b.sub - a.sub).forEach(g => {
+    lin.push(`*${g.prov.nombre}*${g.prov.dias_visita ? " (" + g.prov.dias_visita + ")" : ""} — ${plata(g.sub)}`);
+    g.items.forEach(it => lin.push(`• ${it.nombre} — ${num(it.cant)}${it.costo ? " · ~" + plata(it.sub) : ""}`));
+    lin.push("");
+  });
+  if(r.fuera.length){
+    lin.push(`*Por fuera del presupuesto* — ${plata(r.totalFuera)}`);
+    r.fuera.forEach(it => lin.push(`• ${it.nombre} — ${num(it.cant)} · ~${plata(it.sub)}`));
+    lin.push("");
+  }
+  return lin.join("\n").trim();
+}
+function abGuardarEnDrive(texto){
+  postAdmin({accion:"abastos_guardar", ida: abCalc.c.ida, texto}).catch(() => {});
+}
+$("btnAbMensaje").addEventListener("click", async () => {
+  const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
+  abGuardarEnDrive(t);
+  if(navigator.share){ try{ await navigator.share({text: t}); return; }catch(e){ if(e.name === "AbortError") return; } }
+  location.href = "https://wa.me/?text=" + encodeURIComponent(t);
+});
+$("btnAbTxt").addEventListener("click", async () => {
+  const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
+  abGuardarEnDrive(t);
+  const plano = t.replace(/\*/g, "");
+  const nombre = `lista_abastos_${abCalc.c.ida}.txt`;
+  const archivo = new File([plano], nombre, {type:"text/plain"});
+  if(navigator.canShare && navigator.canShare({files:[archivo]})){
+    try{ await navigator.share({files:[archivo], title:"Lista de abastos"}); return; }
+    catch(e){ if(e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\uFEFF" + plano], {type:"text/plain"}));
+  a.download = nombre; a.click();
+});
+$("btnAbReiniciar").addEventListener("click", () => {
+  if(!confirm("¿Volver a las cantidades calculadas y desmarcar lo comprado?")) return;
+  abCambios = {}; guardar("abastos_cambios", "{}");
+  if(abCalc) guardar("abastos_check_" + abCalc.c.ida, "{}");
+  pintarAbastos();
+});
+["abIda", "abProx", "abSeguridad"].forEach(id => $(id).addEventListener("change", () => {
+  if($("abProx").value <= $("abIda").value) $("abProx").value = sumarDiasISO($("abIda").value, 7);
+  pintarAbastos();
+}));
+$("abPresupuesto").addEventListener("input", e => {
+  const n = Number(e.target.value.replace(/\D/g, "")) || 0;
+  e.target.value = n ? pesos(n) : ""; pintarAbastos();
+});
+$("abModoLibre").addEventListener("click", () => abModo("libre"));
+$("abModoPres").addEventListener("click", () => { abModo("presupuesto"); $("abPresupuesto").focus(); });
+$("btnVolverAbastos").addEventListener("click", () => irMenu("compras"));
+
 /* ---------- Eventos de KPIs ---------- */
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
 $("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
@@ -1532,7 +1823,7 @@ $("btnPedidos").addEventListener("click", enObra("Pedidos sugeridos por proveedo
 $("btnAbastos").addEventListener("click", enObra("Lista de compra general"));
 $("btnVentasDia").addEventListener("click", enObra("Ventas del día"));
 $("btnVentasMes").addEventListener("click", enObra("Ventas mensuales"));
-$("btnAbastosPlaza").addEventListener("click", enObra("Lista de abastos"));
+$("btnAbastosPlaza").addEventListener("click", abrirAbastos);
 $("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
 
