@@ -33,6 +33,7 @@
   .estado{position:fixed;top:calc(env(safe-area-inset-top,0px) + 17px);right:20px;font-size:.8rem;opacity:.6;z-index:5}
 
   .cabeza{display:flex;align-items:center;gap:10px;flex:none}
+  .casita{flex:none;align-self:stretch;padding:8px 13px !important;font-size:1.25rem !important;line-height:1}
   .cabeza h2{margin:0;flex:1;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.8rem;line-height:1}
   .sec{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;font-size:1.05rem;
     font-weight:600;padding:12px 20px;cursor:pointer}
@@ -360,7 +361,7 @@
 <!-- ============ KPIs ============ -->
 <section class="pantalla" id="kpis">
   <div class="cabeza"><h2>KPIs</h2>
-    <button class="sec" id="btnKpiActualizar">Actualizar</button>
+    <button class="sec" id="btnKpiActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
     <button class="sec" id="btnVolverKpis">Volver</button></div>
   <div class="seg">
     <button id="segHoy" aria-pressed="false">Hoy</button>
@@ -464,8 +465,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.41 · 6-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbzLPLbgAsrBi3PqUu2OL3EPhO-DVXUn2Obp_vhf5zoan0LEdLWwyx2ENHaB5IedR5ow/exec";
+const VERSION = "v1.43 · 6-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1357,10 +1358,10 @@ function pintarKpis(){
   h += bloqueComparacion("Últimos 7 días", k.semana, "vs. 7 días anteriores");
   h += bloqueComparacion("Mes a la fecha", k.mes, "vs. mismo corte del mes pasado");
   h += bloqueTendencia(k.tendencia_30d);
+  h += bloqueTopVentas(k.reposicion);
   h += bloqueUtilidad(k.utilidad);
   h += bloqueAlertas(k);
   h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer");
-  h += bloqueTop30(k.reposicion);
   h += `<p class="nota" style="text-align:center">Calculado ${esc(fechaHora(k.generado))}</p>`;
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
@@ -1424,6 +1425,10 @@ function bloqueAlertas(k){
   h += det("Reponer esta semana", sem.length, "amarillo", lista(sem, x => fila(x.nombre, `${num(x.existencias ?? 0)} und · ${num(x.dias_cobertura)} días`)));
   h += det("Agotados", inv.n_agotados || 0, "", lista(inv.agotados, x => fila(x.nombre, esc(x.categoria))) + mas(inv.n_agotados, (inv.agotados || []).length));
   h += det("Bajo el mínimo", inv.n_bajo_minimo || 0, "amarillo", lista(inv.bajo_minimo, x => fila(x.nombre, `${num(x.stock)} / mín. ${num(x.minimo)}`)) + mas(inv.n_bajo_minimo, (inv.bajo_minimo || []).length));
+  const baja = r.baja_rotacion || [];
+  h += det("Baja rotación · no pedir más", baja.length, "gris",
+    `<p class="nota" style="margin:0 0 6px">Sí se venden, pero tan poco que lo que hay alcanza para más de 60 días. Los pedidos sugeridos ya no los incluyen.</p>` +
+    lista(baja, x => fila(x.nombre, `${num(x.existencias)} und · ${num(x.por_dia)}/día · ${num(Math.round(x.dias_cobertura))} días`)));
   h += det("Sin venta en 30 días", inv.n_sin_movimiento || 0, "gris",
     (inv.sin_movimiento_nota ? `<p class="nota" style="margin:0 0 6px">${esc(inv.sin_movimiento_nota)}</p>` : "") +
     lista(inv.sin_movimiento, x => fila(x.nombre, `${num(x.stock)} und · ${esc(x.ultima_venta)}`)) + mas(inv.n_sin_movimiento, (inv.sin_movimiento || []).length));
@@ -1459,11 +1464,23 @@ function bloqueDetalle(det, dia){
      <b>${plata(p.ventas)}</b></div>`).join("") + `</div>`;
   return h;
 }
-function bloqueTop30(r){
-  const t = (r && r.top_30d) || [];
-  if(!t.length) return "";
-  return `<div class="bloque"><h3>Más vendidos 30 días <small>por unidades</small></h3>` + t.map((p, i) =>
-    `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)}</span><b>${num(p.unidades)} und · ${num(p.por_dia)}/día</b></div>`).join("") + `</div>`;
+/* Más vendidos: semana / mes / 3 meses, top 5 / 10 / 20, por unidades o por plata */
+let topDias = "7", topN = 10, topPor = "unidades";
+function bloqueTopVentas(r){
+  const top = (r && r.top) || {};
+  if(!Object.keys(top).length && !(r && r.top_30d && r.top_30d.length)) return "";
+  const lista = ((top[topDias] || {})[topPor]) || (topDias === "30" && r.top_30d) || [];
+  const seg = (grupo, actual, ops) => `<div class="seg" style="background:var(--verde);margin-bottom:6px">` +
+    ops.map(([v, t]) => `<button data-top="${grupo}" data-v="${v}" aria-pressed="${String(actual) === String(v)}">${t}</button>`).join("") + `</div>`;
+  return `<div class="bloque" id="bloqueTop"><h3>Más vendidos</h3>
+    ${seg("dias", topDias, [["7", "Semana"], ["30", "Mes"], ["90", "3 meses"]])}
+    ${seg("n", topN, [[5, "Top 5"], [10, "Top 10"], [20, "Top 20"]])}
+    ${seg("por", topPor, [["unidades", "Por unidades"], ["ingreso", "Por plata"]])}` +
+    (lista.length ? lista.slice(0, topN).map((p, i) => `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)}
+      <small style="display:block;opacity:.65">${num(p.por_dia)}/día${p.existencias != null ? " · quedan " + num(p.existencias) : ""}</small></span>
+      <b>${topPor === "ingreso" ? plata(p.ingreso) : num(p.unidades) + " und"}</b></div>`).join("")
+      : `<p class="nota" style="margin:0">Sin ventas en este período.</p>`) +
+    `<p class="nota">Ventas netas (sin devoluciones), calculadas cada madrugada.</p></div>`;
 }
 
 /* ---------- Costos fijos ---------- */
@@ -1623,7 +1640,8 @@ async function recargarProveedores(desdeSiigo){
   }
 }
 function pintarProveedores(){
-  const filtros = [["", "Todos"], ["si", "Abastos"], ["no", "No abastos"], ["?", "Sin definir"], ["$", "Por pagar"]];
+  const filtros = [["", "Activos"], ["si", "Abastos"], ["no", "No abastos"], ["?", "Sin definir"], ["$", "Por pagar"],
+    ["viejo", "Sin compras 6 meses"], ["off", "Inactivos"]];
   $("provChips").innerHTML = filtros.map(([k, t]) => {
     const n = provs.filter(p => provPasa(p, k)).length;
     return `<button class="chip" data-f="${k}" aria-pressed="${provFiltro === k}">${t} · ${n}</button>`;
@@ -1637,7 +1655,9 @@ function pintarProveedores(){
     return;
   }
   $("provItems").innerHTML = lista.length ? lista.map(p => {
-    const ab = p.abastos === true ? '<span class="etq">abastos</span>' : p.abastos === null ? '<span class="etq gris">sin definir</span>' : "";
+    const ab = (p.inactivo ? '<span class="etq gris">inactivo</span>' : "") +
+      (p.abastos === true ? '<span class="etq">abastos</span>' : p.abastos === null ? '<span class="etq gris">sin definir</span>' : "");
+    const meses = mesesSinComprar(p);
     const prodQ = q ? (p.items || []).filter(it => normal(it.producto + " " + it.codigo).includes(q)).slice(0, 3) : [];
     const partes = [];
     if(p.contacto) partes.push(esc(p.contacto));
@@ -1648,11 +1668,19 @@ function pintarProveedores(){
       <span class="cod">${p.productos || 0}</span>
       <span class="nom">${esc(p.nombre)}${ab}
         <small>${partes.join(" · ")}${p.pendiente ? ` · <span style="color:#ffd23f">debes ${plata(p.pendiente)}</span>` : ""}${
+          !p.inactivo && meses >= 6 ? ` · <span style="color:#ff9a86">sin compras hace ${meses} meses</span>` : ""}${
           prodQ.length ? "<br>" + prodQ.map(it => esc(it.producto) + " " + plata(it.ultimo_costo)).join(" · ") : ""}</small></span>
       <span class="pre">›</span></button>`;
   }).join("") : '<div class="vacio">Nada coincide.</div>';
 }
+function mesesSinComprar(p){
+  if(!p.ultima_compra || !/^\d{4}-\d{2}-\d{2}$/.test(p.ultima_compra)) return 0;
+  return Math.floor(difDias(p.ultima_compra, hoyISO()) / 30);
+}
 function provPasa(p, f){
+  if(f === "off") return !!p.inactivo;
+  if(p.inactivo) return false;          // los inactivos solo salen en su filtro
+  if(f === "viejo") return mesesSinComprar(p) >= 6;
   if(f === "si") return p.abastos === true;
   if(f === "no") return p.abastos === false;
   if(f === "?") return p.abastos === null || p.abastos === undefined;
@@ -1731,8 +1759,8 @@ function pintarProveedor(){
     <h3 style="margin:0">Vendedor <small>toma el pedido</small></h3>
     <div class="fechas">${campo("pvContacto", "Nombre", p.contacto, 'placeholder="Ej: Carlos"')}
       ${campo("pvTel", "Celular", p.telefono, 'inputmode="tel" placeholder="300 123 4567"')}</div>
-    ${wa ? `<div class="acciones" style="margin:0"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>
-      <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a></div>` : ""}
+    ${wa ? `<div class="acciones" style="margin:0"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">📞 Llamar</a>
+      <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">💬 WhatsApp</a></div>` : ""}
     <div class="campo">Días que pasa a tomar pedido${chipsDias("pvDias", p.dias)}</div>
     <button class="chip" id="pvMas" style="text-transform:none;align-self:flex-start">${p.masAbierto ? "− Menos opciones" : "+ Más opciones"}</button>
     <div id="pvMasCaja" style="display:${p.masAbierto ? "flex" : "none"};flex-direction:column;gap:10px">
@@ -1769,10 +1797,29 @@ function pintarProveedor(){
         <small style="display:block;opacity:.65">${esc(it.codigo)} · ${it.compras} compras · prom. ${plata(it.costo_promedio)}</small></span>
         <b>${plata(it.ultimo_costo)}<small style="display:block;font-weight:500;opacity:.65">${fechaTxt(it.fecha)}</small></b></div>`).join("")
       : '<p class="nota" style="margin:0">Sin productos registrados.</p>') + `</div>`;
+    const meses = mesesSinComprar(p);
+    h += `<div class="bloque"><h3>Estado <small>${p.inactivo ? "inactivo" : "activo"}</small></h3>
+      <p class="nota" style="margin:0 0 10px">${p.inactivo
+        ? "No sale en pedidos sugeridos ni en abastos, y sus productos se sugieren con otros proveedores. Su historial se conserva."
+        : (meses >= 6 ? `No le compras hace ${meses} meses. ` : "") + "Si ya no le vas a comprar, inactívalo: deja de salir en pedidos y abastos, pero se conserva su historial."}</p>
+      <button class="${p.inactivo ? "ppal" : "sec"}" id="pvInactivar" style="width:100%">${p.inactivo ? "✓ Reactivar proveedor" : "⛔ Inactivar proveedor"}</button></div>`;
   }
   $("provFicha").innerHTML = h;
 }
 $("provFicha").addEventListener("click", async e => {
+  if(e.target.closest("#pvInactivar")){
+    const nuevo = !provSel.inactivo;
+    if(nuevo && !confirm(`¿Inactivar ${provSel.nombre}?\n\nNo saldrá en pedidos ni en abastos. Lo puedes reactivar cuando quieras desde el filtro "Inactivos".`)) return;
+    leerFichaProveedor();
+    provSel.inactivo = nuevo;
+    const pend = provPendientes(); pend[provSel.nit] = Object.assign({}, pend[provSel.nit] || {}, {inactivo: nuevo});
+    guardar("prov_pendientes", JSON.stringify(pend));
+    reflejarProveedor(provSel.nit, {inactivo: nuevo});
+    pintarProveedor();
+    provAviso((nuevo ? "Inactivando " : "Reactivando ") + provSel.nombre + "…");
+    if(await enviarPendientes()) provAviso(nuevo ? "✓ Proveedor inactivado" : "✓ Proveedor reactivado");
+    return;
+  }
   const pagar = e.target.closest(".pv-pagar");
   if(pagar){
     const f = provSel.facturas.find(x => x.id === pagar.dataset.id); if(!f) return;
@@ -1830,7 +1877,7 @@ function leerFichaProveedor(){
 function datosManuales(p){
   return {nombre:p.nombre, abastos:p.abastos, dias_visita:p.dias_visita, dias_entrega:p.dias_entrega,
     contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones,
-    frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo};
+    frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo, inactivo: !!p.inactivo};
 }
 /* Refleja los cambios en las copias del celular (lista de proveedores y datos de compras) */
 function reflejarProveedor(nit, datos){
@@ -2080,9 +2127,10 @@ function itemsAbastos(){
   const pm = provPorNit();
   const out = [];
   ((cmDatos && cmDatos.productos) || []).forEach(p => {
-    const ab = p.proveedores.filter(x => pm[x.nit] && pm[x.nit].abastos === true);
+    const activos = p.proveedores.filter(x => !(pm[x.nit] && pm[x.nit].inactivo));
+    const ab = activos.filter(x => pm[x.nit] && pm[x.nit].abastos === true);
     if(!ab.length) return;
-    const otro = p.proveedores.find(x => !(pm[x.nit] && pm[x.nit].abastos === true) && x.costo);
+    const otro = activos.find(x => !(pm[x.nit] && pm[x.nit].abastos === true) && x.costo);
     const pv = pm[ab[0].nit];
     out.push({codigo:p.codigo, nombre:p.nombre, categoria:p.categoria, existencias:p.existencias,
       prom:p.prom_dia, precio:p.precio, costo:ab[0].costo || 0,
@@ -2182,10 +2230,11 @@ function itemsPedido(nit, todos){
   const pm = provPorNit();
   const out = [];
   ((cmDatos && cmDatos.productos) || []).forEach(p => {
-    const mio = p.proveedores.find(x => x.nit === nit); if(!mio) return;
-    const mejor = p.proveedores.find(x => x.costo) || p.proveedores[0];
+    const activos = p.proveedores.filter(x => !(pm[x.nit] && pm[x.nit].inactivo));
+    const mio = activos.find(x => x.nit === nit); if(!mio) return;
+    const mejor = activos.find(x => x.costo) || activos[0];
     if(!todos && mejor && mejor.nit !== nit) return;
-    const otro = p.proveedores.find(x => x.nit !== nit && x.costo);
+    const otro = activos.find(x => x.nit !== nit && x.costo);
     out.push({codigo:p.codigo, nombre:p.nombre, categoria:p.categoria, existencias:p.existencias,
       prom:p.prom_dia, precio:p.precio, costo:mio.costo || 0, prov:null,
       otro: otro ? {nombre:(pm[otro.nit] || {}).nombre || "", costo:otro.costo} : null});
@@ -2229,7 +2278,7 @@ async function abrirPedidos(){
 function pintarPedidos(){
   const box = $("pdItems");
   if(!cmDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
-  const provsP = cmDatos.proveedores.filter(p => p.abastos !== true);
+  const provsP = cmDatos.proveedores.filter(p => p.abastos !== true && !p.inactivo);
   if(!provsP.length){
     box.innerHTML = `<div class="vacio">Todavía no hay proveedores.<br>Aparecen solos cuando registres facturas de compra en Siigo.</div>`;
     $("pdPagos").innerHTML = ""; return;
@@ -2300,7 +2349,7 @@ function pintarPedido(){
   $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}El repartidor lo trae el <b>${fechaTxt(f.llega)}</b>${
     prov.dias_entrega ? "" : " (sin días de entrega)"} · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar proveedor</a>${
     prov.pendiente ? `<br><span style="color:#ffd23f">Al recibir, paga ${plata(prov.pendiente)}${pend.length ? " (" + pend.map(x => esc(x.factura)).join(", ") + ")" : ""}</span>` : ""}`;
-  $("btnPdEnviar").textContent = wa ? "WhatsApp a " + (prov.contacto ? prov.contacto.split(" ")[0] : "vendedor") : "WhatsApp al vendedor";
+  $("btnPdEnviar").textContent = "💬 " + (wa ? "WhatsApp a " + (prov.contacto ? prov.contacto.split(" ")[0] : "vendedor") : "WhatsApp al vendedor");
   $("pdResumen").innerHTML = `
     <div class="caja"><b>${plata(r.total)}</b><span>${r.presupuesto ? "de " + plata(r.presupuesto) : "estimado sin IVA"}</span></div>
     <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
@@ -2451,7 +2500,8 @@ function pintarProducto(){
       ${dato("En Siigo", it.q === null ? "—" : num(it.q), u ? "contado " + fechaHora(u.f) + " · " + num(u.r) + " und" : "nunca contado")}
       ${cp && cp.prom_dia ? dato("Vende", num(Math.round(cp.prom_dia * 10) / 10) + "/día", it.q > 0 ? "alcanza ~" + Math.floor(it.q / cp.prom_dia) + " días" : "") : ""}
     </div></div>`;
-  const provsProd = cp ? cp.proveedores : [];
+  const provsProd = cp ? cp.proveedores.slice().sort((a, b) =>
+    !!(pm[a.nit] && pm[a.nit].inactivo) - !!(pm[b.nit] && pm[b.nit].inactivo)) : [];
   h += `<div class="bloque"><h3>Proveedores <small>costo sin IVA</small></h3>`;
   if(!cmDatos) h += `<p class="nota" style="margin:0">${prodError ? "No se pudo cargar: " + esc(prodError) : "Cargando…"}</p>`;
   else if(!provsProd.length) h += `<p class="nota" style="margin:0">Todavía no hay compras registradas de este producto, así que no se sabe a quién se le compra. Aparece al importar su factura de compra en Siigo.</p>`;
@@ -2459,7 +2509,7 @@ function pintarProducto(){
     const pv = pm[x.nit] || {nombre: x.nit};
     const margen = x.costo && psi ? Math.round((psi - x.costo) / psi * 1000) / 10 : null;
     return `<button class="item prod-prov" data-nit="${esc(x.nit)}" style="width:100%">
-      <span class="nom">${esc(pv.nombre)}${i === 0 && provsProd.length > 1 && x.costo ? '<span class="etq">más barato</span>' : ""}${pv.abastos ? '<span class="etq gris">abastos</span>' : ""}
+      <span class="nom" style="${pv.inactivo ? "opacity:.55" : ""}">${esc(pv.nombre)}${i === 0 && provsProd.length > 1 && x.costo && !pv.inactivo ? '<span class="etq">más barato</span>' : ""}${pv.abastos ? '<span class="etq gris">abastos</span>' : ""}${pv.inactivo ? '<span class="etq gris">inactivo</span>' : ""}
         <small>${x.fecha ? "última compra " + fechaTxt(x.fecha) : ""}${margen !== null ? ` · margen <b style="color:${margen < 5 ? "#ff9a86" : "inherit"}">${margen}%</b>` : ""}${
           pv.dias_visita ? " · pedido " + esc(pv.dias_visita) : ""}</small></span>
       <span class="pre">${x.costo ? plata(x.costo) : "—"}<small>›</small></span></button>`;
@@ -2488,7 +2538,31 @@ document.addEventListener("click", e => {
   inp.style.pointerEvents = "auto"; inp.focus(); inp.click();
   setTimeout(() => { inp.style.pointerEvents = "none"; }, 500);
 });
+/* ---------- Botón 🏠: al menú principal desde cualquier subpantalla ---------- */
+document.querySelectorAll("section.pantalla").forEach(sec => {
+  if(["escaneo", "resultado", "principal"].includes(sec.id)) return;
+  const cab = sec.querySelector(".cabeza"); if(!cab) return;
+  const b = document.createElement("button");
+  b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
+  b.addEventListener("click", () => {
+    if(sec.id === "fijos" && fijosCambios && !confirm("Hay cambios sin guardar. ¿Salir igual?")) return;
+    if(sec.id === "fijos") fijosCambios = false;
+    if(esAdmin()) irMenu("principal"); else inicio();
+  });
+  const volver = [...cab.querySelectorAll("button")].pop();
+  cab.insertBefore(b, volver || null);
+});
+
 /* ---------- Eventos de KPIs ---------- */
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("[data-top]"); if(!b) return;
+  if(b.dataset.top === "dias") topDias = b.dataset.v;
+  if(b.dataset.top === "n") topN = Number(b.dataset.v);
+  if(b.dataset.top === "por") topPor = b.dataset.v;
+  const caja = $("bloqueTop"); if(!caja || !kpis) return;
+  const tmp = document.createElement("div"); tmp.innerHTML = bloqueTopVentas(kpis.reposicion);
+  caja.replaceWith(tmp.firstElementChild);
+});
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
 $("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
 $("segHoy").addEventListener("click", () => { diaKpi = "hoy"; pintarKpis(); $("kpiPanel").scrollTop = 0; });
