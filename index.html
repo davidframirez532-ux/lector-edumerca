@@ -279,9 +279,19 @@
 <!-- ============ LISTA (catálogo / sin código) ============ -->
 <section class="pantalla" id="lista">
   <div class="cabeza"><h2 id="tituloLista">Catálogo</h2><button class="sec" id="btnVolverLista">Volver</button></div>
-  <input class="buscador" id="buscador" type="search" placeholder="Buscar por nombre o código" autocomplete="off" enterkeyhint="search">
+  <div style="display:flex;gap:8px;flex:none">
+    <input class="buscador" id="buscador" type="search" placeholder="Buscar por nombre o código" autocomplete="off" enterkeyhint="search" style="flex:1;min-width:0">
+    <button class="sec" id="btnListaEscanear" aria-label="Escanear" style="flex:none;font-size:1.4rem;padding:0 16px">📷</button>
+  </div>
   <div class="chips" id="chips"></div>
   <div class="items" id="items"></div>
+</section>
+
+<!-- ============ PRODUCTO (desde el catálogo) ============ -->
+<section class="pantalla" id="producto">
+  <div class="cabeza"><h2>Producto</h2><button class="sec" id="btnVolverProducto">Volver</button></div>
+  <div class="panel" id="prodFicha"></div>
+  <div class="acciones"><button class="sec" id="btnProdPrecio">Ver etiqueta de precio</button></div>
 </section>
 
 <!-- ============ AJUSTES (5 toques en el logo) ============ -->
@@ -427,11 +437,11 @@
   <p id="pdInfo" style="margin:0;font-size:.9rem;opacity:.9"></p>
   <div class="fechas">
     <label class="campo">Pedido para el<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdIda"></span></label>
-    <label class="campo">Siguiente pedido<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdProx"></span></label>
+    <label class="campo">Debe alcanzar hasta<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdProx"></span></label>
   </div>
   <div class="fechas">
     <label class="campo">Días de reserva<input id="pdSeguridad" type="number" min="0" max="7" inputmode="numeric"></label>
-    <div class="campo">Productos<button class="chip" id="pdTodos" aria-pressed="false" style="padding:10px 12px;text-transform:none">Todo lo que le compro</button></div>
+    <label class="campo">Presupuesto ($)<input id="pdPresupuesto" inputmode="numeric" placeholder="Sin límite" autocomplete="off"></label>
   </div>
   <div class="resumen" id="pdResumen"></div>
   <div class="items" id="pdLista"></div>
@@ -453,8 +463,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.38 · 6-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxs-RWHv1VpZWayxxXRvMPk1QDih9xtFRq1OLkU846_QGCS7Z3BVbVFCmG0s_5tSVEa/exec";
+const VERSION = "v1.39 · 6-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxyrlhsNEfxB8BEWMDlU99PlBOqU4-rat7_YNL-qlc-SXDc_VW2ApRh81l4twNn7xi1/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -636,7 +646,7 @@ async function abrirCamara(modo){
   $("cuenta").textContent = quedan;
   tCuenta = setInterval(()=>{
     quedan--; $("cuenta").textContent = quedan;
-    if(quedan <= 0) cerrarCamara().then(()=> modoCamara === "conteo" ? abrirConteo() : inicio());
+    if(quedan <= 0) cerrarCamara().then(volverDeCamara);
   }, 1000);
   escaner = new Html5Qrcode("camara", {
     formatsToSupport:[Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
@@ -651,7 +661,7 @@ async function abrirCamara(modo){
         if(navigator.vibrate) navigator.vibrate(80);
         const m = modoCamara;
         await cerrarCamara();
-        if(m === "conteo") pedirCantidad(codigo); else mostrar(codigo);
+        if(m === "conteo") pedirCantidad(codigo); else if(m === "lista") buscarEnLista(codigo); else mostrar(codigo);
       }, ()=>{});
   }catch(err){
     await cerrarCamara();
@@ -782,7 +792,7 @@ function pintarLista(){
       sm.style.color = "var(--rojo)";
       sm.textContent = "⚠ nunca contado";
     }
-    b.onclick = ()=>{ clearTimeout(tLista); mostrarItem(i, "lista"); };
+    b.onclick = ()=>{ clearTimeout(tLista); abrirProducto(i); };
     return b;
   }));
 }
@@ -1205,6 +1215,17 @@ function pedirClave(){
   claveAdmin = c.trim();
   return claveAdmin;
 }
+/* Convierte la respuesta de Apps Script en datos; si vino una página de error, saca el mensaje */
+function leerRespuesta(texto){
+  try{ return JSON.parse(texto); }
+  catch(e){
+    const plano = String(texto || "").replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+    const m = plano.match(/(\w*(Error|Exception|Excepción)[^.]*?:[^]{0,220})/);
+    throw new Error("Apps Script devolvió un error: " + (m ? m[1].trim() : plano.slice(0, 200) || "sin detalle") +
+      ". Revisa permisos o el panel Ejecuciones.");
+  }
+}
 async function postAdmin(cuerpo){
   const url = apiUrl();
   if(!url) throw new Error("Falta configurar la URL de Apps Script.");
@@ -1212,7 +1233,7 @@ async function postAdmin(cuerpo){
   if(clave === null) throw new Error("Cancelado");
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
     body: JSON.stringify(Object.assign({}, cuerpo, {clave, quien}))});
-  const d = await r.json();
+  const d = leerRespuesta(await r.text());
   if(!d.ok){ if(/clave|pin/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
   return d;
 }
@@ -1242,7 +1263,7 @@ async function cargarKpis(actualizar){
   try{
     const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=kpis&pin=" + encodeURIComponent(clave) +
       (actualizar ? "&actualizar=1" : "") + "&t=" + Date.now(), {cache:"no-store"});
-    const d = await r.json();
+    const d = leerRespuesta(await r.text());
     if(!d.ok){ if(/pin|clave/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
     kpis = d;
     guardar("kpis", JSON.stringify(d));
@@ -1355,7 +1376,14 @@ function bloqueAlertas(k){
     (inv.sin_movimiento_nota ? `<p class="nota" style="margin:0 0 6px">${esc(inv.sin_movimiento_nota)}</p>` : "") +
     lista(inv.sin_movimiento, x => fila(x.nombre, `${num(x.stock)} und · ${esc(x.ultima_venta)}`)) + mas(inv.n_sin_movimiento, (inv.sin_movimiento || []).length));
   h += `</div>`;
-  if(inv.valor_costo != null) h += `<p class="nota">Inventario a costo: ${plata(inv.valor_costo)}${inv.dias_inventario != null ? ` · alcanza para ${inv.dias_inventario} días` : ""}</p>`;
+  if(inv.valor_costo != null){
+    const cc = inv.con_costo || [];
+    h += `<details class="alerta" style="margin-top:8px"><summary><span>Inventario a costo: ${plata(inv.valor_costo)}</span><span class="num-alerta gris">${inv.n_con_costo ?? cc.length}</span></summary>
+      <p class="nota" style="margin:0 0 6px">Existencias de hoy × costo de compra, sin IVA. Calculado con <b>${inv.n_con_costo ?? cc.length}</b> de ${num(inv.productos_con_stock || 0)} productos con existencias: los demás todavía no tienen factura de compra registrada.${
+        inv.dias_inventario != null ? ` Alcanza para unos ${inv.dias_inventario} días de venta.` : ""}</p>` +
+      cc.map(x => `<div class="fila-dato"><span>${esc(x.nombre)}<small style="display:block;opacity:.65">${num(x.stock)} × ${plata(x.costo)}</small></span><b>${plata(x.subtotal)}</b></div>`).join("") +
+      ((inv.n_con_costo || 0) > cc.length ? `<p class="nota">… y ${inv.n_con_costo - cc.length} más</p>` : "") + `</details>`;
+  }
   return h + "</div>";
 }
 function bloqueDetalle(det, dia){
@@ -1472,9 +1500,7 @@ async function postApp(cuerpo, msTimeout){
   }catch(e){
     throw new Error(e.name === "AbortError" ? "Apps Script no respondió a tiempo" : "Sin conexión");
   }finally{ clearTimeout(t); }
-  let d;
-  try{ d = JSON.parse(texto); }
-  catch(e){ throw new Error("Apps Script devolvió un error. Revisa permisos o el panel Ejecuciones."); }
+  const d = leerRespuesta(texto);
   if(!d.ok) throw new Error(d.error || "error");
   return d;
 }
@@ -1642,7 +1668,6 @@ function pintarProveedor(){
       <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a></div>` : ""}
     <div class="campo">Días que pasa a tomar pedido${chipsDias("pvDias", p.dias)}</div>
     <div class="seg" id="pvFrec" style="background:var(--verde)">${segFrec}</div>
-    ${campo("pvMinimo", "Pedido mínimo ($)", p.pedido_minimo ? pesos(p.pedido_minimo) : "", 'inputmode="numeric" placeholder="0 = sin mínimo"')}
   </div>
   <div class="bloque" style="display:flex;flex-direction:column;gap:10px">
     <h3 style="margin:0">Repartidor <small>trae la mercancía y cobra</small></h3>
@@ -1712,7 +1737,7 @@ function leerFichaProveedor(){
   const v = id => $(id) ? $(id).value.trim() : "";
   if(provSel.nuevo) provSel.nombre = v("pvNombre").toUpperCase();
   provSel.contacto = v("pvContacto"); provSel.telefono = v("pvTel"); provSel.observaciones = v("pvObs");
-  provSel.pedido_minimo = Number(v("pvMinimo").replace(/\D/g, "")) || 0;
+  if($("pvMinimo")) provSel.pedido_minimo = Number(v("pvMinimo").replace(/\D/g, "")) || 0;
   provSel.dias_visita = textoDias(provSel.dias);
   provSel.dias_entrega = textoDias(provSel.diasEnt);
 }
@@ -1734,7 +1759,8 @@ function reflejarProveedor(nit, datos){
   }
 }
 function volverDeFicha(){
-  if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
+  if(provVolver === "producto"){ ir("producto"); pintarProducto(); }
+  else if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
   else { ir("proveedores"); pintarProveedores(); }
 }
 $("btnProvGuardar").addEventListener("click", async () => {
@@ -2080,21 +2106,24 @@ function itemsPedido(nit, todos){
   });
   return out;
 }
-/* Fechas del pedido: cuándo se pide, cuándo llega, y cuándo llega el siguiente */
+/* Fechas del pedido: cuándo se pide, cuándo llega (repartidor) y hasta cuándo debe alcanzar
+   (cuando llegue el repartidor con el siguiente pedido) */
+function hastaPorDefecto(prov, fechaPedido){ return llegadaDe(prov, siguienteVisita(prov, fechaPedido)); }
 function fechasPedido(prov){
   const hoy = hoyISO();
   let g = pdFechas[prov.nit];
-  if(!(g && g.ida >= hoy && g.prox > g.ida)){
+  if(!(g && g.ida >= hoy && g.hasta && g.hasta > llegadaDe(prov, g.ida))){
     const ida = proximoDia(prov.dias_visita, hoy, true) || hoy;
-    g = {ida, prox: siguienteVisita(prov, ida)};
+    g = {ida, hasta: hastaPorDefecto(prov, ida)};
   }
-  return Object.assign({}, g, {llega: llegadaDe(prov, g.ida), llegaSig: llegadaDe(prov, g.prox)});
+  return {ida: g.ida, llega: llegadaDe(prov, g.ida), hasta: g.hasta};
 }
+function pdPresupuesto(nit){ return Number(leerJSON("pedidos_presupuesto", {})[nit]) || 0; }
 function calcPedido(prov, todos){
   const f = fechasPedido(prov);
   const cambios = leerJSON("pedido_cambios_" + prov.nit, {});
-  // Lo que se pide debe alcanzar desde que llega hasta que llega el siguiente pedido
-  const r = calcCompra(itemsPedido(prov.nit, todos), {ida:f.llega, prox:f.llegaSig, seguridad:pdSeguridad(), presupuesto:0}, cambios);
+  const r = calcCompra(itemsPedido(prov.nit, todos), {ida:f.llega, prox:f.hasta, seguridad:pdSeguridad(),
+    presupuesto: pdPresupuesto(prov.nit)}, cambios);
   r.fechas = f;
   return r;
 }
@@ -2159,35 +2188,40 @@ function abrirPedido(nit){
   const prov = provPorNit()[nit];
   const f = fechasPedido(prov);
   $("pdTitulo").textContent = prov.nombre;
-  ponerFecha("pdIda", f.ida); ponerFecha("pdProx", f.prox);
+  ponerFecha("pdIda", f.ida); ponerFecha("pdProx", f.hasta);
   $("pdSeguridad").value = pdSeguridad();
-  $("pdTodos").setAttribute("aria-pressed", leer("pedido_todos_" + nit) === "1");
+  const pres = pdPresupuesto(nit);
+  $("pdPresupuesto").value = pres ? pesos(pres) : "";
   ir("pedido");
   pintarPedido();
   $("pdLista").scrollTop = 0;
 }
 function pintarPedido(){
   const prov = provPorNit()[pdNit]; if(!prov) return;
-  pdFechas[pdNit] = {ida: $("pdIda").value, prox: $("pdProx").value};
+  pdFechas[pdNit] = {ida: $("pdIda").value, hasta: $("pdProx").value};
   guardar("pedidos_fechas", JSON.stringify(pdFechas));
   guardar("pedidos_seguridad", String(Number($("pdSeguridad").value) || 0));
-  const todos = $("pdTodos").getAttribute("aria-pressed") === "true";
+  const presTodos = leerJSON("pedidos_presupuesto", {});
+  presTodos[pdNit] = Number($("pdPresupuesto").value.replace(/\D/g, "")) || 0;
+  guardar("pedidos_presupuesto", JSON.stringify(presTodos));
+  const todos = leer("pedido_todos_" + pdNit) === "1";
   const r = pdCalc = calcPedido(prov, todos);
   const f = r.fechas;
   const chk = leerJSON("pedido_check_" + pdNit + "_" + f.ida, {});
   const min = Number(prov.pedido_minimo) || 0;
   const wa = telWa(prov.telefono);
   const pend = prov.facturas_pendientes || [];
-  $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}Llega: <b>${fechaTxt(f.llega)}</b>${
+  $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}El repartidor lo trae el <b>${fechaTxt(f.llega)}</b>${
     prov.dias_entrega ? "" : " (sin días de entrega)"} · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar proveedor</a>${
     prov.pendiente ? `<br><span style="color:#ffd23f">Al recibir, paga ${plata(prov.pendiente)}${pend.length ? " (" + pend.map(x => esc(x.factura)).join(", ") + ")" : ""}</span>` : ""}`;
-  $("btnPdEnviar").textContent = wa ? "Enviar al vendedor" : "Enviar por WhatsApp";
+  $("btnPdEnviar").textContent = "Enviar por WhatsApp";
   $("pdResumen").innerHTML = `
-    <div class="caja"><b>${plata(r.total)}</b><span>estimado sin IVA</span></div>
+    <div class="caja"><b>${plata(r.total)}</b><span>${r.presupuesto ? "de " + plata(r.presupuesto) : "estimado sin IVA"}</span></div>
     <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
-    ${min ? `<div class="caja"><b style="color:${r.total >= min ? "#4fd6a8" : "#ff9a86"}">${r.total >= min ? "✓" : plata(min - r.total)}</b><span>${r.total >= min ? "pasa el mínimo" : "falta para el mínimo"}</span></div>` : ""}`;
-  let h = `<p class="nota" style="margin:0 0 4px">Alcanza desde que llega (${fechaTxt(f.llega)}) hasta el siguiente pedido (${fechaTxt(f.llegaSig)}): ${r.ciclo} días${
-    r.cfg.seguridad ? ` + ${r.cfg.seguridad} de reserva` : ""}. ${todos ? "Todo lo que le compras." : "Solo lo que él te vende más barato."} Toca un producto para cambiar la cantidad.</p>`;
+    ${r.presupuesto ? `<div class="caja"><b style="color:${r.fuera.length ? "#ff9a86" : "inherit"}">${r.fuera.length}</b><span>por fuera</span></div>` : ""}`;
+  let h = `<p class="nota" style="margin:0 0 6px">Debe alcanzar desde que llega (${fechaTxt(f.llega)}) hasta que el repartidor traiga el siguiente pedido (${fechaTxt(f.hasta)}): ${r.ciclo} días${
+    r.cfg.seguridad ? ` + ${r.cfg.seguridad} de reserva` : ""}. Toca un producto para cambiar la cantidad.</p>
+    <button class="chip" id="pdTodos" aria-pressed="${todos}" style="text-transform:none;margin-bottom:4px">${todos ? "✓ " : ""}Incluir todo lo que le compro${todos ? "" : " (ahora: solo lo que él vende más barato)"}</button>`;
   h += r.dentro.length ? `<div class="bloque" style="margin-top:6px">` + r.dentro.map(it => htmlItem(it, chk, true)).join("") + `</div>`
     : `<div class="vacio">No hace falta pedirle nada para estas fechas.</div>`;
   $("pdLista").innerHTML = h + htmlExtras(r);
@@ -2207,17 +2241,21 @@ async function abrirFichaDesdePedido(){
 $("pdLista").addEventListener("click", e =>
   clicLista(e, pdCalc, "pedido_check_" + pdNit + "_" + (pdCalc ? pdCalc.fechas.ida : ""), "pedido_cambios_" + pdNit, pdCambios, pintarPedido));
 ["pdIda", "pdProx", "pdSeguridad"].forEach(id => $(id).addEventListener("change", () => {
-  if(id === "pdIda") $("pdProx").value = siguienteVisita(provPorNit()[pdNit], $("pdIda").value);
-  if($("pdProx").value <= $("pdIda").value) $("pdProx").value = sumarDiasISO($("pdIda").value, 7);
+  const prov = provPorNit()[pdNit];
+  if(id === "pdIda") $("pdProx").value = hastaPorDefecto(prov, $("pdIda").value);
+  if($("pdProx").value <= llegadaDe(prov, $("pdIda").value)) $("pdProx").value = hastaPorDefecto(prov, $("pdIda").value);
   pintarFechaCampo("pdIda"); pintarFechaCampo("pdProx");
   pintarPedido();
 }));
-$("pdTodos").addEventListener("click", () => {
-  const v = $("pdTodos").getAttribute("aria-pressed") !== "true";
-  $("pdTodos").setAttribute("aria-pressed", v);
-  guardar("pedido_todos_" + pdNit, v ? "1" : "0");
-  pintarPedido();
+$("pdPresupuesto").addEventListener("input", e => {
+  const n = Number(e.target.value.replace(/\D/g, "")) || 0;
+  e.target.value = n ? pesos(n) : ""; pintarPedido();
 });
+$("pdLista").addEventListener("click", e => {
+  if(!e.target.closest("#pdTodos")) return;
+  guardar("pedido_todos_" + pdNit, leer("pedido_todos_" + pdNit) === "1" ? "0" : "1");
+  pintarPedido();
+}, true);
 function textoPedido(conPrecios){
   const r = pdCalc, prov = provPorNit()[pdNit], f = r.fechas;
   const lin = [];
@@ -2248,10 +2286,21 @@ async function registrarPedido(silencioso){
 $("btnPdEnviar").addEventListener("click", () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
   const prov = provPorNit()[pdNit];
+  let wa = telWa(prov.telefono);
+  if(!wa){
+    const n = prompt(`No tengo el celular del vendedor de ${prov.nombre}.\nEscríbelo (10 dígitos) y queda guardado:`, "");
+    if(n === null) return;
+    wa = telWa(n);
+    if(wa.length < 12) return alert("Ese número no parece un celular válido.");
+    const datos = {telefono: n.replace(/[^\d+ ]/g, "")};
+    const pend = provPendientes(); pend[prov.nit] = Object.assign({}, pend[prov.nit] || {}, datos);
+    guardar("prov_pendientes", JSON.stringify(pend));
+    reflejarProveedor(prov.nit, datos);
+    enviarPendientes();
+  }
   registrarPedido(true);
-  const wa = telWa(prov.telefono), t = textoPedido(false);
-  if(wa) location.href = `https://wa.me/${wa}?text=${encodeURIComponent(t)}`;
-  else compartirTexto(t);
+  const url = `https://wa.me/${wa}?text=${encodeURIComponent(textoPedido(false))}`;
+  if(!window.open(url, "_blank")) location.href = url;
 });
 $("btnPdRegistrar").addEventListener("click", async () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
@@ -2268,6 +2317,80 @@ $("btnPdReiniciar").addEventListener("click", () => {
   pintarPedido();
 });
 $("btnVolverPedido").addEventListener("click", () => { ir("pedidos"); pintarPedidos(); });
+
+
+/* ---------- Producto: detalle con sus proveedores ---------- */
+let prodSel = null;
+const normCod = c => String(c || "").trim().replace(/^0+(?=\d)/, "");
+function volverDeCamara(){
+  if(modoCamara === "conteo") abrirConteo();
+  else if(modoCamara === "lista") abrirLista(false);
+  else inicio();
+}
+function buscarEnLista(codigo){
+  const it = buscar(codigo);
+  if(it) return abrirProducto(it);
+  $("buscador").value = String(codigo).trim();
+  abrirLista(false);
+}
+function datosCompraDe(it){
+  const cods = new Set([normCod(it.c), normCod(it.b)].filter(Boolean));
+  return ((cmDatos && cmDatos.productos) || []).find(p => cods.has(normCod(p.codigo))) || null;
+}
+async function abrirProducto(it){
+  clearTimeout(tLista);
+  prodSel = it;
+  cmDatos = cmDatos || leerJSON("compras_datos", null);
+  pintarProducto();
+  ir("producto");
+  $("prodFicha").scrollTop = 0;
+  if(!cmDatos || !datosCompraDe(it)){
+    try{ cmDatos = await postApp({accion:"compras_datos"}); guardar("compras_datos", JSON.stringify(cmDatos)); }
+    catch(e){ prodError = e.message; }
+    if($("producto").classList.contains("activa") && prodSel === it) pintarProducto();
+  }
+}
+let prodError = "";
+function pintarProducto(){
+  const it = prodSel; if(!it) return;
+  const cp = datosCompraDe(it);
+  const pm = provPorNit();
+  const u = ultimoDe(it);
+  const iva = cp ? Number(cp.iva) || 0 : 0;
+  const psi = it.p ? it.p / (1 + iva / 100) : 0;
+  let h = `<div class="bloque"><h3 style="margin-bottom:4px">${esc(it.n)}</h3>
+    <p class="nota" style="margin:0">Código ${esc(it.c || "—")}${it.b && it.b !== it.c ? " · barras " + esc(it.b) : ""}${it.cat ? " · " + esc(it.cat) : ""}</p>
+    <div class="grilla" style="margin-top:10px">
+      ${dato("Precio", plata(it.p), iva ? `IVA ${iva}% · sin IVA ${plata(psi)}` : "")}
+      ${dato("En Siigo", it.q === null ? "—" : num(it.q), u ? "contado " + fechaHora(u.f) + " · " + num(u.r) + " und" : "nunca contado")}
+      ${cp && cp.prom_dia ? dato("Vende", num(Math.round(cp.prom_dia * 10) / 10) + "/día", it.q > 0 ? "alcanza ~" + Math.floor(it.q / cp.prom_dia) + " días" : "") : ""}
+    </div></div>`;
+  const provsProd = cp ? cp.proveedores : [];
+  h += `<div class="bloque"><h3>Proveedores <small>costo sin IVA</small></h3>`;
+  if(!cmDatos) h += `<p class="nota" style="margin:0">${prodError ? "No se pudo cargar: " + esc(prodError) : "Cargando…"}</p>`;
+  else if(!provsProd.length) h += `<p class="nota" style="margin:0">Todavía no hay compras registradas de este producto, así que no se sabe a quién se le compra. Aparece al importar su factura de compra en Siigo.</p>`;
+  else h += provsProd.map((x, i) => {
+    const pv = pm[x.nit] || {nombre: x.nit};
+    const margen = x.costo && psi ? Math.round((psi - x.costo) / psi * 1000) / 10 : null;
+    return `<button class="item prod-prov" data-nit="${esc(x.nit)}" style="width:100%">
+      <span class="nom">${esc(pv.nombre)}${i === 0 && provsProd.length > 1 && x.costo ? '<span class="etq">más barato</span>' : ""}${pv.abastos ? '<span class="etq gris">abastos</span>' : ""}
+        <small>${x.fecha ? "última compra " + fechaTxt(x.fecha) : ""}${margen !== null ? ` · margen <b style="color:${margen < 5 ? "#ff9a86" : "inherit"}">${margen}%</b>` : ""}${
+          pv.dias_visita ? " · pedido " + esc(pv.dias_visita) : ""}</small></span>
+      <span class="pre">${x.costo ? plata(x.costo) : "—"}<small>›</small></span></button>`;
+  }).join("");
+  h += `</div>`;
+  $("prodFicha").innerHTML = h;
+}
+$("prodFicha").addEventListener("click", e => {
+  const b = e.target.closest(".prod-prov"); if(!b) return;
+  const lista = aplicarPendientes(leerJSON("proveedores", []));
+  let p = lista.find(x => x.nit === b.dataset.nit);
+  if(!p){ const c = provPorNit()[b.dataset.nit]; if(!c) return; p = Object.assign({items:[], facturas:[], pedidos:[]}, c); }
+  provs = lista.length ? lista : provs;
+  abrirProveedor(p, "producto");
+});
+$("btnVolverProducto").addEventListener("click", () => abrirLista(false));
+$("btnProdPrecio").addEventListener("click", () => { if(prodSel) mostrarItem(prodSel, "lista"); });
 
 /* ---------- Eventos de KPIs ---------- */
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
@@ -2293,9 +2416,15 @@ $("btnConteo").addEventListener("click", abrirConteo);
 
 $("btnVolverLista").addEventListener("click", ()=>irMenu("inventario"));
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
+$("buscador").addEventListener("keydown", e=>{
+  if(e.key !== "Enter") return;
+  const it = buscar($("buscador").value.trim());
+  if(it){ e.preventDefault(); $("buscador").blur(); abrirProducto(it); }
+});
+$("btnListaEscanear").addEventListener("click", ()=>abrirCamara("lista"));
 $("items").addEventListener("scroll", tocarLista, {passive:true});
 $("resultado").addEventListener("click", volverDeResultado);
-$("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(()=> modoCamara === "conteo" ? abrirConteo() : inicio()));
+$("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(volverDeCamara));
 $("btnDigitarEsc").addEventListener("click", async ()=>{
   await cerrarCamara();
   const v = prompt("Código del producto:");
