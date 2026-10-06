@@ -201,6 +201,12 @@
   .ab-cant small{font-size:.8rem;opacity:.8}
   .ab-item.hecho .ab-nom,.ab-item.hecho .ab-cant{opacity:.4;text-decoration:line-through}
   #abResumen .caja b,#pdResumen .caja b{font-size:1.3rem}
+  .dias7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dias7 .chip{padding:8px 0;font-size:.85rem;min-width:0;text-align:center}
+  .fecha-campo{position:relative;display:block;background:var(--papel);color:var(--tinta);border-radius:8px;
+    padding:9px 28px 9px 10px;font:500 1rem "Barlow",sans-serif;white-space:nowrap;overflow:hidden}
+  .fecha-campo::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);opacity:.6}
+  .fecha-campo input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
   .fechas{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
   .fechas .campo input{padding:9px 10px;font-size:1rem}
   .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
@@ -373,16 +379,20 @@
   <div class="cabeza"><h2>Proveedores</h2><button class="sec" id="btnVolverProvs">Volver</button></div>
   <input class="buscador" id="provBuscar" type="search" placeholder="Buscar proveedor o producto" autocomplete="off" enterkeyhint="search">
   <div class="chips" id="provChips"></div>
+  <p id="provEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.1em"></p>
   <div class="items" id="provItems"></div>
-  <div class="acciones"><button class="sec" id="btnProvNuevo">+ Proveedor sin documento</button></div>
+  <div class="acciones">
+    <button class="sec chico" id="btnProvSiigo">Actualizar desde Siigo</button>
+    <button class="sec chico" id="btnProvNuevo">+ Sin documento</button>
+  </div>
 </section>
 
 <!-- ============ LISTA DE ABASTOS ============ -->
 <section class="pantalla" id="abastos">
   <div class="cabeza"><h2>Lista de abastos</h2><button class="sec" id="btnVolverAbastos">Volver</button></div>
   <div class="fechas">
-    <label class="campo">Voy a comprar el<input type="date" id="abIda"></label>
-    <label class="campo">Próxima ida (aprox.)<input type="date" id="abProx"></label>
+    <label class="campo">Voy a comprar el<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="abIda"></span></label>
+    <label class="campo">Próxima ida (aprox.)<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="abProx"></span></label>
   </div>
   <div class="seg" id="abModo" data-modo="libre">
     <button id="abModoLibre" aria-pressed="true">Sin límite</button>
@@ -405,8 +415,9 @@
 <!-- ============ PEDIDOS SUGERIDOS ============ -->
 <section class="pantalla" id="pedidos">
   <div class="cabeza"><h2>Pedidos sugeridos</h2><button class="sec" id="btnVolverPedidos">Volver</button></div>
-  <p style="margin:0;font-size:.9rem;opacity:.8">Ordenados por el próximo día que pasa el vendedor. No incluye proveedores de abastos.</p>
+  <p style="margin:0;font-size:.9rem;opacity:.8">Ordenados por el próximo día que pasa el vendedor. Lo pendiente se paga cuando pasa el repartidor.</p>
   <p id="pdEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center"></p>
+  <div id="pdPagos" style="flex:none"></div>
   <div class="items" id="pdItems"></div>
 </section>
 
@@ -415,8 +426,8 @@
   <div class="cabeza"><h2 id="pdTitulo" style="font-size:1.45rem">Pedido</h2><button class="sec" id="btnVolverPedido">Volver</button></div>
   <p id="pdInfo" style="margin:0;font-size:.9rem;opacity:.9"></p>
   <div class="fechas">
-    <label class="campo">Pedido para el<input type="date" id="pdIda"></label>
-    <label class="campo">Siguiente visita<input type="date" id="pdProx"></label>
+    <label class="campo">Pedido para el<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdIda"></span></label>
+    <label class="campo">Siguiente pedido<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdProx"></span></label>
   </div>
   <div class="fechas">
     <label class="campo">Días de reserva<input id="pdSeguridad" type="number" min="0" max="7" inputmode="numeric"></label>
@@ -426,7 +437,7 @@
   <div class="items" id="pdLista"></div>
   <div class="acciones">
     <button class="ppal chico" id="btnPdEnviar" style="flex:2">Enviar al vendedor</button>
-    <button class="sec chico" id="btnPdTxt">TXT</button>
+    <button class="sec chico" id="btnPdRegistrar">Registrar pedido</button>
     <button class="sec chico" id="btnPdReiniciar" aria-label="Reiniciar">↺</button>
   </div>
 </section>
@@ -442,8 +453,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.37 · 5-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxRHlHPb94cq0a-1uU_c8nMw5IjQwrqUqtn40LTVEurIE9vwwZgivv3221ImI2qexw/exec";
+const VERSION = "v1.38 · 6-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxyrlhsNEfxB8BEWMDlU99PlBOqU4-rat7_YNL-qlc-SXDc_VW2ApRh81l4twNn7xi1/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -475,10 +486,22 @@ function ir(id){
   if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
 }
 
-function fechaHora(iso){
-  return new Date(iso).toLocaleString("es-CO",
-    {day:"numeric", month:"short", hour:"numeric", minute:"2-digit"});
+/* Fechas: siempre día-mes-año */
+const SEM = ["dom","lun","mar","mié","jue","vie","sáb"];
+const SEM_LARGO = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const dos = n => String(n).padStart(2, "0");
+function aFecha(x){
+  if(x instanceof Date) return x;
+  const s = String(x || "");
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T12:00:00");
+  if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) return new Date(s.replace(" ", "T"));
+  return new Date(s);
 }
+function dmy(x){ const d = aFecha(x); return isNaN(d) ? String(x || "") : dos(d.getDate()) + "-" + dos(d.getMonth() + 1) + "-" + d.getFullYear(); }
+function fechaHora(x){ const d = aFecha(x); return isNaN(d) ? String(x || "") : dmy(d) + " " + dos(d.getHours()) + ":" + dos(d.getMinutes()); }
+function fechaTxt(x){ if(!x) return ""; const d = aFecha(x); return isNaN(d) ? String(x) : SEM[d.getDay()] + " " + dmy(d); }
+function fechaLarga(x){ const d = aFecha(x); return isNaN(d) ? String(x || "") : SEM_LARGO[d.getDay()] + " " + dmy(d); }
+function fechaArchivo(x){ return dmy(x); }
 function hace(iso){
   const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
   if(d <= 0) return "hoy";
@@ -564,7 +587,7 @@ async function descargarCatalogo(){
       const f = new Date(leer("catalogo_fecha"));
       estado.textContent = f.toDateString() === new Date().toDateString()
         ? `Precios de las ${f.toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"})}`
-        : `Sin conexión · precios del ${f.toLocaleDateString("es-CO")}`;
+        : `Sin conexión · precios del ${dmy(f)}`;
     }else estado.textContent = "No se pudieron cargar los precios";
     setTimeout(descargarCatalogo, 2*60*1000);
   }finally{ descargando = false; }
@@ -913,7 +936,7 @@ function csvConteo(){
   const esc = t => `"${String(t).replace(/"/g,'""')}"`;
   const filas = conteo.map(c=>[
     esc(c.codigo), esc(c.nombre), c.precio, c.siigo === null ? "" : c.siigo, c.real,
-    c.siigo === null ? "" : (c.real - c.siigo), esc(new Date(c.hora).toLocaleString("es-CO"))
+    c.siigo === null ? "" : (c.real - c.siigo), esc(fechaHora(new Date(c.hora)))
   ].join(","));
   return "\uFEFF" + [cab, ...filas].join("\r\n");
 }
@@ -927,7 +950,7 @@ function descargarConteo(){
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
 function txtConteo(){
-  const f = new Date().toLocaleString("es-CO");
+  const f = fechaHora(new Date());
   const dif = conteo.filter(c=>c.siigo !== null && c.real !== c.siigo);
   const lin = [];
   lin.push("CONTEO FISICO - EDUMERCA");
@@ -988,7 +1011,7 @@ async function enviarConteo(){
   const btn = $("btnConteoDrive"); btn.disabled = true; btn.textContent = "Guardando…";
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({sesion: new Date().toLocaleString("es-CO"), conteo})});
+      body: JSON.stringify({sesion: fechaHora(new Date()), conteo})});
     const d = await r.json();
     if(!d.ok) throw new Error(d.error || "error");
     if(confirm(`Se guardaron ${d.guardadas} líneas en Drive.\n\n¿Borrar el conteo del celular?`)){
@@ -1137,7 +1160,7 @@ async function marcarAjustados(codigos){
 }
 function textoAjustes(){
   const lista = porAjustar();
-  const lin = ["AJUSTES PENDIENTES PARA SIIGO", new Date().toLocaleString("es-CO"), ""];
+  const lin = ["AJUSTES PENDIENTES PARA SIIGO", fechaHora(new Date()), ""];
   lista.forEach(l=>{
     lin.push((l.n || "") );
     lin.push("  cod " + l.cod + "   Siigo " + num(l.s) + "  contado " + num(l.r) +
@@ -1239,10 +1262,6 @@ function varPct(v){
   const n = Math.abs(v).toLocaleString("es-CO", {maximumFractionDigits:1});
   return `<em class="${v >= 0 ? "sube" : "baja"}">${v >= 0 ? "▲" : "▼"} ${n}%</em>`;
 }
-function fechaTxt(f){
-  if(!f) return "";
-  return new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"short", day:"numeric", month:"short"});
-}
 function pintarKpis(){
   const p = $("kpiPanel");
   $("segHoy").setAttribute("aria-pressed", diaKpi === "hoy");
@@ -1269,7 +1288,7 @@ function pintarKpis(){
   h += bloqueAlertas(k);
   h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer");
   h += bloqueTop30(k.reposicion);
-  h += `<p class="nota" style="text-align:center">Calculado ${esc(k.generado)}</p>`;
+  h += `<p class="nota" style="text-align:center">Calculado ${esc(fechaHora(k.generado))}</p>`;
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
 }
@@ -1439,32 +1458,86 @@ $("btnVolverFijos").addEventListener("click", () => {
   fijosCambios = false; abrirKpis();
 });
 
+/* ---------- Llamadas sin clave (proveedores, compras, pagos) ---------- */
+async function postApp(cuerpo, msTimeout){
+  const url = apiUrl();
+  if(!url) throw new Error("Falta configurar la URL de Apps Script.");
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), msTimeout || 60000);
+  let texto;
+  try{
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify(Object.assign({}, cuerpo, {quien})), signal: ctrl.signal});
+    texto = await r.text();
+  }catch(e){
+    throw new Error(e.name === "AbortError" ? "Apps Script no respondió a tiempo" : "Sin conexión");
+  }finally{ clearTimeout(t); }
+  let d;
+  try{ d = JSON.parse(texto); }
+  catch(e){ throw new Error("Apps Script devolvió un error. Revisa permisos o el panel Ejecuciones."); }
+  if(!d.ok) throw new Error(d.error || "error");
+  return d;
+}
+
 /* ---------- Proveedores ---------- */
 let provs = [], provFiltro = "", provSel = null;
+/* Cambios guardados en el celular que aún no confirma Apps Script */
+function provPendientes(){ return leerJSON("prov_pendientes", {}); }
+function aplicarPendientes(lista){
+  const pend = provPendientes();
+  Object.keys(pend).forEach(nit => { const p = lista.find(x => x.nit === nit); if(p) Object.assign(p, pend[nit]); });
+  return lista;
+}
+async function enviarPendientes(){
+  const pend = provPendientes();
+  for(const nit of Object.keys(pend)){
+    try{
+      await postApp({accion:"proveedor_guardar", proveedor: Object.assign({nit}, pend[nit])}, 45000);
+      const p2 = provPendientes(); delete p2[nit]; guardar("prov_pendientes", JSON.stringify(p2));
+    }catch(e){
+      provAviso("No se pudo guardar en Drive: " + e.message + " · se reintentará", true);
+      return false;
+    }
+  }
+  return true;
+}
+function provAviso(t, error){
+  ["provEstado", "pdEstado"].forEach(id => { const el = $(id); if(el){ el.textContent = t; el.style.color = error ? "#ff9a86" : ""; } });
+}
 async function abrirProveedores(){
   clearTimeout(tLista);
   ir("proveedores");
-  try{ provs = JSON.parse(leer("proveedores") || "[]"); }catch(e){ provs = []; }
+  provs = aplicarPendientes(leerJSON("proveedores", []));
   pintarProveedores();
   if(!provs.length) $("provItems").innerHTML = '<div class="vacio">Cargando…</div>';
+  await recargarProveedores(false);
+}
+async function recargarProveedores(desdeSiigo){
+  provAviso(desdeSiigo ? "Leyendo compras de Siigo… puede tardar un minuto" : "Actualizando…");
   try{
-    const d = await postAdmin({accion:"proveedores"});
-    provs = d.proveedores || [];
-    guardar("proveedores", JSON.stringify(provs));
+    await enviarPendientes();
+    const d = await postApp({accion: desdeSiigo ? "proveedores_actualizar" : "proveedores"}, desdeSiigo ? 300000 : 60000);
+    provs = aplicarPendientes(d.proveedores || []);
+    guardar("proveedores", JSON.stringify(d.proveedores || []));
+    if(!Object.keys(provPendientes()).length) provAviso("");
     pintarProveedores();
+    if($("proveedor").classList.contains("activa") && provSel && !provSel.nuevo){
+      const p = provs.find(x => x.nit === provSel.nit); if(p){ abrirProveedor(p, provVolver); }
+    }
   }catch(e){
+    provAviso((provs.length ? "Mostrando la última copia · " : "") + e.message, true);
     if(!provs.length) $("provItems").innerHTML = `<div class="vacio">No se pudo cargar: ${esc(e.message)}</div>`;
   }
 }
 function pintarProveedores(){
-  const filtros = [["", "Todos"], ["si", "Abastos"], ["no", "No abastos"], ["?", "Sin definir"]];
+  const filtros = [["", "Todos"], ["si", "Abastos"], ["no", "No abastos"], ["?", "Sin definir"], ["$", "Por pagar"]];
   $("provChips").innerHTML = filtros.map(([k, t]) => {
     const n = provs.filter(p => provPasa(p, k)).length;
     return `<button class="chip" data-f="${k}" aria-pressed="${provFiltro === k}">${t} · ${n}</button>`;
   }).join("");
   const q = normal($("provBuscar").value.trim());
   const lista = provs.filter(p => provPasa(p, provFiltro)).filter(p => !q ||
-    normal(p.nombre + " " + p.nit).includes(q) ||
+    normal(p.nombre + " " + p.nit + " " + (p.contacto || "")).includes(q) ||
     (p.items || []).some(it => normal(it.producto + " " + it.codigo).includes(q)));
   if(!provs.length){
     $("provItems").innerHTML = '<div class="vacio">Aún no hay proveedores.<br>Aparecen solos cuando registres facturas de compra o documentos soporte en Siigo.</div>';
@@ -1473,10 +1546,15 @@ function pintarProveedores(){
   $("provItems").innerHTML = lista.length ? lista.map(p => {
     const ab = p.abastos === true ? '<span class="etq">abastos</span>' : p.abastos === null ? '<span class="etq gris">sin definir</span>' : "";
     const prodQ = q ? (p.items || []).filter(it => normal(it.producto + " " + it.codigo).includes(q)).slice(0, 3) : [];
+    const partes = [];
+    if(p.contacto) partes.push(esc(p.contacto));
+    if(p.dias_visita) partes.push("Pedido: " + esc(p.dias_visita));
+    if(p.dias_entrega) partes.push("Entrega: " + esc(p.dias_entrega));
+    if(!partes.length) partes.push(p.ultima_compra ? "Última compra " + fechaTxt(p.ultima_compra) : esc(p.origen || ""));
     return `<button class="item" data-nit="${esc(p.nit)}">
       <span class="cod">${p.productos || 0}</span>
       <span class="nom">${esc(p.nombre)}${ab}
-        <small>${p.contacto ? esc(p.contacto) + " · " : ""}${p.dias_visita ? "Pasa: " + esc(p.dias_visita) + " · " : ""}${p.ultima_compra ? "Última compra " + fechaTxt(p.ultima_compra) : esc(p.origen || "")}${
+        <small>${partes.join(" · ")}${p.pendiente ? ` · <span style="color:#ffd23f">debes ${plata(p.pendiente)}</span>` : ""}${
           prodQ.length ? "<br>" + prodQ.map(it => esc(it.producto) + " " + plata(it.ultimo_costo)).join(" · ") : ""}</small></span>
       <span class="pre">›</span></button>`;
   }).join("") : '<div class="vacio">Nada coincide.</div>';
@@ -1485,6 +1563,7 @@ function provPasa(p, f){
   if(f === "si") return p.abastos === true;
   if(f === "no") return p.abastos === false;
   if(f === "?") return p.abastos === null || p.abastos === undefined;
+  if(f === "$") return p.pendiente > 0;
   return true;
 }
 $("provChips").addEventListener("click", e => {
@@ -1497,21 +1576,25 @@ $("provItems").addEventListener("click", e => {
   abrirProveedor(provs.find(p => p.nit === b.dataset.nit), "proveedores");
 });
 $("btnProvNuevo").addEventListener("click", () => abrirProveedor(null, "proveedores"));
+$("btnProvSiigo").addEventListener("click", () => recargarProveedores(true));
 $("btnVolverProvs").addEventListener("click", () => irMenu("compras"));
 
+/* ---------- Ficha del proveedor ---------- */
 const DIAS_SEM = ["DOM","LUN","MAR","MIE","JUE","VIE","SAB"];
 const FRECUENCIAS = [[1,"Cada semana"],[2,"Cada 15 días"],[4,"Cada mes"]];
 let provVolver = "proveedores";
 function abrirProveedor(p, volver){
   provVolver = volver || "proveedores";
   provSel = p ? JSON.parse(JSON.stringify(p)) :
-    {nit:"", nombre:"", abastos:true, dias_visita:"", contacto:"", telefono:"", observaciones:"",
-     frecuencia:1, pedido_minimo:0, items:[], nuevo:true};
+    {nit:"", nombre:"", abastos:true, dias_visita:"", dias_entrega:"", contacto:"", telefono:"", observaciones:"",
+     frecuencia:1, pedido_minimo:0, items:[], facturas:[], pedidos:[], nuevo:true};
   provSel.dias = diasVisita(provSel.dias_visita);
+  provSel.diasEnt = diasVisita(provSel.dias_entrega);
   $("provTitulo").textContent = p ? "Proveedor" : "Nuevo proveedor";
+  const scroll = $("proveedor").classList.contains("activa") ? $("provFicha").scrollTop : 0;
   pintarProveedor();
   ir("proveedor");
-  $("provFicha").scrollTop = 0;
+  $("provFicha").scrollTop = scroll;
 }
 /* "martes y viernes", "MAR, VIE" → [2,5] */
 function diasVisita(txt){
@@ -1519,47 +1602,65 @@ function diasVisita(txt){
   return [["dom",0],["lun",1],["mar",2],["mie",3],["jue",4],["vie",5],["sab",6]]
     .filter(([k]) => new RegExp("(^|[^a-z])" + k).test(t)).map(([, i]) => i);
 }
+const textoDias = dias => [1,2,3,4,5,6,0].filter(i => dias.includes(i)).map(i => DIAS_SEM[i]).join(", ");
 function telWa(t){
   let d = String(t || "").replace(/\D/g, "");
   if(d.length === 10 && d[0] === "3") d = "57" + d;
   return d;
 }
+function chipsDias(id, dias){
+  return `<div class="dias7" id="${id}">` + [1,2,3,4,5,6,0].map(i =>
+    `<button class="chip" data-dia="${i}" aria-pressed="${dias.includes(i)}">${DIAS_SEM[i].charAt(0) + DIAS_SEM[i].slice(1).toLowerCase()}</button>`).join("") + `</div>`;
+}
 function pintarProveedor(){
   const p = provSel;
   const seg = [[true, "Abastos"], [false, "No abastos"], [null, "Sin definir"]].map(([v, t]) =>
     `<button data-ab="${v}" aria-pressed="${p.abastos === v}">${t}</button>`).join("");
-  const chipsDias = [1,2,3,4,5,6,0].map(i =>
-    `<button class="chip" data-dia="${i}" aria-pressed="${p.dias.includes(i)}">${DIAS_SEM[i].toLowerCase()}</button>`).join("");
   const segFrec = FRECUENCIAS.map(([v, t]) =>
     `<button data-frec="${v}" aria-pressed="${Number(p.frecuencia || 1) === v}">${t}</button>`).join("");
   const campo = (id, titulo, valor, extra) =>
     `<label class="campo">${titulo}<input id="${id}" value="${esc(valor || "")}" autocomplete="off" ${extra || ""}></label>`;
   const items = (p.items || []).slice().sort((a, b) => normal(a.producto).localeCompare(normal(b.producto)));
   const wa = telWa(p.telefono);
+  const pend = (p.facturas || []).filter(f => !f.pagada);
   let h = "";
   if(p.nuevo){
     h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
       ${campo("pvNombre", "Nombre del proveedor", p.nombre, 'placeholder="Ej: DON PEDRO - PLAZA LAS FLORES"')}
-      <p class="nota" style="margin:0">Para proveedores sin factura ni documento soporte. Si después registras sus compras en Siigo como documento soporte, aparecerá también con su NIT y sus productos.</p></div>`;
+      <p class="nota" style="margin:0">Para proveedores sin factura ni documento soporte. Si después registras sus compras en Siigo, aparecerá también con su NIT y sus productos.</p></div>`;
   }else{
     h += `<div class="bloque"><h3 style="margin-bottom:6px">${esc(p.nombre)}</h3>
       <p class="nota" style="margin:0">NIT ${esc(p.nit)} · ${esc(p.origen || "")}<br>
       ${p.documentos ? `${p.documentos} compras · desde ${fechaTxt(p.primera_compra)} · última ${fechaTxt(p.ultima_compra)}<br>Total comprado: ${plata(p.total_comprado)} sin IVA` : "Sin compras registradas en Siigo"}</p></div>`;
   }
-  h += `<div class="bloque" style="display:flex;flex-direction:column;gap:10px">
-    <div class="seg" id="pvAbastos" style="background:var(--verde)">${seg}</div></div>
+  h += `<div class="bloque"><div class="seg" id="pvAbastos" style="background:var(--verde)">${seg}</div></div>
   <div class="bloque" style="display:flex;flex-direction:column;gap:10px">
-    <h3 style="margin:0">Vendedor</h3>
-    ${campo("pvContacto", "Nombre", p.contacto, 'placeholder="Ej: Carlos"')}
-    ${campo("pvTel", "Celular", p.telefono, 'inputmode="tel" placeholder="300 123 4567"')}
-    ${wa ? `<div class="acciones"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>
+    <h3 style="margin:0">Vendedor <small>toma el pedido</small></h3>
+    <div class="fechas">${campo("pvContacto", "Nombre", p.contacto, 'placeholder="Ej: Carlos"')}
+      ${campo("pvTel", "Celular", p.telefono, 'inputmode="tel" placeholder="300 123 4567"')}</div>
+    ${wa ? `<div class="acciones" style="margin:0"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>
       <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a></div>` : ""}
-    <div class="campo">Días que pasa o que vas<div class="chips" id="pvDias" style="flex-wrap:wrap">${chipsDias}</div></div>
+    <div class="campo">Días que pasa a tomar pedido${chipsDias("pvDias", p.dias)}</div>
     <div class="seg" id="pvFrec" style="background:var(--verde)">${segFrec}</div>
     ${campo("pvMinimo", "Pedido mínimo ($)", p.pedido_minimo ? pesos(p.pedido_minimo) : "", 'inputmode="numeric" placeholder="0 = sin mínimo"')}
-    <label class="campo">Observaciones<textarea id="pvObs" placeholder="Ej: entrega al día siguiente, pago de contado">${esc(p.observaciones || "")}</textarea></label>
+  </div>
+  <div class="bloque" style="display:flex;flex-direction:column;gap:10px">
+    <h3 style="margin:0">Repartidor <small>trae la mercancía y cobra</small></h3>
+    <div class="campo">Días que pasa a entregar${chipsDias("pvDiasEnt", p.diasEnt)}</div>
+    <label class="campo">Observaciones<textarea id="pvObs" placeholder="Ej: se paga la factura anterior en cada entrega">${esc(p.observaciones || "")}</textarea></label>
   </div>`;
   if(!p.nuevo){
+    h += `<div class="bloque"><h3>Facturas <small>${pend.length ? `<span style="color:#ffd23f">debes ${plata(pend.reduce((s, f) => s + f.total, 0))}</span>` : "al día"}</small></h3>` +
+      ((p.facturas || []).length ? p.facturas.map(f => `<div class="fila-dato" style="align-items:center">
+        <span>${esc(f.factura)}<small style="display:block;opacity:.65">${fechaTxt(f.fecha)}${f.pagada && f.fecha_pago ? " · pagada " + fechaTxt(f.fecha_pago) : ""}</small></span>
+        <span style="display:flex;align-items:center;gap:10px"><b>${plata(f.total)}</b>
+        <button class="sw${f.pagada ? " on" : ""} pv-pagar" data-id="${esc(f.id)}" style="min-width:5.8em">${f.pagada ? "Pagada" : "Pagar"}</button></span></div>`).join("")
+        : '<p class="nota" style="margin:0">Sin facturas registradas en Siigo. Aparecen al importar el XML o crear la compra.</p>') + `</div>`;
+    if((p.pedidos || []).length){
+      h += `<div class="bloque"><h3>Últimos pedidos</h3>` + p.pedidos.map(x => `<details class="alerta" style="margin-bottom:6px"><summary>
+        <span>${fechaTxt(x.fecha_pedido)}${x.llegada ? " → llega " + fechaTxt(x.llegada) : ""}</span><b>${plata(x.valor)}</b></summary>
+        <p class="nota" style="white-space:pre-line;margin:0">${esc(x.detalle)}</p></details>`).join("") + `</div>`;
+    }
     h += `<div class="bloque"><h3>Le compras ${items.length} productos <small>costo sin IVA</small></h3>` +
       (items.length ? items.map(it => `<div class="fila-dato"><span>${esc(it.producto)}${it.mas_barato ? '<span class="etq">más barato</span>' : ""}
         <small style="display:block;opacity:.65">${esc(it.codigo)} · ${it.compras} compras · prom. ${plata(it.costo_promedio)}</small></span>
@@ -1568,19 +1669,38 @@ function pintarProveedor(){
   }
   $("provFicha").innerHTML = h;
 }
-$("provFicha").addEventListener("click", e => {
+$("provFicha").addEventListener("click", async e => {
+  const pagar = e.target.closest(".pv-pagar");
+  if(pagar){
+    const f = provSel.facturas.find(x => x.id === pagar.dataset.id); if(!f) return;
+    const nuevo = !f.pagada;
+    if(!confirm(nuevo ? `¿Marcar como pagada la factura ${f.factura} por ${plata(f.total)}?` : `¿Marcar la factura ${f.factura} como NO pagada?`)) return;
+    pagar.disabled = true; pagar.textContent = "…";
+    try{
+      await postApp({accion:"factura_pagar", id:f.id, pagada:nuevo, fecha: hoyISO()}, 45000);
+      f.pagada = nuevo; f.fecha_pago = nuevo ? hoyISO() : "";
+      const q = provs.find(x => x.nit === provSel.nit);
+      if(q){ q.facturas = provSel.facturas; q.pendiente = provSel.facturas.filter(x => !x.pagada).reduce((s, x) => s + x.total, 0);
+        guardar("proveedores", JSON.stringify(provs)); }
+      if(cmDatos){ const c = cmDatos.proveedores.find(x => x.nit === provSel.nit); if(c){ c.pendiente = q ? q.pendiente : 0;
+        c.facturas_pendientes = provSel.facturas.filter(x => !x.pagada); guardar("compras_datos", JSON.stringify(cmDatos)); } }
+    }catch(err){ alert("No se pudo marcar: " + err.message); }
+    leerFichaProveedor(); pintarProveedor(); return;
+  }
   const ab = e.target.closest("#pvAbastos button");
   const dia = e.target.closest("#pvDias .chip");
+  const diaE = e.target.closest("#pvDiasEnt .chip");
   const fr = e.target.closest("#pvFrec button");
-  if(!ab && !dia && !fr) return;
+  if(!ab && !dia && !diaE && !fr) return;
+  const scroll = $("provFicha").scrollTop;
   leerFichaProveedor();
   if(ab) provSel.abastos = ab.dataset.ab === "true" ? true : ab.dataset.ab === "false" ? false : null;
-  if(dia){
-    const i = Number(dia.dataset.dia);
-    provSel.dias = provSel.dias.includes(i) ? provSel.dias.filter(x => x !== i) : provSel.dias.concat(i);
-  }
+  const alternar = (lista, i) => lista.includes(i) ? lista.filter(x => x !== i) : lista.concat(i);
+  if(dia) provSel.dias = alternar(provSel.dias, Number(dia.dataset.dia));
+  if(diaE) provSel.diasEnt = alternar(provSel.diasEnt, Number(diaE.dataset.dia));
   if(fr) provSel.frecuencia = Number(fr.dataset.frec);
   pintarProveedor();
+  $("provFicha").scrollTop = scroll;
 });
 $("provFicha").addEventListener("input", e => {
   if(e.target.id === "pvMinimo"){
@@ -1593,34 +1713,53 @@ function leerFichaProveedor(){
   if(provSel.nuevo) provSel.nombre = v("pvNombre").toUpperCase();
   provSel.contacto = v("pvContacto"); provSel.telefono = v("pvTel"); provSel.observaciones = v("pvObs");
   provSel.pedido_minimo = Number(v("pvMinimo").replace(/\D/g, "")) || 0;
-  provSel.dias_visita = [1,2,3,4,5,6,0].filter(i => provSel.dias.includes(i)).map(i => DIAS_SEM[i]).join(", ");
+  provSel.dias_visita = textoDias(provSel.dias);
+  provSel.dias_entrega = textoDias(provSel.diasEnt);
+}
+function datosManuales(p){
+  return {nombre:p.nombre, abastos:p.abastos, dias_visita:p.dias_visita, dias_entrega:p.dias_entrega,
+    contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones,
+    frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo};
+}
+/* Refleja los cambios en las copias del celular (lista de proveedores y datos de compras) */
+function reflejarProveedor(nit, datos){
+  const q = provs.find(x => x.nit === nit);
+  if(q) Object.assign(q, datos);
+  const base = leerJSON("proveedores", []);
+  const b = base.find(x => x.nit === nit); if(b){ Object.assign(b, datos); guardar("proveedores", JSON.stringify(base)); }
+  if(cmDatos){
+    const c = cmDatos.proveedores.find(x => x.nit === nit);
+    if(c) Object.assign(c, datos); else cmDatos.proveedores.push(Object.assign({nit}, datos));
+    guardar("compras_datos", JSON.stringify(cmDatos));
+  }
+}
+function volverDeFicha(){
+  if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
+  else { ir("proveedores"); pintarProveedores(); }
 }
 $("btnProvGuardar").addEventListener("click", async () => {
   leerFichaProveedor();
-  if(provSel.nuevo && !provSel.nombre) return alert("Escribe el nombre del proveedor.");
-  const btn = $("btnProvGuardar"); btn.disabled = true; btn.textContent = "Guardando…";
-  try{
-    const p = provSel;
-    const d = await postAdmin({accion:"proveedor_guardar", proveedor:{nit:p.nit, nombre:p.nombre, abastos:p.abastos,
-      dias_visita:p.dias_visita, contacto:p.contacto, telefono:p.telefono, observaciones:p.observaciones,
-      frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo}});
-    // refleja el cambio en los datos de compras sin esperar otra descarga
-    if(cmDatos){
-      const q = cmDatos.proveedores.find(x => x.nit === (d.nit || p.nit));
-      const nuevo = {nit:d.nit || p.nit, nombre:p.nombre, abastos:p.abastos, dias_visita:p.dias_visita,
-        contacto:p.contacto, telefono:p.telefono, frecuencia:p.frecuencia, pedido_minimo:p.pedido_minimo};
-      if(q) Object.assign(q, nuevo); else cmDatos.proveedores.push(nuevo);
-      guardar("compras_datos", JSON.stringify(cmDatos));
-    }
-    if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
-    else await abrirProveedores();
-  }catch(e){ alert("No se pudo guardar: " + e.message); }
-  finally{ btn.disabled = false; btn.textContent = "Guardar"; }
+  const p = provSel;
+  if(p.nuevo){
+    if(!p.nombre) return alert("Escribe el nombre del proveedor.");
+    const btn = $("btnProvGuardar"); btn.disabled = true; btn.textContent = "Guardando…";
+    try{
+      await postApp({accion:"proveedor_guardar", proveedor: datosManuales(p)}, 45000);
+      await abrirProveedores();
+    }catch(e){ alert("No se pudo crear: " + e.message); }
+    finally{ btn.disabled = false; btn.textContent = "Guardar"; }
+    return;
+  }
+  // Se guarda primero en el celular y se envía en segundo plano: no se pierde aunque falle la conexión
+  const datos = datosManuales(p);
+  const pend = provPendientes(); pend[p.nit] = datos; guardar("prov_pendientes", JSON.stringify(pend));
+  reflejarProveedor(p.nit, datos);
+  volverDeFicha();
+  provAviso("Guardando " + p.nombre + "…");
+  if(await enviarPendientes()) provAviso("✓ Guardado");
+  setTimeout(() => { if(!Object.keys(provPendientes()).length) provAviso(""); }, 3000);
 });
-$("btnVolverProv").addEventListener("click", () => {
-  if(provVolver === "pedido"){ ir("pedido"); pintarPedido(); }
-  else { ir("proveedores"); pintarProveedores(); }
-});
+$("btnVolverProv").addEventListener("click", volverDeFicha);
 
 /* ---------- Datos de compras (abastos y pedidos) ---------- */
 let cmDatos = null;
@@ -1631,29 +1770,35 @@ function difDias(a, b){ return Math.round((new Date(b + "T12:00:00") - new Date(
 function diaSemana(f){ return new Date(f + "T12:00:00").getDay(); }
 function provPorNit(){ const m = {}; ((cmDatos && cmDatos.proveedores) || []).forEach(p => m[p.nit] = p); return m; }
 async function cargarComprasDatos(estadoId){
-  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){ cmDatos = null; }
-  $(estadoId).textContent = "Actualizando datos…";
+  cmDatos = leerJSON("compras_datos", null);
+  $(estadoId).textContent = "Actualizando datos…"; $(estadoId).style.color = "";
   try{
-    const d = await postAdmin({accion:"compras_datos"});
+    await enviarPendientes();
+    const d = await postApp({accion:"compras_datos"});
+    const pend = provPendientes();
+    (d.proveedores || []).forEach(p => { if(pend[p.nit]) Object.assign(p, pend[p.nit]); });
     cmDatos = d; guardar("compras_datos", JSON.stringify(d));
     $(estadoId).textContent = "";
   }catch(e){
-    $(estadoId).textContent = (cmDatos ? "Usando la última copia · " : "") + "No se pudo actualizar: " + e.message;
+    $(estadoId).textContent = (cmDatos ? "Usando la última copia · " : "") + e.message;
+    $(estadoId).style.color = "#ff9a86";
   }
 }
-/* Próximo día de visita desde una fecha (incluida). null si no tiene días definidos. */
-function proximaVisita(prov, desde){
-  const dias = diasVisita(prov.dias_visita);
+/* Primer día de la lista (texto de días) desde una fecha; incluida o no. null si no hay días. */
+function proximoDia(txtDias, desde, incluida){
+  const dias = diasVisita(txtDias);
   if(!dias.length) return null;
-  for(let i = 0; i < 14; i++){ const f = sumarDiasISO(desde, i); if(dias.includes(diaSemana(f))) return f; }
+  for(let i = incluida ? 0 : 1; i < 15; i++){ const f = sumarDiasISO(desde, i); if(dias.includes(diaSemana(f))) return f; }
   return null;
 }
 function siguienteVisita(prov, fecha){
   const frec = Number(prov.frecuencia) || 1;
   if(frec > 1) return sumarDiasISO(fecha, 7 * frec);
-  const dias = diasVisita(prov.dias_visita);
-  if(dias.length) for(let i = 1; i <= 7; i++){ const f = sumarDiasISO(fecha, i); if(dias.includes(diaSemana(f))) return f; }
-  return sumarDiasISO(fecha, 7);
+  return proximoDia(prov.dias_visita, fecha, false) || sumarDiasISO(fecha, 7);
+}
+/* Cuándo llega lo que se pide en una fecha: el siguiente día de entrega (o el mismo día si no hay repartidor) */
+function llegadaDe(prov, fechaPedido){
+  return proximoDia(prov.dias_entrega, fechaPedido, false) || fechaPedido;
 }
 
 /* Cálculo común: cuánto comprar para llegar a la próxima compra, y en qué orden */
@@ -1702,7 +1847,7 @@ function calcCompra(items, cfg, cambios){
   return {cfg, hastaIda, ciclo, dentro, fuera, sinVenta, cubiertos, total, presupuesto,
     totalFuera: fuera.reduce((s, x) => s + x.sub, 0)};
 }
-const PRIO = {1:["agotado al comprar", "#ff9a86"], 2:["se acaba pronto", "#ffd23f"], 3:["reponer", "#bcd9dc"]};
+const PRIO = {1:["agotado al llegar", "#ff9a86"], 2:["se acaba pronto", "#ffd23f"], 3:["reponer", "#bcd9dc"]};
 function htmlItem(it, chk, conProveedorAlterno){
   const pr = PRIO[it.prioridad], hecho = chk[it.codigo];
   const alterno = conProveedorAlterno && it.otro && it.costo && it.otro.costo < it.costo
@@ -1715,6 +1860,7 @@ function htmlItem(it, chk, conProveedorAlterno){
         it.reducido ? ` · <b>reducido de ${num(it.reducido)}</b>` : ""}${it.manual ? " · cantidad tuya" : ""}${alterno}</small></span>
     <span class="ab-cant"><b>${num(it.cant)}</b><small>${it.costo ? plata(it.sub) : "sin costo"}</small></span></div>`;
 }
+const prod_ = n => n === 1 ? "1 producto" : n + " productos";
 function htmlExtras(r){
   let h = "";
   if(r.fuera.length){
@@ -1745,7 +1891,7 @@ function clicLista(e, r, claveChk, claveCambios, cambios, repintar){
   const fila = e.target.closest(".ab-item"); if(!fila) return;
   const cod = fila.dataset.cod;
   if(e.target.closest(".ab-check")){
-    let chk = {}; try{ chk = JSON.parse(leer(claveChk) || "{}"); }catch(x){}
+    const chk = leerJSON(claveChk, {});
     if(chk[cod]) delete chk[cod]; else chk[cod] = 1;
     guardar(claveChk, JSON.stringify(chk)); repintar(); return;
   }
@@ -1756,9 +1902,7 @@ function clicLista(e, r, claveChk, claveCambios, cambios, repintar){
   else cambios[cod] = Math.max(0, Number(v.replace(",", ".")) || 0);
   guardar(claveCambios, JSON.stringify(cambios)); repintar();
 }
-const prod_ = n => n === 1 ? "1 producto" : n + " productos";
-function leerJSON(k, def){ try{ return JSON.parse(leer(k) || "null") || def; }catch(e){ return def; } }
-function fechaLarga(f){ return new Date(f + "T12:00:00").toLocaleDateString("es-CO", {weekday:"long", day:"numeric", month:"short"}); }
+function leerJSON(k, def){ try{ const v = JSON.parse(leer(k) || "null"); return v === null ? def : v; }catch(e){ return def; } }
 async function compartirTexto(t){
   if(navigator.share){ try{ await navigator.share({text: t}); return; }catch(e){ if(e.name === "AbortError") return; } }
   location.href = "https://wa.me/?text=" + encodeURIComponent(t);
@@ -1772,6 +1916,12 @@ async function compartirTxtArchivo(texto, nombre, titulo){
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["\uFEFF" + texto], {type:"text/plain"}));
   a.download = nombre; a.click();
+}
+/* Campos de fecha: se muestran día-mes-año sin importar el idioma del celular */
+function ponerFecha(id, iso){ $(id).value = iso; pintarFechaCampo(id); }
+function pintarFechaCampo(id){
+  const el = $(id), txt = el.parentElement.querySelector(".fecha-txt");
+  if(txt) txt.textContent = el.value ? fechaTxt(el.value) : "Elegir fecha";
 }
 
 /* ---------- Lista de abastos ---------- */
@@ -1796,13 +1946,13 @@ function abGuardarCfg(){
 async function abrirAbastos(){
   clearTimeout(tLista);
   const c = abCfg();
-  $("abIda").value = c.ida; $("abProx").value = c.prox;
+  ponerFecha("abIda", c.ida); ponerFecha("abProx", c.prox);
   $("abPresupuesto").value = c.presupuesto ? pesos(c.presupuesto) : "";
   $("abSeguridad").value = c.seguridad;
   abModo(c.modo, true);
   abCambios = leerJSON("abastos_cambios", {});
   ir("abastos");
-  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){}
+  cmDatos = leerJSON("compras_datos", null);
   pintarAbastos();
   await cargarComprasDatos("abEstado");
   pintarAbastos();
@@ -1884,13 +2034,13 @@ function textoAbastos(){
 }
 $("btnAbMensaje").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
-  postAdmin({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
+  postApp({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
   compartirTexto(t);
 });
 $("btnAbTxt").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
-  postAdmin({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
-  compartirTxtArchivo(t.replace(/\*/g, ""), `lista_abastos_${abCalc.cfg.ida}.txt`, "Lista de abastos");
+  postApp({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
+  compartirTxtArchivo(t.replace(/\*/g, ""), `lista_abastos_${fechaArchivo(abCalc.cfg.ida)}.txt`, "Lista de abastos");
 });
 $("btnAbReiniciar").addEventListener("click", () => {
   if(!confirm("¿Volver a las cantidades calculadas y desmarcar lo comprado?")) return;
@@ -1901,6 +2051,7 @@ $("btnAbReiniciar").addEventListener("click", () => {
 });
 ["abIda", "abProx", "abSeguridad"].forEach(id => $(id).addEventListener("change", () => {
   if($("abProx").value <= $("abIda").value) $("abProx").value = sumarDiasISO($("abIda").value, 7);
+  pintarFechaCampo("abIda"); pintarFechaCampo("abProx");
   pintarAbastos();
 }));
 $("abPresupuesto").addEventListener("input", e => {
@@ -1929,27 +2080,33 @@ function itemsPedido(nit, todos){
   });
   return out;
 }
+/* Fechas del pedido: cuándo se pide, cuándo llega, y cuándo llega el siguiente */
 function fechasPedido(prov){
   const hoy = hoyISO();
-  const g = pdFechas[prov.nit];
-  if(g && g.ida >= hoy && g.prox > g.ida) return g;
-  const ida = proximaVisita(prov, hoy) || hoy;
-  return {ida, prox: siguienteVisita(prov, ida)};
+  let g = pdFechas[prov.nit];
+  if(!(g && g.ida >= hoy && g.prox > g.ida)){
+    const ida = proximoDia(prov.dias_visita, hoy, true) || hoy;
+    g = {ida, prox: siguienteVisita(prov, ida)};
+  }
+  return Object.assign({}, g, {llega: llegadaDe(prov, g.ida), llegaSig: llegadaDe(prov, g.prox)});
 }
 function calcPedido(prov, todos){
   const f = fechasPedido(prov);
   const cambios = leerJSON("pedido_cambios_" + prov.nit, {});
-  return calcCompra(itemsPedido(prov.nit, todos), {ida:f.ida, prox:f.prox, seguridad:pdSeguridad(), presupuesto:0}, cambios);
+  // Lo que se pide debe alcanzar desde que llega hasta que llega el siguiente pedido
+  const r = calcCompra(itemsPedido(prov.nit, todos), {ida:f.llega, prox:f.llegaSig, seguridad:pdSeguridad(), presupuesto:0}, cambios);
+  r.fechas = f;
+  return r;
 }
 function cuandoTxt(f){
   const d = difDias(hoyISO(), f);
-  return d === 0 ? "hoy" : d === 1 ? "mañana" : fechaTxt(f);
+  return d === 0 ? "hoy" : d === 1 ? "mañana" : SEM[diaSemana(f)] + " " + f.slice(8, 10);
 }
 async function abrirPedidos(){
   clearTimeout(tLista);
   pdFechas = leerJSON("pedidos_fechas", {});
   ir("pedidos");
-  try{ cmDatos = JSON.parse(leer("compras_datos") || "null"); }catch(e){}
+  cmDatos = leerJSON("compras_datos", null);
   pintarPedidos();
   await cargarComprasDatos("pdEstado");
   pintarPedidos();
@@ -1957,22 +2114,36 @@ async function abrirPedidos(){
 function pintarPedidos(){
   const box = $("pdItems");
   if(!cmDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
-  const provs = cmDatos.proveedores.filter(p => p.abastos !== true);
-  if(!provs.length){
+  const provsP = cmDatos.proveedores.filter(p => p.abastos !== true);
+  if(!provsP.length){
     box.innerHTML = `<div class="vacio">Todavía no hay proveedores.<br>Aparecen solos cuando registres facturas de compra en Siigo.</div>`;
-    return;
+    $("pdPagos").innerHTML = ""; return;
   }
-  const filas = provs.map(p => {
+  const filas = provsP.map(p => {
     const r = calcPedido(p, false);
-    return {p, r, f: fechasPedido(p), sinDias: !diasVisita(p.dias_visita).length};
+    return {p, r, f: r.fechas, sinDias: !diasVisita(p.dias_visita).length};
   }).sort((a, b) => a.sinDias - b.sinDias || a.f.ida.localeCompare(b.f.ida) || b.r.total - a.r.total);
+
+  // Pagos que vienen: lo pendiente se paga cuando pase el repartidor
+  const hoy = hoyISO(), en7 = sumarDiasISO(hoy, 7);
+  const pagos = provsP.filter(p => p.pendiente > 0).map(p => ({p, dia: proximoDia(p.dias_entrega, hoy, true)}))
+    .sort((a, b) => (a.dia || "9").localeCompare(b.dia || "9"));
+  const semana = pagos.filter(x => x.dia && x.dia <= en7);
+  $("pdPagos").innerHTML = pagos.length ? `<details class="alerta"${semana.length ? " open" : ""}><summary>
+      <span>Por pagar a repartidores</span><span class="num-alerta amarillo">${plata(pagos.reduce((s, x) => s + x.p.pendiente, 0))}</span></summary>` +
+      pagos.map(x => `<div class="fila-dato"><span>${esc(x.p.nombre)}<small style="display:block;opacity:.65">${
+        x.dia ? "pasa " + (difDias(hoy, x.dia) <= 1 ? cuandoTxt(x.dia) + " · " : "") + fechaTxt(x.dia) : "sin días de entrega"}</small></span><b>${plata(x.p.pendiente)}</b></div>`).join("") +
+      `</details>` : "";
+
   box.innerHTML = filas.map(({p, r, f, sinDias}) => {
     const urg = r.dentro.filter(x => x.prioridad === 1).length;
+    const hoyPasa = !sinDias && difDias(hoyISO(), f.ida) <= 1;
     return `<button class="item" data-nit="${esc(p.nit)}">
-      <span class="cod" style="${!sinDias && difDias(hoyISO(), f.ida) <= 1 ? "background:var(--amarillo);color:var(--verde)" : ""}">${sinDias ? "?" : cuandoTxt(f.ida)}</span>
+      <span class="cod" style="${hoyPasa ? "background:var(--amarillo);color:var(--verde)" : ""}">${sinDias ? "?" : cuandoTxt(f.ida)}</span>
       <span class="nom">${esc(p.nombre)}
-        <small>${p.contacto ? esc(p.contacto) + " · " : ""}${sinDias ? "sin días de visita" : esc(p.dias_visita)}${
-          r.dentro.length ? ` · ${prod_(r.dentro.length)}${urg ? `, <span style="color:#ff9a86">${urg} urgentes</span>` : ""}` : " · nada por pedir"}</small></span>
+        <small>${p.contacto ? esc(p.contacto) + " · " : ""}${sinDias ? "sin días de pedido" : "llega " + cuandoTxt(f.llega)}${
+          r.dentro.length ? ` · ${prod_(r.dentro.length)}${urg ? `, <span style="color:#ff9a86">${urg} urgente${urg > 1 ? "s" : ""}</span>` : ""}` : " · nada por pedir"}${
+          p.pendiente ? ` · <span style="color:#ffd23f">pagar ${plata(p.pendiente)}</span>` : ""}</small></span>
       <span class="pre">${r.dentro.length ? plata(r.total) : ""}<small>›</small></span></button>`;
   }).join("");
 }
@@ -1988,7 +2159,7 @@ function abrirPedido(nit){
   const prov = provPorNit()[nit];
   const f = fechasPedido(prov);
   $("pdTitulo").textContent = prov.nombre;
-  $("pdIda").value = f.ida; $("pdProx").value = f.prox;
+  ponerFecha("pdIda", f.ida); ponerFecha("pdProx", f.prox);
   $("pdSeguridad").value = pdSeguridad();
   $("pdTodos").setAttribute("aria-pressed", leer("pedido_todos_" + nit) === "1");
   ir("pedido");
@@ -2002,19 +2173,20 @@ function pintarPedido(){
   guardar("pedidos_seguridad", String(Number($("pdSeguridad").value) || 0));
   const todos = $("pdTodos").getAttribute("aria-pressed") === "true";
   const r = pdCalc = calcPedido(prov, todos);
-  const chk = leerJSON("pedido_check_" + pdNit + "_" + r.cfg.ida, {});
+  const f = r.fechas;
+  const chk = leerJSON("pedido_check_" + pdNit + "_" + f.ida, {});
   const min = Number(prov.pedido_minimo) || 0;
   const wa = telWa(prov.telefono);
-  $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}${
-    prov.dias_visita ? "Pasa: " + esc(prov.dias_visita) : "Sin días de visita"}${
-    (Number(prov.frecuencia) || 1) > 1 ? " · cada " + (prov.frecuencia == 2 ? "15 días" : prov.frecuencia + " semanas") : ""}
-    · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar</a>`;
+  const pend = prov.facturas_pendientes || [];
+  $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}Llega: <b>${fechaTxt(f.llega)}</b>${
+    prov.dias_entrega ? "" : " (sin días de entrega)"} · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar proveedor</a>${
+    prov.pendiente ? `<br><span style="color:#ffd23f">Al recibir, paga ${plata(prov.pendiente)}${pend.length ? " (" + pend.map(x => esc(x.factura)).join(", ") + ")" : ""}</span>` : ""}`;
   $("btnPdEnviar").textContent = wa ? "Enviar al vendedor" : "Enviar por WhatsApp";
   $("pdResumen").innerHTML = `
     <div class="caja"><b>${plata(r.total)}</b><span>estimado sin IVA</span></div>
     <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
     ${min ? `<div class="caja"><b style="color:${r.total >= min ? "#4fd6a8" : "#ff9a86"}">${r.total >= min ? "✓" : plata(min - r.total)}</b><span>${r.total >= min ? "pasa el mínimo" : "falta para el mínimo"}</span></div>` : ""}`;
-  let h = `<p class="nota" style="margin:0 0 4px">Pedido para ${r.ciclo} días hasta la siguiente visita${
+  let h = `<p class="nota" style="margin:0 0 4px">Alcanza desde que llega (${fechaTxt(f.llega)}) hasta el siguiente pedido (${fechaTxt(f.llegaSig)}): ${r.ciclo} días${
     r.cfg.seguridad ? ` + ${r.cfg.seguridad} de reserva` : ""}. ${todos ? "Todo lo que le compras." : "Solo lo que él te vende más barato."} Toca un producto para cambiar la cantidad.</p>`;
   h += r.dentro.length ? `<div class="bloque" style="margin-top:6px">` + r.dentro.map(it => htmlItem(it, chk, true)).join("") + `</div>`
     : `<div class="vacio">No hace falta pedirle nada para estas fechas.</div>`;
@@ -2023,19 +2195,21 @@ function pintarPedido(){
   if(fl) fl.addEventListener("click", ev => { ev.preventDefault(); abrirFichaDesdePedido(); });
 }
 async function abrirFichaDesdePedido(){
-  let p = (provs || []).find(x => x.nit === pdNit);
+  provs = aplicarPendientes(leerJSON("proveedores", []));
+  let p = provs.find(x => x.nit === pdNit);
   if(!p){
-    try{ const d = await postAdmin({accion:"proveedores"}); provs = d.proveedores || []; guardar("proveedores", JSON.stringify(provs)); }catch(e){}
-    p = (provs || []).find(x => x.nit === pdNit);
+    try{ const d = await postApp({accion:"proveedores"}); provs = aplicarPendientes(d.proveedores || []); guardar("proveedores", JSON.stringify(d.proveedores || [])); }catch(e){}
+    p = provs.find(x => x.nit === pdNit);
   }
-  if(!p){ const b = provPorNit()[pdNit]; p = Object.assign({items:[]}, b); }
+  if(!p){ const b = provPorNit()[pdNit]; p = Object.assign({items:[], facturas:[], pedidos:[]}, b); }
   abrirProveedor(p, "pedido");
 }
 $("pdLista").addEventListener("click", e =>
-  clicLista(e, pdCalc, "pedido_check_" + pdNit + "_" + (pdCalc ? pdCalc.cfg.ida : ""), "pedido_cambios_" + pdNit, pdCambios, pintarPedido));
+  clicLista(e, pdCalc, "pedido_check_" + pdNit + "_" + (pdCalc ? pdCalc.fechas.ida : ""), "pedido_cambios_" + pdNit, pdCambios, pintarPedido));
 ["pdIda", "pdProx", "pdSeguridad"].forEach(id => $(id).addEventListener("change", () => {
   if(id === "pdIda") $("pdProx").value = siguienteVisita(provPorNit()[pdNit], $("pdIda").value);
   if($("pdProx").value <= $("pdIda").value) $("pdProx").value = sumarDiasISO($("pdIda").value, 7);
+  pintarFechaCampo("pdIda"); pintarFechaCampo("pdProx");
   pintarPedido();
 }));
 $("pdTodos").addEventListener("click", () => {
@@ -2045,38 +2219,52 @@ $("pdTodos").addEventListener("click", () => {
   pintarPedido();
 });
 function textoPedido(conPrecios){
-  const r = pdCalc, prov = provPorNit()[pdNit];
+  const r = pdCalc, prov = provPorNit()[pdNit], f = r.fechas;
   const lin = [];
   if(conPrecios){
-    lin.push(`📦 *PEDIDO ${prov.nombre}*`, `Para ${fechaLarga(r.cfg.ida)} · Estimado ${plata(r.total)} sin IVA`, "");
+    lin.push(`📦 *PEDIDO ${prov.nombre}*`, `Pedido: ${fechaLarga(f.ida)} · Llega: ${fechaLarga(f.llega)}`,
+      `Estimado ${plata(r.total)} sin IVA`, "");
     r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}${it.costo ? " · ~" + plata(it.sub) : ""}`));
   }else{
     lin.push(`Hola${prov.contacto ? " " + prov.contacto.split(" ")[0] : ""}, buen día. Este es el pedido de *Edumerca 122*` +
-      `${difDias(hoyISO(), r.cfg.ida) > 0 ? " para el " + fechaLarga(r.cfg.ida) : ""}:`, "");
+      `${difDias(hoyISO(), f.ida) > 0 ? " del " + fechaLarga(f.ida) : ""}:`, "");
     r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}`));
     lin.push("", "Muchas gracias.");
   }
   return lin.join("\n").trim();
 }
+/* El pedido real: lo que de verdad se pidió (puede ser distinto del sugerido) */
+async function registrarPedido(silencioso){
+  const prov = provPorNit()[pdNit], r = pdCalc, f = r.fechas;
+  const cuerpo = {accion:"pedido_registrar", nit: pdNit, proveedor: prov.nombre, fecha_pedido: f.ida, llegada: f.llega,
+    total: r.total, lineas: r.dentro.map(it => ({codigo: it.codigo, nombre: it.nombre, cant: it.cant, costo: it.costo}))};
+  try{
+    await postApp(cuerpo, 45000);
+    postApp({accion:"abastos_guardar", tipo:"pedido", proveedor: prov.nombre, ida: f.ida, texto: textoPedido(true)}).catch(() => {});
+    if(!silencioso) alert(`Pedido registrado: ${prod_(r.dentro.length)} por ${plata(r.total)}.\nLo ves en la ficha del proveedor.`);
+    return true;
+  }catch(e){ if(!silencioso) alert("No se pudo registrar: " + e.message); return false; }
+}
 $("btnPdEnviar").addEventListener("click", () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
   const prov = provPorNit()[pdNit];
-  postAdmin({accion:"abastos_guardar", tipo:"pedido", proveedor: prov.nombre, ida: pdCalc.cfg.ida, texto: textoPedido(true)}).catch(() => {});
+  registrarPedido(true);
   const wa = telWa(prov.telefono), t = textoPedido(false);
   if(wa) location.href = `https://wa.me/${wa}?text=${encodeURIComponent(t)}`;
   else compartirTexto(t);
 });
-$("btnPdTxt").addEventListener("click", () => {
+$("btnPdRegistrar").addEventListener("click", async () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
-  const prov = provPorNit()[pdNit], t = textoPedido(true);
-  postAdmin({accion:"abastos_guardar", tipo:"pedido", proveedor: prov.nombre, ida: pdCalc.cfg.ida, texto: t}).catch(() => {});
-  compartirTxtArchivo(t.replace(/\*/g, ""), `pedido_${prov.nombre.replace(/\W+/g, "_")}_${pdCalc.cfg.ida}.txt`, "Pedido");
+  if(!confirm(`¿Registrar este pedido como el que le hiciste al vendedor?\n${prod_(pdCalc.dentro.length)} · ${plata(pdCalc.total)}\n\nSi le pediste otras cantidades, cámbialas primero tocando cada producto.`)) return;
+  const b = $("btnPdRegistrar"); b.disabled = true;
+  await registrarPedido(false);
+  b.disabled = false;
 });
 $("btnPdReiniciar").addEventListener("click", () => {
   if(!confirm("¿Volver a las cantidades calculadas y desmarcar todo?")) return;
   for(const k in pdCambios) delete pdCambios[k];
   guardar("pedido_cambios_" + pdNit, "{}");
-  if(pdCalc) guardar("pedido_check_" + pdNit + "_" + pdCalc.cfg.ida, "{}");
+  if(pdCalc) guardar("pedido_check_" + pdNit + "_" + pdCalc.fechas.ida, "{}");
   pintarPedido();
 });
 $("btnVolverPedido").addEventListener("click", () => { ir("pedidos"); pintarPedidos(); });
