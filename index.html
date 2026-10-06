@@ -204,9 +204,10 @@
   .dias7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
   .dias7 .chip{padding:8px 0;font-size:.85rem;min-width:0;text-align:center}
   .fecha-campo{position:relative;display:block;background:var(--papel);color:var(--tinta);border-radius:8px;
-    padding:9px 28px 9px 10px;font:500 1rem "Barlow",sans-serif;white-space:nowrap;overflow:hidden}
-  .fecha-campo::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);opacity:.6}
-  .fecha-campo input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
+    padding:12px 34px 12px 12px;font:600 1.05rem "Barlow",sans-serif;white-space:nowrap;overflow:hidden;cursor:pointer;
+    -webkit-tap-highlight-color:rgba(0,0,0,.08)}
+  .fecha-campo::after{content:"📅";position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:1rem}
+  .fecha-campo input{position:absolute;left:0;bottom:0;width:100%;height:100%;opacity:0;padding:0;border:0;pointer-events:none}
   .fechas{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
   .fechas .campo input{padding:9px 10px;font-size:1rem}
   .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
@@ -463,7 +464,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.39 · 6-oct-2026";
+const VERSION = "v1.41 · 6-oct-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -477,6 +478,14 @@ const DIAS_VIEJO = 90;       // a partir de aquí, urgente        // un producto
 /* ===================================== */
 
 const $ = id => document.getElementById(id);
+/* Las llamadas a Apps Script van sin las cookies de Google del celular. Con varias cuentas
+   iniciadas, Google a veces responde "unable to open the file" de forma intermitente. */
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = (url, op) => {
+  const u = typeof url === "string" ? url : (url && url.url) || "";
+  if(/script\.google(usercontent)?\.com/.test(u)) op = Object.assign({credentials:"omit", redirect:"follow"}, op || {});
+  return fetchOriginal(url, op);
+};
 const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos","pedido"];
 const estado = $("estado"), entrada = $("entrada");
 let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
@@ -539,6 +548,12 @@ function esPendiente(it){
 
 /* ---------- Precios ---------- */
 function apiUrl(){
+  // Si cambió la URL por defecto (nueva implementación), se olvida la que había guardada en el celular
+  const vista = leer("api_defecto");
+  if(vista !== API_URL_DEFECTO){
+    if(vista !== null){ try{ localStorage.removeItem("api_url"); }catch(e){} }
+    guardar("api_defecto", API_URL_DEFECTO);
+  }
   const q = new URLSearchParams(location.search).get("api");
   if(q) guardar("api_url", q);
   const g = leer("api_url");
@@ -635,7 +650,17 @@ function buscar(c){
 }
 
 /* ---------- Cámara ---------- */
+let cerrandoCamara = null;
+/* Para no aceptar lecturas a medias: el mismo código debe leerse 2 veces seguidas
+   (o 1 vez si es un EAN/UPC con dígito de control válido y ya pasó medio segundo de enfoque) */
+function eanValido(c){
+  if(!/^\d{8}$|^\d{12,13}$/.test(c)) return false;
+  const d = c.split("").map(Number), control = d.pop();
+  const suma = d.reverse().reduce((s, n, i) => s + n * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - suma % 10) % 10 === control;
+}
 async function abrirCamara(modo){
+  if(cerrandoCamara) await cerrandoCamara;
   if(ocupado) return; ocupado = true;
   modoCamara = modo || "precio";
   clearTimeout(tResultado); clearTimeout(tLista);
@@ -653,11 +678,20 @@ async function abrirCamara(modo){
       Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128],
     experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false
   });
+  let previo = "", vecesPrevio = 0;
+  const inicioCam = Date.now();
   try{
     await escaner.start({facingMode:"environment"},
-      {fps:12, qrbox:(w,h)=>({width:Math.floor(w*.85), height:Math.floor(h*.3)})},
+      {fps:15, qrbox:(w,h)=>({width:Math.floor(w*.9), height:Math.floor(h*.4)}),
+       videoConstraints:{facingMode:"environment", width:{ideal:1280}, height:{ideal:960},
+         advanced:[{focusMode:"continuous"}]}},
       async codigo=>{
         if(!escaner) return;
+        codigo = String(codigo).trim();
+        vecesPrevio = codigo === previo ? vecesPrevio + 1 : 1;
+        previo = codigo;
+        const seguro = vecesPrevio >= 2 || (eanValido(codigo) && Date.now() - inicioCam > 500 && buscar(codigo));
+        if(!seguro) return;
         if(navigator.vibrate) navigator.vibrate(80);
         const m = modoCamara;
         await cerrarCamara();
@@ -671,7 +705,15 @@ async function abrirCamara(modo){
 async function cerrarCamara(){
   clearInterval(tCuenta);
   const e = escaner; escaner = null;
-  if(e){ try{ await e.stop(); }catch(x){} try{ e.clear(); }catch(x){} }
+  if(e && !cerrandoCamara){
+    cerrandoCamara = (async () => {
+      try{ await e.stop(); }catch(x){}
+      try{ e.clear(); }catch(x){}
+      await new Promise(r => setTimeout(r, 150));   // el celular necesita soltar la cámara antes de abrirla otra vez
+    })();
+    await cerrandoCamara;
+    cerrandoCamara = null;
+  }else if(cerrandoCamara) await cerrandoCamara;
   ocupado = false;
 }
 
@@ -931,6 +973,12 @@ function pedirCantidad(codigo){
 function guardarItemConteo(){
   const v = $("cantidadReal").value.replace(",",".").trim();
   if(v === "" || isNaN(Number(v))){ $("cantidadReal").focus(); return false; }
+  // El lector físico escribe el código en este campo si se escanea antes de guardar
+  if(/^\d{8,}$/.test(v)){
+    $("cantidadReal").value = "";
+    alert("Eso parece un código de barras, no una cantidad.\nEscribe la cantidad contada y guarda antes de escanear el siguiente.");
+    $("cantidadReal").focus(); return false;
+  }
   const linea = {...pendiente, real: Number(v), hora: new Date().toISOString(), quien};
   conteo = conteo.filter(c=>c.codigo !== pendiente.codigo);
   conteo.push(linea);
@@ -1121,6 +1169,7 @@ async function generarPlantilla(){
 }
 
 let claveAdmin = "";
+try{ if(localStorage.getItem("admin") === VERSION) claveAdmin = localStorage.getItem("clave_admin") || ""; }catch(e){}
 async function borrarConteos(codigos, nombre, yaConfirmado){
   const url = apiUrl();
   if(!url) return alert("Falta configurar la URL de Apps Script.");
@@ -1195,11 +1244,12 @@ async function entrar(){
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
       body: JSON.stringify({accion:"clave", clave:c.trim()})});
-    const d = await r.json();
+    const d = leerRespuesta(await r.text());
     if(!d.ok) return alert("Clave incorrecta.");
     claveAdmin = c.trim();
+    guardar("clave_admin", claveAdmin);
     guardar("admin", VERSION);
-    pedirQuien(true);
+    pedirQuien(false);
     irMenu("principal");
   }catch(e){ alert("No se pudo validar la clave: " + e.message); }
 }
@@ -1213,8 +1263,10 @@ function pedirClave(){
   const c = prompt("Clave de administrador:");
   if(c === null) return null;
   claveAdmin = c.trim();
+  guardar("clave_admin", claveAdmin);
   return claveAdmin;
 }
+function olvidarClave(){ claveAdmin = ""; guardar("clave_admin", ""); }
 /* Convierte la respuesta de Apps Script en datos; si vino una página de error, saca el mensaje */
 function leerRespuesta(texto){
   try{ return JSON.parse(texto); }
@@ -1234,7 +1286,7 @@ async function postAdmin(cuerpo){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
     body: JSON.stringify(Object.assign({}, cuerpo, {clave, quien}))});
   const d = leerRespuesta(await r.text());
-  if(!d.ok){ if(/clave|pin/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
+  if(!d.ok){ if(/clave incorrecta|pin incorrecto/i.test(d.error || "")) olvidarClave(); throw new Error(d.error || "error"); }
   return d;
 }
 
@@ -1264,7 +1316,7 @@ async function cargarKpis(actualizar){
     const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=kpis&pin=" + encodeURIComponent(clave) +
       (actualizar ? "&actualizar=1" : "") + "&t=" + Date.now(), {cache:"no-store"});
     const d = leerRespuesta(await r.text());
-    if(!d.ok){ if(/pin|clave/i.test(d.error || "")) claveAdmin = ""; throw new Error(d.error || "error"); }
+    if(!d.ok){ if(/clave incorrecta|pin incorrecto/i.test(d.error || "")) olvidarClave(); throw new Error(d.error || "error"); }
     kpis = d;
     guardar("kpis", JSON.stringify(d));
     msg.textContent = "";
@@ -1488,6 +1540,14 @@ $("btnVolverFijos").addEventListener("click", () => {
 
 /* ---------- Llamadas sin clave (proveedores, compras, pagos) ---------- */
 async function postApp(cuerpo, msTimeout){
+  try{ return await postAppUnaVez(cuerpo, msTimeout); }
+  catch(e){
+    if(!/Apps Script devolvió un error|Sin conexión|otra operación/.test(e.message)) throw e;
+    await new Promise(r => setTimeout(r, 2000));
+    return await postAppUnaVez(cuerpo, msTimeout);
+  }
+}
+async function postAppUnaVez(cuerpo, msTimeout){
   const url = apiUrl();
   if(!url) throw new Error("Falta configurar la URL de Apps Script.");
   const ctrl = new AbortController();
@@ -1514,12 +1574,19 @@ function aplicarPendientes(lista){
   Object.keys(pend).forEach(nit => { const p = lista.find(x => x.nit === nit); if(p) Object.assign(p, pend[nit]); });
   return lista;
 }
-async function enviarPendientes(){
+let enviandoPend = null;
+function enviarPendientes(){
+  if(!enviandoPend) enviandoPend = enviarPendientesAhora().finally(() => { enviandoPend = null; });
+  return enviandoPend;
+}
+async function enviarPendientesAhora(){
   const pend = provPendientes();
   for(const nit of Object.keys(pend)){
     try{
       await postApp({accion:"proveedor_guardar", proveedor: Object.assign({nit}, pend[nit])}, 45000);
-      const p2 = provPendientes(); delete p2[nit]; guardar("prov_pendientes", JSON.stringify(p2));
+      // solo se borra si nadie lo cambió mientras se enviaba
+      const p2 = provPendientes();
+      if(JSON.stringify(p2[nit]) === JSON.stringify(pend[nit])){ delete p2[nit]; guardar("prov_pendientes", JSON.stringify(p2)); }
     }catch(e){
       provAviso("No se pudo guardar en Drive: " + e.message + " · se reintentará", true);
       return false;
@@ -1667,7 +1734,11 @@ function pintarProveedor(){
     ${wa ? `<div class="acciones" style="margin:0"><a class="sec" style="text-align:center;text-decoration:none" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ""))}">Llamar</a>
       <a class="sec" style="text-align:center;text-decoration:none" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a></div>` : ""}
     <div class="campo">Días que pasa a tomar pedido${chipsDias("pvDias", p.dias)}</div>
-    <div class="seg" id="pvFrec" style="background:var(--verde)">${segFrec}</div>
+    <button class="chip" id="pvMas" style="text-transform:none;align-self:flex-start">${p.masAbierto ? "− Menos opciones" : "+ Más opciones"}</button>
+    <div id="pvMasCaja" style="display:${p.masAbierto ? "flex" : "none"};flex-direction:column;gap:10px">
+      <div class="campo">Cada cuánto pasa<div class="seg" id="pvFrec" style="background:var(--verde)">${segFrec}</div></div>
+      ${campo("pvMinimo", "Pedido mínimo ($)", p.pedido_minimo ? pesos(p.pedido_minimo) : "", 'inputmode="numeric" placeholder="0 = sin mínimo"')}
+    </div>
   </div>
   <div class="bloque" style="display:flex;flex-direction:column;gap:10px">
     <h3 style="margin:0">Repartidor <small>trae la mercancía y cobra</small></h3>
@@ -1676,11 +1747,18 @@ function pintarProveedor(){
   </div>`;
   if(!p.nuevo){
     h += `<div class="bloque"><h3>Facturas <small>${pend.length ? `<span style="color:#ffd23f">debes ${plata(pend.reduce((s, f) => s + f.total, 0))}</span>` : "al día"}</small></h3>` +
-      ((p.facturas || []).length ? p.facturas.map(f => `<div class="fila-dato" style="align-items:center">
+      ((p.facturas || []).length ? p.facturas.filter((f, i) => p.todasFacturas || i < 3 || !f.pagada).map(f => `<div class="fila-dato" style="align-items:center">
         <span>${esc(f.factura)}<small style="display:block;opacity:.65">${fechaTxt(f.fecha)}${f.pagada && f.fecha_pago ? " · pagada " + fechaTxt(f.fecha_pago) : ""}</small></span>
         <span style="display:flex;align-items:center;gap:10px"><b>${plata(f.total)}</b>
         <button class="sw${f.pagada ? " on" : ""} pv-pagar" data-id="${esc(f.id)}" style="min-width:5.8em">${f.pagada ? "Pagada" : "Pagar"}</button></span></div>`).join("")
-        : '<p class="nota" style="margin:0">Sin facturas registradas en Siigo. Aparecen al importar el XML o crear la compra.</p>') + `</div>`;
+        : '<p class="nota" style="margin:0">Sin facturas registradas en Siigo. Aparecen al importar el XML o crear la compra.</p>') +
+      (() => {
+        const todas = (p.facturas || []).length;
+        const visibles = (p.facturas || []).filter((f, i) => p.todasFacturas || i < 3 || !f.pagada).length;
+        if(todas <= 3 && !p.todasFacturas) return "";
+        if(p.todasFacturas) return todas > 3 ? `<button class="chip" id="pvVerFacturas" style="text-transform:none;margin-top:8px">− Ver menos</button>` : "";
+        return todas > visibles ? `<button class="chip" id="pvVerFacturas" style="text-transform:none;margin-top:8px">+ Ver ${todas - visibles} más</button>` : "";
+      })() + `</div>`;
     if((p.pedidos || []).length){
       h += `<div class="bloque"><h3>Últimos pedidos</h3>` + p.pedidos.map(x => `<details class="alerta" style="margin-bottom:6px"><summary>
         <span>${fechaTxt(x.fecha_pedido)}${x.llegada ? " → llega " + fechaTxt(x.llegada) : ""}</span><b>${plata(x.valor)}</b></summary>
@@ -1712,6 +1790,14 @@ $("provFicha").addEventListener("click", async e => {
     }catch(err){ alert("No se pudo marcar: " + err.message); }
     leerFichaProveedor(); pintarProveedor(); return;
   }
+  if(e.target.closest("#pvMas")){
+    provSel.masAbierto = !provSel.masAbierto;
+    $("pvMasCaja").style.display = provSel.masAbierto ? "flex" : "none";
+    $("pvMas").textContent = provSel.masAbierto ? "− Menos opciones" : "+ Más opciones";
+    return;
+  }
+  const ver = e.target.closest("#pvVerFacturas");
+  if(ver){ provSel.todasFacturas = !provSel.todasFacturas; const sc = $("provFicha").scrollTop; leerFichaProveedor(); pintarProveedor(); $("provFicha").scrollTop = sc; return; }
   const ab = e.target.closest("#pvAbastos button");
   const dia = e.target.closest("#pvDias .chip");
   const diaE = e.target.closest("#pvDiasEnt .chip");
@@ -2214,7 +2300,7 @@ function pintarPedido(){
   $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}El repartidor lo trae el <b>${fechaTxt(f.llega)}</b>${
     prov.dias_entrega ? "" : " (sin días de entrega)"} · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar proveedor</a>${
     prov.pendiente ? `<br><span style="color:#ffd23f">Al recibir, paga ${plata(prov.pendiente)}${pend.length ? " (" + pend.map(x => esc(x.factura)).join(", ") + ")" : ""}</span>` : ""}`;
-  $("btnPdEnviar").textContent = "Enviar por WhatsApp";
+  $("btnPdEnviar").textContent = wa ? "WhatsApp a " + (prov.contacto ? prov.contacto.split(" ")[0] : "vendedor") : "WhatsApp al vendedor";
   $("pdResumen").innerHTML = `
     <div class="caja"><b>${plata(r.total)}</b><span>${r.presupuesto ? "de " + plata(r.presupuesto) : "estimado sin IVA"}</span></div>
     <div class="caja"><b>${r.dentro.length}</b><span>productos</span></div>
@@ -2392,6 +2478,16 @@ $("prodFicha").addEventListener("click", e => {
 $("btnVolverProducto").addEventListener("click", () => abrirLista(false));
 $("btnProdPrecio").addEventListener("click", () => { if(prodSel) mostrarItem(prodSel, "lista"); });
 
+
+/* Campos de fecha: tocar en cualquier parte del recuadro abre el calendario */
+document.addEventListener("click", e => {
+  const caja = e.target.closest(".fecha-campo"); if(!caja) return;
+  e.preventDefault();
+  const inp = caja.querySelector("input[type=date]"); if(!inp) return;
+  try{ if(inp.showPicker){ inp.showPicker(); return; } }catch(x){}
+  inp.style.pointerEvents = "auto"; inp.focus(); inp.click();
+  setTimeout(() => { inp.style.pointerEvents = "none"; }, 500);
+});
 /* ---------- Eventos de KPIs ---------- */
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
 $("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
@@ -2563,7 +2659,7 @@ $("btnForzar").addEventListener("click", async ()=>{
 });
 $("btnModoCliente").addEventListener("click", ()=>{
   if(!confirm("¿Dejar este celular en modo cliente?\n\nPara volver a entrar se pedirá la clave.")) return;
-  guardar("admin", ""); claveAdmin = "";
+  guardar("admin", ""); guardar("clave_admin", ""); claveAdmin = "";
   inicio();
 });
 $("btnCambiarQuien").addEventListener("click", ()=>{
