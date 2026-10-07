@@ -150,6 +150,14 @@
   .dato b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;line-height:1.05;
     color:var(--amarillo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dato .sub{font-size:.8rem;opacity:.85}
+  .hoja{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:flex-end}
+  .hoja[hidden]{display:none}
+  .hoja-caja{background:var(--verde2);width:100%;border-radius:16px 16px 0 0;padding:18px 20px calc(18px + env(safe-area-inset-bottom,0px));
+    display:flex;flex-direction:column;gap:10px;font-family:"Barlow Condensed",sans-serif}
+  .hoja-caja h3{font-weight:800;font-size:1.35rem}
+  .hoja-op{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;border:0;border-radius:10px;
+    padding:12px 14px;background:var(--verde);color:var(--papel);font:600 1.05rem "Barlow",sans-serif;cursor:pointer}
+  .hoja-op small{font-weight:500;font-size:.85rem;opacity:.75}
   .sel-hora{border:0;border-radius:8px;padding:9px 10px;font:500 1rem "Barlow",sans-serif;background:var(--papel);color:var(--tinta);width:100%}
   .sube{color:#4fd6a8;font-style:normal;font-weight:600}.baja{color:#ff9a86;font-style:normal;font-weight:600}
   .fila-dato{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
@@ -289,6 +297,15 @@
   <div class="chips" id="chips"></div>
   <div class="items" id="items"></div>
 </section>
+
+<!-- ============ HOJA DE OPCIONES ============ -->
+<div id="hoja" class="hoja" hidden>
+  <div class="hoja-caja">
+    <h3 id="hojaTitulo" style="margin:0 0 4px"></h3>
+    <div id="hojaOpciones" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button class="sec" id="hojaCancelar" style="margin-top:6px">Cancelar</button>
+  </div>
+</div>
 
 <!-- ============ PRODUCTO (desde el catálogo) ============ -->
 <section class="pantalla" id="producto">
@@ -462,12 +479,12 @@
   <div class="acciones"><button class="ppal" id="btnProvGuardar">Guardar</button></div>
 </section>
 
-<input id="entrada" inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
+<input id="entrada" inputmode="none" virtualkeyboardpolicy="manual" autocomplete="off" autocorrect="off" spellcheck="false" aria-hidden="true" tabindex="-1">
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.45 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycby60Za2jKdEdFpD9rXOuSi-hifSn6MUSugEbHRS1FxvIa3T4LiCTDw1po0D631ELbD_/exec";
+const VERSION = "v1.46 · 7-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -504,7 +521,11 @@ const normal=t=>String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f
 function ir(id){
   document.querySelectorAll(".pantalla").forEach(p=>p.classList.toggle("activa", p.id===id));
   const escribible = ESCRIBIBLES.includes(id);
-  if(!escribible) setTimeout(()=>entrada.focus({preventScroll:true}),50);
+  if(!escribible){
+    const ae = document.activeElement;
+    if(ae && ae !== entrada && ae.blur) ae.blur();
+    setTimeout(enfocarLector, 50);
+  }
 }
 
 /* Fechas: siempre día-mes-año */
@@ -2467,7 +2488,7 @@ $("pdLista").addEventListener("click", e => {
   guardar("pedido_todos_" + pdNit, leer("pedido_todos_" + pdNit) === "1" ? "0" : "1");
   pintarPedido();
 }, true);
-function textoPedido(conPrecios){
+function textoPedido(conPrecios, sinNombre){
   const r = pdCalc, prov = provPorNit()[pdNit], f = r.fechas;
   const lin = [];
   if(conPrecios){
@@ -2475,7 +2496,8 @@ function textoPedido(conPrecios){
       `Estimado ${plata(r.total)} sin IVA`, "");
     r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}${it.costo ? " · ~" + plata(it.sub) : ""}`));
   }else{
-    lin.push(`Hola${prov.contacto ? " " + prov.contacto.split(" ")[0] : ""}, buen día. Este es el pedido de *Edumerca 122*` +
+    const nombre = sinNombre ? "" : prov.contacto;
+    lin.push(`Hola${nombre ? " " + nombre.split(" ")[0] : ""}, buen día. Este es el pedido de *Edumerca 122*` +
       `${difDias(hoyISO(), f.ida) > 0 ? " del " + fechaLarga(f.ida) : ""}:`, "");
     r.dentro.forEach(it => lin.push(`• ${num(it.cant)} × ${it.nombre}`));
     lin.push("", "Muchas gracias.");
@@ -2494,24 +2516,59 @@ async function registrarPedido(silencioso){
     return true;
   }catch(e){ if(!silencioso) alert("No se pudo registrar: " + e.message); return false; }
 }
+/* Hoja de opciones genérica: elegir(titulo, [{t, sub, fn}]) */
+function elegir(titulo, opciones){
+  $("hojaTitulo").textContent = titulo;
+  $("hojaOpciones").innerHTML = "";
+  opciones.forEach(o => {
+    const b = document.createElement("button");
+    b.className = "hoja-op";
+    b.innerHTML = esc(o.t) + (o.sub ? `<small>${esc(o.sub)}</small>` : "");
+    b.addEventListener("click", () => { $("hoja").hidden = true; o.fn(); });
+    $("hojaOpciones").appendChild(b);
+  });
+  $("hoja").hidden = false;
+}
+$("hojaCancelar").addEventListener("click", () => { $("hoja").hidden = true; });
+$("hoja").addEventListener("click", e => { if(e.target.id === "hoja") $("hoja").hidden = true; });
+
+function abrirWa(numero, texto){
+  const url = numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texto)}` : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  if(!window.open(url, "_blank")) location.href = url;
+}
+const telBonito = t => { const d = String(t || "").replace(/\D/g, "").replace(/^57(?=3\d{9}$)/, ""); return d.length === 10 ? d.replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3") : d; };
+function pedirNumero(mensaje){
+  const n = prompt(mensaje, "");
+  if(n === null) return null;
+  const wa = telWa(n);
+  if(wa.length < 12){ alert("Ese número no parece un celular válido (10 dígitos)."); return null; }
+  return {wa, n: n.replace(/[^\d+ ]/g, "")};
+}
+
+/* A quién se manda el pedido: vendedor, vendedor de reemplazo o cualquier contacto */
 $("btnPdEnviar").addEventListener("click", () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
   const prov = provPorNit()[pdNit];
-  let wa = telWa(prov.telefono);
-  if(!wa){
-    const n = prompt(`No tengo el celular del vendedor de ${prov.nombre}.\nEscríbelo (10 dígitos) y queda guardado:`, "");
-    if(n === null) return;
-    wa = telWa(n);
-    if(wa.length < 12) return alert("Ese número no parece un celular válido.");
-    const datos = {telefono: n.replace(/[^\d+ ]/g, "")};
+  const wa = telWa(prov.telefono);
+  const reemplazo = leer("pedido_reemplazo_" + pdNit) || "";
+  const enviar = (numero, sinNombre) => { registrarPedido(true); abrirWa(numero, textoPedido(false, sinNombre)); };
+  const ops = [];
+  if(wa) ops.push({t: "💬 Vendedor" + (prov.contacto ? ": " + prov.contacto : ""), sub: telBonito(prov.telefono), fn: () => enviar(wa, false)});
+  else ops.push({t: "💬 Vendedor (guardar su celular)", sub: "Queda guardado en el proveedor", fn: () => {
+    const r = pedirNumero(`Celular del vendedor de ${prov.nombre}:`); if(!r) return;
+    const datos = {telefono: r.n};
     const pend = provPendientes(); pend[prov.nit] = Object.assign({}, pend[prov.nit] || {}, datos);
-    guardar("prov_pendientes", JSON.stringify(pend));
-    reflejarProveedor(prov.nit, datos);
-    enviarPendientes();
-  }
-  registrarPedido(true);
-  const url = `https://wa.me/${wa}?text=${encodeURIComponent(textoPedido(false))}`;
-  if(!window.open(url, "_blank")) location.href = url;
+    guardar("prov_pendientes", JSON.stringify(pend)); reflejarProveedor(prov.nit, datos); enviarPendientes();
+    enviar(r.wa, false);
+  }});
+  if(reemplazo) ops.push({t: "🔁 Reemplazo anterior", sub: telBonito(reemplazo), fn: () => enviar(reemplazo, true)});
+  ops.push({t: "🔁 Vendedor de reemplazo", sub: "Escribir el número de quien vino hoy", fn: () => {
+    const r = pedirNumero(`Celular del vendedor de reemplazo de ${prov.nombre}:`); if(!r) return;
+    guardar("pedido_reemplazo_" + pdNit, r.wa);
+    enviar(r.wa, true);
+  }});
+  ops.push({t: "📇 Elegir contacto en WhatsApp", sub: "Abre WhatsApp para escoger a quién", fn: () => enviar("", true)});
+  elegir("Enviar pedido a…", ops);
 });
 $("btnPdRegistrar").addEventListener("click", async () => {
   if(!pdCalc || !pdCalc.dentro.length) return alert("El pedido está vacío.");
@@ -2799,10 +2856,17 @@ entrada.addEventListener("keydown", async e=>{
   if(escaner) await cerrarCamara();
   if(enConteo) pedirCantidad(v); else mostrar(v);
 });
+/* El lector físico escribe en un campo oculto. Se le devuelve el foco cada segundo,
+   salvo que el usuario esté usando una lista, un campo o un selector de la pantalla. */
+function enfocarLector(){
+  const ae = document.activeElement;
+  if(ae && ae !== entrada && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  entrada.focus({preventScroll:true});
+  try{ if(navigator.virtualKeyboard) navigator.virtualKeyboard.hide(); }catch(e){}
+}
 setInterval(()=>{
   const act = document.querySelector(".pantalla.activa");
-  if(act && !ESCRIBIBLES.includes(act.id) && document.activeElement !== entrada)
-    entrada.focus({preventScroll:true});
+  if(act && !ESCRIBIBLES.includes(act.id) && document.activeElement !== entrada) enfocarLector();
 }, 1000);
 
 /* ---------- Ajustes (5 toques en el logo) ---------- */
@@ -2849,7 +2913,16 @@ $("btnCambiarUrl").addEventListener("click", ()=>{
   const u = prompt("URL de la web app de precios:", apiUrl());
   if(u !== null){ guardar("api_url", u.trim()); descargarCatalogo(); }
 });
+function soltarTeclado(){
+  const ae = document.activeElement;
+  if(ae && ae !== entrada && ae.blur) ae.blur();       // nada queda escribiendo solo al volver a la app
+  try{ if(navigator.virtualKeyboard) navigator.virtualKeyboard.hide(); }catch(e){}
+  const act = document.querySelector(".pantalla.activa");
+  if(act && !ESCRIBIBLES.includes(act.id)) enfocarLector();
+}
+window.addEventListener("pageshow", soltarTeclado);
 document.addEventListener("visibilitychange", ()=>{
+  if(!document.hidden) soltarTeclado();
   if(document.hidden && escaner){
     const enConteo = modoCamara === "conteo";
     cerrarCamara().then(()=> enConteo ? abrirConteo() : inicio());
@@ -2860,6 +2933,7 @@ window.addEventListener("online", descargarCatalogo);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 
 /* ---------- Arranque ---------- */
+setTimeout(soltarTeclado, 100);
 cargarConteo();
 try{ const c = leer("catalogo"); if(c) cargarEnMapa(JSON.parse(c)); }catch(e){}
 descargarCatalogo();
