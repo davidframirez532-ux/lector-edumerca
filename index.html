@@ -467,7 +467,7 @@
 <script>
 /* =========== CONFIGURACIÓN =========== */
 const VERSION = "v1.45 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwdtOgfSDyCsZUFEFhAntxb4Y2u8KgWWVHBd9w1B5741F40qcanssxyiwOqWWDeUhIO/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1470,13 +1470,15 @@ function bloqueAlertas(k){
 function bloqueDetalle(det, dia){
   const cats = det.por_categoria || [], top = det.top_productos || [], horas = det.por_hora || [];
   if(!cats.length && !top.length)
-    return `<div class="bloque"><h3>Detalle <small>${dia}</small></h3><p class="nota" style="margin:0">Sin ventas registradas ${dia}.</p></div>`;
+    return `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Sin ventas registradas ${dia}${
+      dia === "hoy" ? ". Si ya se vendió, toca ↻ para traer las ventas de hoy, o mira <b>Ayer</b>." : "."}</p></div>`;
   const maxC = Math.max(...cats.map(c => c.ventas), 1);
   let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>` + cats.map(c =>
     `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
       <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null ? ` · ${c.margen_pct}%` : ""}</b></div>
       <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
-  if(horas.length) h += `<div class="bloque" id="bloqueHoras">${htmlHoras(horas, dia)}</div>`;
+  h += horas.length ? `<div class="bloque" id="bloqueHoras">${htmlHoras(horas, dia)}</div>`
+    : `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Las ventas de este día no traen la hora. Toca ↻ para recalcular.</p></div>`;
   h += `<div class="bloque"><h3>Más vendidos <small>${dia}</small></h3>` + top.map((p, i) =>
     `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)} <small style="opacity:.65">× ${num(p.unidades)}</small></span>
      <b>${plata(p.ventas)}</b></div>`).join("") + `</div>`;
