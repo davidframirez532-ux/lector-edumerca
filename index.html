@@ -150,6 +150,7 @@
   .dato b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;line-height:1.05;
     color:var(--amarillo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .dato .sub{font-size:.8rem;opacity:.85}
+  .sel-hora{border:0;border-radius:8px;padding:9px 10px;font:500 1rem "Barlow",sans-serif;background:var(--papel);color:var(--tinta);width:100%}
   .sube{color:#4fd6a8;font-style:normal;font-weight:600}.baja{color:#ff9a86;font-style:normal;font-weight:600}
   .fila-dato{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
     border-bottom:1px solid rgba(251,250,245,.12);font-size:.95rem;line-height:1.25}
@@ -364,8 +365,8 @@
     <button class="sec" id="btnKpiActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
     <button class="sec" id="btnVolverKpis">Volver</button></div>
   <div class="seg">
-    <button id="segHoy" aria-pressed="false">Hoy</button>
-    <button id="segAyer" aria-pressed="true">Ayer</button>
+    <button id="segHoy" aria-pressed="true">Hoy</button>
+    <button id="segAyer" aria-pressed="false">Ayer</button>
   </div>
   <p id="kpiEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
   <div class="panel" id="kpiPanel"></div>
@@ -466,7 +467,7 @@
 <script>
 /* =========== CONFIGURACIÓN =========== */
 const VERSION = "v1.45 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbwyOfBvAl_PAfk2mJhamcmjt6gqVlpz6qJcI7hQUT2xJdyMBf9FZ4q384XCwIXftYxo/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1292,7 +1293,7 @@ async function postAdmin(cuerpo){
 }
 
 /* ---------- KPIs ---------- */
-let kpis = null, diaKpi = "ayer", cargandoKpis = false;
+let kpis = null, diaKpi = "hoy", cargandoKpis = false;
 function abrirKpis(){
   clearTimeout(tLista);
   try{ kpis = JSON.parse(leer("kpis") || "null"); }catch(e){ kpis = null; }
@@ -1355,16 +1356,35 @@ function pintarKpis(){
              d.margen_pct == null ? "sin costos de compra aún" : d.margen_pct + "% · cubre " + d.cobertura_costos_pct + "% de la venta")}
     </div>
     ${d.devoluciones ? `<p class="nota">Devoluciones: ${plata(d.devoluciones)}</p>` : ""}</div>`;
+  h += bloqueUtilidadBruta(k);
   h += bloqueComparacion("Últimos 7 días", k.semana, "vs. 7 días anteriores");
   h += bloqueComparacion("Mes a la fecha", k.mes, "vs. mismo corte del mes pasado");
   h += bloqueTendencia(k.tendencia_30d);
   h += bloqueTopVentas(k.reposicion);
   h += bloqueUtilidad(k.utilidad);
+  h += `<div class="bloque" id="bloqueHist">${htmlHistorial(k.historial)}</div>`;
   h += bloqueAlertas(k);
   h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer");
   h += `<p class="nota" style="text-align:center">Calculado ${esc(fechaHora(k.generado))}</p>`;
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
+}
+/* Utilidad bruta = ventas sin IVA − costo de lo vendido (antes de gastos fijos) */
+function bloqueUtilidadBruta(k){
+  const s = (k.semana || {}).actual || {}, sa = (k.semana || {}).anterior || {};
+  const m = (k.mes || {}).actual || {}, ma = (k.mes || {}).anterior || {};
+  const varM = (a, b) => b ? varPct(Math.round((a / b - 1) * 1000) / 10) : "";
+  const pct = x => x.margen_pct != null ? x.margen_pct + "% de margen" : "";
+  const cob = Math.min(s.cobertura_costos_pct ?? 100, m.cobertura_costos_pct ?? 100);
+  const sinCostos = !s.margen && !m.margen;
+  return `<div class="bloque" style="border:2px solid var(--amarillo)"><h3>Utilidad bruta <small>antes de gastos fijos</small></h3>
+    <div class="grilla">
+      ${dato("Últimos 7 días", sinCostos ? "—" : plata(s.margen), [pct(s), sa.margen ? varM(s.margen, sa.margen) + ` <span style="opacity:.7">antes ${plata(sa.margen)}</span>` : ""].filter(Boolean).join(" · "))}
+      ${dato("Mes a la fecha", sinCostos ? "—" : plata(m.margen), [pct(m), ma.margen ? varM(m.margen, ma.margen) + ` <span style="opacity:.7">antes ${plata(ma.margen)}</span>` : ""].filter(Boolean).join(" · "))}
+    </div>
+    <p class="nota">${sinCostos ? "Aparece cuando registres facturas de compra en Siigo: sin costo no se puede calcular la ganancia."
+      : cob < 80 ? `⚠ Solo el ${Math.round(cob)}% de lo vendido tiene costo registrado: la utilidad real es mayor a la que se ve. Sube más facturas de compra para completarla.`
+      : "Ventas sin IVA menos lo que costó la mercancía vendida."}</p></div>`;
 }
 function bloqueComparacion(titulo, c, sub){
   if(!c) return "";
@@ -1417,13 +1437,17 @@ function bloqueAlertas(k){
   const lista = (arr, fmt) => arr && arr.length ? arr.map(fmt).join("") : '<p class="nota" style="margin:0">Nada por aquí.</p>';
   const mas = (n, m) => n > m ? `<p class="nota">… y ${n - m} más</p>` : "";
   const det = (titulo, n, clase, cuerpo) =>
-    `<details class="alerta"${n && clase === "" ? " open" : ""}><summary><span>${titulo}</span>
+    `<details class="alerta"><summary><span>${titulo}</span>
       <span class="num-alerta ${n ? clase : "cero"}">${n}</span></summary>${cuerpo}</details>`;
   const rep = r.reponer_ya || [], sem = r.esta_semana || [];
   let h = `<div class="bloque"><h3>Alertas</h3><div style="display:flex;flex-direction:column;gap:8px">`;
   h += det("Reponer ya", rep.length, "", lista(rep, x => fila(x.nombre, `${num(x.existencias ?? 0)} und · ${num(x.dias_cobertura)} días`)));
   h += det("Reponer esta semana", sem.length, "amarillo", lista(sem, x => fila(x.nombre, `${num(x.existencias ?? 0)} und · ${num(x.dias_cobertura)} días`)));
-  h += det("Agotados", inv.n_agotados || 0, "", lista(inv.agotados, x => fila(x.nombre, esc(x.categoria))) + mas(inv.n_agotados, (inv.agotados || []).length));
+  h += det("Agotados que sí se venden", inv.n_agotados || 0, "",
+    lista(inv.agotados, x => fila(x.nombre, x.ultima_venta ? "vendido " + fechaTxt(x.ultima_venta) : esc(x.categoria))) + mas(inv.n_agotados, (inv.agotados || []).length));
+  if(inv.n_agotados_sin_venta) h += det("Agotados sin ventas en 90 días", inv.n_agotados_sin_venta, "gris",
+    `<p class="nota" style="margin:0 0 6px">No se han vendido en 3 meses: probablemente descontinuados o que ya no se piden. Si no los vas a volver a traer, inactívalos en Siigo y dejarán de salir.</p>` +
+    lista(inv.agotados_sin_venta, x => fila(x.nombre, esc(x.categoria))) + mas(inv.n_agotados_sin_venta, (inv.agotados_sin_venta || []).length));
   h += det("Bajo el mínimo", inv.n_bajo_minimo || 0, "amarillo", lista(inv.bajo_minimo, x => fila(x.nombre, `${num(x.stock)} / mín. ${num(x.minimo)}`)) + mas(inv.n_bajo_minimo, (inv.bajo_minimo || []).length));
   const baja = r.baja_rotacion || [];
   h += det("Baja rotación · no pedir más", baja.length, "gris",
@@ -1452,18 +1476,68 @@ function bloqueDetalle(det, dia){
     `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
       <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null ? ` · ${c.margen_pct}%` : ""}</b></div>
       <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
-  if(horas.length){
-    const maxH = Math.max(...horas.map(x => x.ventas), 1);
-    h += `<div class="bloque"><h3>Por hora <small>${dia}</small></h3>` + horas.map(x =>
-      `<div style="display:grid;grid-template-columns:3.4em 1fr 6.5em;align-items:center;gap:8px;font-size:.9rem;padding:3px 0">
-        <span>${x.hora}:00</span><div class="barra-h" style="margin:0;width:${Math.max(2, x.ventas / maxH * 100)}%"></div>
-        <b style="text-align:right;font-weight:600">${plata(x.ventas)}</b></div>`).join("") + `</div>`;
-  }
+  if(horas.length) h += `<div class="bloque" id="bloqueHoras">${htmlHoras(horas, dia)}</div>`;
   h += `<div class="bloque"><h3>Más vendidos <small>${dia}</small></h3>` + top.map((p, i) =>
     `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)} <small style="opacity:.65">× ${num(p.unidades)}</small></span>
      <b>${plata(p.ventas)}</b></div>`).join("") + `</div>`;
   return h;
 }
+/* Ventas por hora: las 3 mejores, y el gráfico del día completo con rango ajustable */
+let horasAbierto = false, horaDesde = 0, horaHasta = 23;
+function htmlHoras(horas, dia){
+  const mejores = horas.slice().sort((a, b) => b.ventas - a.ventas).slice(0, 3);
+  let h = `<h3>Mejores horas <small>${dia}</small></h3>` + mejores.map((x, i) =>
+    `<div class="fila-dato"><span>${["🥇","🥈","🥉"][i]} ${x.hora}:00 – ${x.hora + 1}:00<small style="display:block;opacity:.65">${x.transacciones || 0} tickets</small></span><b>${plata(x.ventas)}</b></div>`).join("");
+  h += `<button class="chip" data-horas="toggle" style="margin-top:8px;text-transform:none">${horasAbierto ? "− Ocultar" : "+ Ver"} todas las horas</button>`;
+  if(!horasAbierto) return h;
+  const mapa = {}; horas.forEach(x => mapa[x.hora] = x);
+  const conDatos = horas.map(x => x.hora);
+  const d0 = Math.max(0, Math.min(horaDesde, 23)), d1 = Math.max(d0, Math.min(horaHasta, 23));
+  const rango = []; for(let x = d0; x <= d1; x++) rango.push({hora: x, ventas: (mapa[x] || {}).ventas || 0, t: (mapa[x] || {}).transacciones || 0});
+  const W = 320, H = 150, PL = 8, PR = 8, PT = 14, PB = 22;
+  const max = Math.max(...rango.map(r => r.ventas), 1);
+  const X = i => PL + (rango.length === 1 ? (W - PL - PR) / 2 : i * (W - PL - PR) / (rango.length - 1));
+  const Y = v => PT + (H - PT - PB) * (1 - v / max);
+  const pts = rango.map((r, i) => `${X(i).toFixed(1)},${Y(r.ventas).toFixed(1)}`).join(" ");
+  const paso = rango.length > 12 ? 3 : rango.length > 6 ? 2 : 1;
+  const opts = sel => Array.from({length: 24}, (_, x) => `<option value="${x}"${x === sel ? " selected" : ""}>${x}:00</option>`).join("");
+  h += `<div class="fechas" style="margin:10px 0 6px">
+      <label class="campo">Desde<select data-horas="desde" class="sel-hora">${opts(d0)}</select></label>
+      <label class="campo">Hasta<select data-horas="hasta" class="sel-hora">${opts(d1)}</select></label></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+      <button class="chip" data-horas="dia" style="text-transform:none">Todo el día</button>
+      <button class="chip" data-horas="abierto" style="text-transform:none">Solo ${Math.min(...conDatos)}h a ${Math.max(...conDatos) + 1}h</button></div>
+    <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">
+      <line x1="${PL}" x2="${W - PR}" y1="${H - PB}" y2="${H - PB}" stroke="rgba(251,250,245,.25)"/>
+      <polyline points="${pts}" fill="none" stroke="#3fd0c9" stroke-width="2.5" stroke-linejoin="round"/>
+      ${rango.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(r.ventas).toFixed(1)}" r="${r.ventas ? 3.5 : 2}" fill="${r.ventas === max ? "#ffd23f" : "#3fd0c9"}"><title>${r.hora}:00 · ${plata(r.ventas)} · ${r.t} tickets</title></circle>`).join("")}
+      ${rango.map((r, i) => i % paso === 0 ? `<text x="${X(i).toFixed(1)}" y="${H - 6}" font-size="10" fill="rgba(251,250,245,.7)" text-anchor="middle">${r.hora}h</text>` : "").join("")}
+      <text x="${W - PR}" y="10" font-size="10" fill="rgba(251,250,245,.7)" text-anchor="end">máx ${plata(max)}</text>
+    </svg>
+    <p class="nota">Toca un punto para ver el valor. Las horas sin ventas quedan en cero.</p>`;
+  return h;
+}
+
+/* Historial: cómo han ido las semanas y los meses (sale del registro diario en Drive) */
+let histVista = "semanas";
+function htmlHistorial(hst){
+  const filas = ((hst || {})[histVista] || []);
+  const etiqueta = x => histVista === "meses"
+    ? ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][Number(x.periodo.slice(5, 7)) - 1] + " " + x.periodo.slice(0, 4)
+    : "sem. " + dmy(x.periodo).slice(0, 5);
+  let h = `<h3>Historial</h3><div class="seg" style="background:var(--verde);margin-bottom:8px">
+    <button data-hist="semanas" aria-pressed="${histVista === "semanas"}">Semanas</button>
+    <button data-hist="meses" aria-pressed="${histVista === "meses"}">Meses</button></div>`;
+  if(!filas.length) return h + `<p class="nota" style="margin:0">Todavía no hay historial.</p>`;
+  const maxV = Math.max(...filas.map(x => x.ventas), 1);
+  h += filas.map(x => `<div class="fila-dato" style="display:block">
+      <div style="display:flex;justify-content:space-between;gap:8px"><span>${etiqueta(x)}${x.parcial ? ' <small style="opacity:.6">(en curso)</small>' : ""}</span>
+        <b>${plata(x.ventas)}</b></div>
+      <div class="barra-h" style="width:${Math.max(2, x.ventas / maxV * 100)}%"></div>
+      <small style="opacity:.75">utilidad bruta ${x.margen ? plata(x.margen) + (x.margen_pct != null ? " (" + x.margen_pct + "%)" : "") : "—"} · ${num(x.transacciones)} tickets${x.ticket_promedio ? " · prom. " + plata(x.ticket_promedio) : ""}</small></div>`).join("");
+  return h + `<p class="nota">Guardado día a día en EDUMERCA / Kpis / historico_kpis.</p>`;
+}
+
 /* Más vendidos: semana / mes / 3 meses, top 5 / 10 / 20, por unidades o por plata */
 let topDias = "7", topN = 10, topPor = "unidades";
 function bloqueTopVentas(r){
@@ -2555,6 +2629,31 @@ document.querySelectorAll("section.pantalla").forEach(sec => {
 });
 
 /* ---------- Eventos de KPIs ---------- */
+function repintarHoras(){
+  const caja = $("bloqueHoras"); if(!caja || !kpis) return;
+  const det = kpis[diaKpi + "_detalle"] || {};
+  caja.innerHTML = htmlHoras(det.por_hora || [], diaKpi === "hoy" ? "hoy" : "ayer");
+}
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("button[data-horas]"); if(!b) return;
+  const horas = ((kpis || {})[diaKpi + "_detalle"] || {}).por_hora || [];
+  if(b.dataset.horas === "toggle") horasAbierto = !horasAbierto;
+  if(b.dataset.horas === "dia"){ horaDesde = 0; horaHasta = 23; }
+  if(b.dataset.horas === "abierto" && horas.length){ horaDesde = Math.min(...horas.map(x => x.hora)); horaHasta = Math.max(...horas.map(x => x.hora)); }
+  repintarHoras();
+});
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("[data-hist]"); if(!b || !kpis) return;
+  histVista = b.dataset.hist;
+  $("bloqueHist").innerHTML = htmlHistorial(kpis.historial);
+});
+$("kpiPanel").addEventListener("change", e => {
+  const sel = e.target.closest("select[data-horas]"); if(!sel) return;
+  if(sel.dataset.horas === "desde") horaDesde = Number(sel.value);
+  if(sel.dataset.horas === "hasta") horaHasta = Number(sel.value);
+  if(horaHasta < horaDesde) [horaDesde, horaHasta] = [horaHasta, horaDesde];
+  repintarHoras();
+});
 $("kpiPanel").addEventListener("click", e => {
   const b = e.target.closest("[data-top]"); if(!b) return;
   if(b.dataset.top === "dias") topDias = b.dataset.v;
