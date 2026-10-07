@@ -158,6 +158,10 @@
   .hoja-op{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;border:0;border-radius:10px;
     padding:12px 14px;background:var(--verde);color:var(--papel);font:600 1.05rem "Barlow",sans-serif;cursor:pointer}
   .hoja-op small{font-weight:500;font-size:.85rem;opacity:.75}
+  .usuario-linea{margin:0;font-size:.9rem;opacity:.95}
+  .usuario-linea a{color:var(--amarillo)}
+  .fecha-campo.pyp-si{box-shadow:0 0 0 3px #4fd6a8;background:#e3fbf2}
+  .fecha-campo.pyp-no{box-shadow:0 0 0 3px #ff6b5b;background:#ffe5e1}
   .sel-hora{border:0;border-radius:8px;padding:9px 10px;font:500 1rem "Barlow",sans-serif;background:var(--papel);color:var(--tinta);width:100%}
   .sube{color:#4fd6a8;font-style:normal;font-weight:600}.baja{color:#ff9a86;font-style:normal;font-weight:600}
   .fila-dato{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
@@ -313,6 +317,19 @@
   </div>
 </div>
 
+<!-- ============ FORMULARIO CORTO ============ -->
+<div id="formVentana" class="hoja" hidden style="align-items:center">
+  <div class="hoja-caja" style="border-radius:16px;margin:0 auto;width:calc(100% - 40px);max-width:420px;box-sizing:border-box">
+    <h3 id="formTitulo" style="margin:0"></h3>
+    <div id="formCampos" style="display:flex;flex-direction:column;gap:10px"></div>
+    <p id="formError" style="margin:0;color:#ff9a86;font:500 .95rem 'Barlow',sans-serif;min-height:1.2em"></p>
+    <div class="acciones" style="margin:0">
+      <button class="sec" id="formCancelar">Cancelar</button>
+      <button class="ppal" id="formOk" style="flex:2">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ HOJA DE OPCIONES ============ -->
 <div id="hoja" class="hoja" hidden>
   <div class="hoja-caja">
@@ -435,16 +452,14 @@
 <!-- ============ LISTA DE ABASTOS ============ -->
 <section class="pantalla" id="abastos">
   <div class="cabeza"><h2>Lista de abastos</h2><button class="sec" id="btnVolverAbastos">Volver</button></div>
+  <p id="abUsuario" class="usuario-linea"></p>
   <div class="fechas">
     <label class="campo">Voy a comprar el<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="abIda"></span></label>
     <label class="campo">Próxima ida (aprox.)<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="abProx"></span></label>
   </div>
-  <div class="seg" id="abModo" data-modo="libre">
-    <button id="abModoLibre" aria-pressed="true">Sin límite</button>
-    <button id="abModoPres" aria-pressed="false">Con presupuesto</button>
-  </div>
+  <p id="abPyp" style="margin:0;font-size:.9rem;font-weight:600"></p>
   <div class="fechas">
-    <label class="campo" id="abPresWrap" style="display:none">Presupuesto ($)<input id="abPresupuesto" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    <label class="campo">Presupuesto ($)<input id="abPresupuesto" inputmode="numeric" placeholder="Sin límite" autocomplete="off"></label>
     <label class="campo">Días de reserva<input id="abSeguridad" type="number" min="0" max="7" inputmode="numeric"></label>
   </div>
   <p id="abEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center"></p>
@@ -469,6 +484,7 @@
 <!-- ============ PEDIDO A UN PROVEEDOR ============ -->
 <section class="pantalla" id="pedido">
   <div class="cabeza"><h2 id="pdTitulo" style="font-size:1.45rem">Pedido</h2><button class="sec" id="btnVolverPedido">Volver</button></div>
+  <p id="pdUsuario" class="usuario-linea"></p>
   <p id="pdInfo" style="margin:0;font-size:.9rem;opacity:.9"></p>
   <div class="fechas">
     <label class="campo">Pedido para el<span class="fecha-campo"><span class="fecha-txt"></span><input type="date" id="pdIda"></span></label>
@@ -498,8 +514,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.49 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbztIGrrgjlhp_2D9kPRrrabbU-eC62Qs2eQZFlUWZetBSfXjgH6mCwG7NJLZu0GIs72/exec";
+const VERSION = "v1.48 · 7-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxDdJGdQ010f8XYTRzNQx5v_5nortSFSGIZPuZZqENNoAQybJmRO9gDBYYeScF5720/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -2240,12 +2256,12 @@ function abCfg(){
   if(!c.ida || c.ida < hoy) c.ida = hoy;
   if(!c.prox || c.prox <= c.ida) c.prox = sumarDiasISO(c.ida, c.intervalo || 7);
   if(c.seguridad === undefined) c.seguridad = 1;
-  if(!c.modo) c.modo = "libre";
   return c;
 }
 function abGuardarCfg(){
-  const c = {ida: $("abIda").value, prox: $("abProx").value, modo: $("abModo").dataset.modo,
-    presupuesto: Number($("abPresupuesto").value.replace(/\D/g, "")) || 0,
+  const pres = Number($("abPresupuesto").value.replace(/\D/g, "")) || 0;
+  const c = {ida: $("abIda").value, prox: $("abProx").value, modo: pres ? "presupuesto" : "libre",
+    presupuesto: pres,
     seguridad: Number($("abSeguridad").value) || 0};
   if(c.ida && c.prox) c.intervalo = Math.max(1, difDias(c.ida, c.prox));
   guardar("abastos_cfg", JSON.stringify(c));
@@ -2257,20 +2273,14 @@ async function abrirAbastos(){
   ponerFecha("abIda", c.ida); ponerFecha("abProx", c.prox);
   $("abPresupuesto").value = c.presupuesto ? pesos(c.presupuesto) : "";
   $("abSeguridad").value = c.seguridad;
-  abModo(c.modo, true);
   abCambios = leerJSON("abastos_cambios", {});
   ir("abastos");
+  pintarUsuario();
+  cargarAdmins().then(pintarUsuario);
   cmDatos = leerJSON("compras_datos", null);
   pintarAbastos();
   await cargarComprasDatos("abEstado");
   pintarAbastos();
-}
-function abModo(m, sinPintar){
-  $("abModo").dataset.modo = m;
-  $("abModoLibre").setAttribute("aria-pressed", m === "libre");
-  $("abModoPres").setAttribute("aria-pressed", m === "presupuesto");
-  $("abPresWrap").style.display = m === "presupuesto" ? "" : "none";
-  if(!sinPintar){ abGuardarCfg(); pintarAbastos(); }
 }
 function itemsAbastos(){
   const pm = provPorNit();
@@ -2289,6 +2299,7 @@ function itemsAbastos(){
   return out;
 }
 function pintarAbastos(){
+  pintarPyp();
   const box = $("abItems");
   if(!cmDatos){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   const items = itemsAbastos();
@@ -2343,8 +2354,8 @@ function textoAbastos(){
 }
 $("btnAbMensaje").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
-  postApp({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
-  compartirTexto(t);
+  const guardarCopia = () => postApp({accion:"abastos_guardar", tipo:"abastos", ida: abCalc.cfg.ida, texto: t}).catch(() => {});
+  elegir("Enviar lista de abastos a…", opcionesEnvio(t, guardarCopia));
 });
 $("btnAbTxt").addEventListener("click", () => {
   const t = textoAbastos(); if(!t || !abCalc.dentro.length) return alert("La lista está vacía.");
@@ -2367,8 +2378,7 @@ $("abPresupuesto").addEventListener("input", e => {
   const n = Number(e.target.value.replace(/\D/g, "")) || 0;
   e.target.value = n ? pesos(n) : ""; pintarAbastos();
 });
-$("abModoLibre").addEventListener("click", () => abModo("libre"));
-$("abModoPres").addEventListener("click", () => { abModo("presupuesto"); $("abPresupuesto").focus(); });
+
 $("btnVolverAbastos").addEventListener("click", () => irMenu("compras"));
 
 /* ---------- Pedidos sugeridos por proveedor ---------- */
@@ -2478,6 +2488,7 @@ function abrirPedido(nit){
   $("pdPresupuesto").value = pres ? pesos(pres) : "";
   ir("pedido");
   pintarPedido();
+  cargarAdmins().then(pintarUsuario);
   $("pdLista").scrollTop = 0;
 }
 function pintarPedido(){
@@ -2495,6 +2506,7 @@ function pintarPedido(){
   const min = Number(prov.pedido_minimo) || 0;
   const wa = telWa(prov.telefono);
   const pend = prov.facturas_pendientes || [];
+  pintarUsuario();
   $("pdInfo").innerHTML = `${prov.contacto ? "Vendedor: <b>" + esc(prov.contacto) + "</b> · " : ""}El repartidor lo trae el <b>${fechaTxt(f.llega)}</b>${
     prov.dias_entrega ? "" : " (sin días de entrega)"} · <a href="#" id="pdFicha" style="color:var(--amarillo)">editar proveedor</a>${
     prov.pendiente ? `<br><span style="color:#ffd23f">Al recibir, paga ${plata(prov.pendiente)}${pend.length ? " (" + pend.map(x => esc(x.factura)).join(", ") + ")" : ""}</span>` : ""}`;
@@ -2589,12 +2601,11 @@ function abrirWa(numero, texto){
   if(!window.open(url, "_blank")) location.href = url;
 }
 const telBonito = t => { const d = String(t || "").replace(/\D/g, "").replace(/^57(?=3\d{9}$)/, ""); return d.length === 10 ? d.replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3") : d; };
-function pedirNumero(mensaje){
-  const n = prompt(mensaje, "");
-  if(n === null) return null;
-  const wa = telWa(n);
-  if(wa.length < 12){ alert("Ese número no parece un celular válido (10 dígitos)."); return null; }
-  return {wa, n: n.replace(/[^\d+ ]/g, "")};
+async function pedirNumero(mensaje){
+  const r = await pedirForm(mensaje, [{id:"n", label:"Celular (10 dígitos)", inputmode:"tel", placeholder:"300 123 4567",
+    validar: v => telWa(v).length >= 12 || "Ese número no parece un celular válido"}], "Abrir WhatsApp");
+  if(!r) return null;
+  return {wa: telWa(r.n), n: r.n.replace(/[^\d+ ]/g, "")};
 }
 
 /* A quién se manda el pedido: vendedor, vendedor de reemplazo o cualquier contacto */
@@ -2606,20 +2617,22 @@ $("btnPdEnviar").addEventListener("click", () => {
   const enviar = (numero, sinNombre) => { registrarPedido(true); abrirWa(numero, textoPedido(false, sinNombre)); };
   const ops = [];
   if(wa) ops.push({t: "💬 Vendedor" + (prov.contacto ? ": " + prov.contacto : ""), sub: telBonito(prov.telefono), fn: () => enviar(wa, false)});
-  else ops.push({t: "💬 Vendedor (guardar su celular)", sub: "Queda guardado en el proveedor", fn: () => {
-    const r = pedirNumero(`Celular del vendedor de ${prov.nombre}:`); if(!r) return;
+  else ops.push({t: "💬 Vendedor (guardar su celular)", sub: "Queda guardado en el proveedor", fn: async () => {
+    const r = await pedirNumero(`Celular del vendedor de ${prov.nombre}`); if(!r) return;
     const datos = {telefono: r.n};
     const pend = provPendientes(); pend[prov.nit] = Object.assign({}, pend[prov.nit] || {}, datos);
     guardar("prov_pendientes", JSON.stringify(pend)); reflejarProveedor(prov.nit, datos); enviarPendientes();
     enviar(r.wa, false);
   }});
   if(reemplazo) ops.push({t: "🔁 Reemplazo anterior", sub: telBonito(reemplazo), fn: () => enviar(reemplazo, true)});
-  ops.push({t: "🔁 Vendedor de reemplazo", sub: "Escribir el número de quien vino hoy", fn: () => {
-    const r = pedirNumero(`Celular del vendedor de reemplazo de ${prov.nombre}:`); if(!r) return;
+  ops.push({t: "🔁 Vendedor de reemplazo", sub: "Escribir el número de quien vino hoy", fn: async () => {
+    const r = await pedirNumero(`Vendedor de reemplazo de ${prov.nombre}`); if(!r) return;
     guardar("pedido_reemplazo_" + pdNit, r.wa);
     enviar(r.wa, true);
   }});
   ops.push({t: "📇 Elegir contacto en WhatsApp", sub: "Abre WhatsApp para escoger a quién", fn: () => enviar("", true)});
+  // Copia para mí o para otro administrador: con precios, para revisar
+  opcionesInternas(textoPedido(true), null).forEach(o => ops.push(o));
   elegir("Enviar pedido a…", ops);
 });
 $("btnPdRegistrar").addEventListener("click", async () => {
@@ -2738,6 +2751,153 @@ document.querySelectorAll("section.pantalla").forEach(sec => {
   const volver = [...cab.querySelectorAll("button")].pop();
   cab.insertBefore(b, volver || null);
 });
+
+
+/* ---------- Formulario corto (sin diálogos del navegador) ---------- */
+function pedirForm(titulo, campos, okTexto){
+  return new Promise(resolve => {
+    const v = $("formVentana"), err = $("formError"), ok = $("formOk");
+    $("formTitulo").textContent = titulo;
+    ok.textContent = okTexto || "Guardar"; err.textContent = "";
+    $("formCampos").innerHTML = campos.map(c => `<label class="campo">${esc(c.label)}<input id="fc_${c.id}" value="${esc(c.valor || "")}"
+      ${c.inputmode ? `inputmode="${c.inputmode}"` : ""} placeholder="${esc(c.placeholder || "")}" autocomplete="off"
+      style="${c.mayus ? "text-transform:uppercase" : ""}"></label>`).join("");
+    v.hidden = false;
+    setTimeout(() => { const p = $("fc_" + campos[0].id); if(p) p.focus(); }, 80);
+    const cerrar = r => { v.hidden = true; ok.onclick = null; $("formCancelar").onclick = null; resolve(r); };
+    ok.onclick = () => {
+      const r = {};
+      for(const c of campos){
+        const val = $("fc_" + c.id).value.trim();
+        if(c.validar && (val || c.obligatorio)){ const m = c.validar(val); if(m !== true){ err.textContent = m; return; } }
+        r[c.id] = val;
+      }
+      cerrar(r);
+    };
+    $("formCancelar").onclick = () => cerrar(null);
+    $("formCampos").onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); ok.onclick(); } };
+  });
+}
+
+/* ---------- Usuario y administradores (EDUMERCA / Administradores) ---------- */
+let admins = leerJSON("admins", []);
+function misDatos(){ return leerJSON("mis_datos", {}); }
+async function cargarAdmins(){
+  try{
+    const d = await postApp({accion:"admins"}, 30000);
+    admins = d.admins || []; guardar("admins", JSON.stringify(admins));
+    const yo = admins.find(a => normal(a.usuario) === normal(quien));
+    if(yo){
+      const md = misDatos();
+      // lo que haya en Drive llena lo que falte en el celular
+      if(!md.telefono && yo.telefono) md.telefono = yo.telefono;
+      if(!md.placa && yo.placa) md.placa = yo.placa;
+      guardar("mis_datos", JSON.stringify(md));
+    }
+  }catch(e){}
+}
+function pintarUsuario(){
+  const md = misDatos();
+  const txt = `👤 <b>${esc(quien || "sin nombre")}</b>${md.telefono ? " · 📱 " + esc(telBonito(md.telefono)) : ""}${
+    md.placa ? " · 🚗 " + esc(md.placa) : ""} · <a href="#" class="mis-datos">mis datos</a>`;
+  ["abUsuario", "pdUsuario"].forEach(id => { if($(id)) $(id).innerHTML = txt; });
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest(".mis-datos"); if(!a) return;
+  e.preventDefault(); editarMisDatos();
+});
+async function editarMisDatos(){
+  const md = misDatos();
+  const r = await pedirForm("Mis datos", [
+    {id:"usuario", label:"Nombre de usuario", valor: quien, placeholder:"Ej: David", obligatorio:true, validar: v => !!v || "Escribe tu nombre"},
+    {id:"telefono", label:"Mi celular (para enviarme listas)", valor: md.telefono || "", inputmode:"tel", placeholder:"300 123 4567",
+      validar: v => telWa(v).length >= 12 || "Ese celular no parece válido"},
+    {id:"placa", label:"Placa de mi carro (pico y placa)", valor: md.placa || "", placeholder:"ABC123", mayus:true}
+  ]);
+  if(!r) return false;
+  quien = r.usuario; guardar("quien", quien);
+  const nuevo = {telefono: r.telefono.replace(/[^\d+ ]/g, ""), placa: r.placa.toUpperCase().replace(/[^A-Z0-9]/g, "")};
+  guardar("mis_datos", JSON.stringify(nuevo));
+  pintarUsuario();
+  if($("abastos").classList.contains("activa")) pintarAbastos();
+  postApp({accion:"admin_guardar", usuario: quien, telefono: nuevo.telefono, placa: nuevo.placa})
+    .then(d => { admins = d.admins || admins; guardar("admins", JSON.stringify(admins)); }).catch(() => {});
+  return true;
+}
+
+/* Opciones para enviarme o enviar a otro administrador (usadas en abastos y pedidos) */
+function opcionesInternas(texto, alEnviar){
+  const ops = [];
+  const md = misDatos();
+  const ir_ = numero => { if(alEnviar) alEnviar(); abrirWa(numero, texto); };
+  if(telWa(md.telefono).length >= 12) ops.push({t: "📲 Enviármelo a mí", sub: (quien || "yo") + " · " + telBonito(md.telefono), fn: () => ir_(telWa(md.telefono))});
+  else ops.push({t: "📲 Enviármelo a mí", sub: "Primero guarda tu celular", fn: async () => {
+    if(await editarMisDatos() && telWa(misDatos().telefono).length >= 12) ir_(telWa(misDatos().telefono));
+  }});
+  const otros = admins.filter(a => normal(a.usuario) !== normal(quien) && telWa(a.telefono).length >= 12);
+  if(otros.length) ops.push({t: "👥 A otro administrador", sub: otros.map(a => a.usuario).join(", "), fn: () => {
+    elegir("¿A quién?", otros.map(a => ({t: "👤 " + a.usuario, sub: telBonito(a.telefono), fn: () => ir_(telWa(a.telefono))})));
+  }});
+  return ops;
+}
+function opcionesEnvio(texto, alEnviar){
+  const ops = opcionesInternas(texto, alEnviar);
+  ops.push({t: "➕ Otro número", sub: "Escribes el celular y se abre el chat", fn: async () => {
+    const r = await pedirNumero("Enviar a otro número"); if(!r) return;
+    if(alEnviar) alEnviar(); abrirWa(r.wa, texto);
+  }});
+  ops.push({t: "📇 Elegir contacto en WhatsApp", sub: "Abre WhatsApp para escoger a quién", fn: () => { if(alEnviar) alEnviar(); abrirWa("", texto); }});
+  return ops;
+}
+
+/* ---------- Pico y placa (Bogotá, particulares) ----------
+   Regla vigente (oct-2026): fechas impares circulan placas terminadas en 1–5;
+   fechas pares, terminadas en 6–9 y 0. No aplica sábados, domingos ni festivos.
+   Si la Alcaldía cambia la regla, se ajusta aquí. */
+const PYP = { impar: [1, 2, 3, 4, 5], par: [6, 7, 8, 9, 0], horario: "6:00 a.m. a 9:00 p.m." };
+function pascua(y){
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4,
+    f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30,
+    i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
+    mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mes - 1, dia, 12);
+}
+const festivosCache = {};
+function festivosCO(y){
+  if(festivosCache[y]) return festivosCache[y];
+  const iso = d => d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate());
+  const lunes = d => { const x = new Date(d); while(x.getDay() !== 1) x.setDate(x.getDate() + 1); return x; };
+  const f = (m, d) => new Date(y, m - 1, d, 12);
+  const mas = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const p = pascua(y);
+  const lista = [f(1,1), f(5,1), f(7,20), f(8,7), f(12,8), f(12,25),                         // fijos
+    lunes(f(1,6)), lunes(f(3,19)), lunes(f(6,29)), lunes(f(8,15)), lunes(f(10,12)), lunes(f(11,1)), lunes(f(11,11)),  // Ley Emiliani
+    mas(p, -3), mas(p, -2), lunes(mas(p, 39)), lunes(mas(p, 60)), lunes(mas(p, 68))];          // Semana Santa, Ascensión, Corpus, Sagrado Corazón
+  return festivosCache[y] = new Set(lista.map(iso));
+}
+function picoPlaca(fecha, placa){
+  const m = String(placa || "").match(/(\d)\D*$/);
+  if(!m || !fecha) return null;
+  const dig = Number(m[1]), d = aFecha(fecha);
+  if(d.getDay() === 0 || d.getDay() === 6) return {puede: true, motivo: "fin de semana, no aplica"};
+  if(festivosCO(d.getFullYear()).has(fecha)) return {puede: true, motivo: "festivo, no aplica"};
+  const impar = d.getDate() % 2 === 1;
+  const puede = (impar ? PYP.impar : PYP.par).includes(dig);
+  return {puede, motivo: `fecha ${impar ? "impar" : "par"}, placa termina en ${dig}`};
+}
+function pintarPyp(){
+  const placa = misDatos().placa;
+  ["abIda", "abProx"].forEach(id => {
+    const caja = $(id).parentElement;
+    caja.classList.remove("pyp-si", "pyp-no");
+    const r = picoPlaca($(id).value, placa);
+    if(r) caja.classList.add(r.puede ? "pyp-si" : "pyp-no");
+  });
+  const r = picoPlaca($("abIda").value, placa);
+  $("abPyp").innerHTML = !placa ? `🚗 <a href="#" class="mis-datos" style="color:var(--amarillo)">Agrega tu placa</a> para ver el pico y placa`
+    : r.puede ? `<span style="color:#4fd6a8">🟢 Puedes ir en carro (${esc(r.motivo)})</span>`
+    : `<span style="color:#ff9a86">🔴 Pico y placa ese día, ${PYP.horario} (${esc(r.motivo)})</span>`;
+}
 
 /* ---------- Eventos de KPIs ---------- */
 function repintarHoras(){
