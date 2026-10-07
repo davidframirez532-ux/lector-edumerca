@@ -298,6 +298,21 @@
   <div class="items" id="items"></div>
 </section>
 
+<!-- ============ PIN ============ -->
+<div id="pinVentana" class="hoja" hidden style="align-items:center">
+  <div class="hoja-caja" style="border-radius:16px;margin:0 auto;width:calc(100% - 40px);max-width:420px;box-sizing:border-box">
+    <h3 id="pinTitulo" style="margin:0">PIN de administrador</h3>
+    <input id="pinCampo" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="12"
+      style="width:100%;box-sizing:border-box;border:0;border-radius:10px;padding:14px;font:600 1.6rem 'Barlow',sans-serif;text-align:center;letter-spacing:.4em;background:var(--papel);color:var(--tinta);-webkit-user-select:text;user-select:text">
+    <p id="pinError" style="margin:0;color:#ff9a86;font:500 .95rem 'Barlow',sans-serif;min-height:1.2em"></p>
+    <button class="chip" id="pinTeclado" style="align-self:flex-start;text-transform:none">ABC · usar letras</button>
+    <div class="acciones" style="margin:0">
+      <button class="sec" id="pinCancelar">Cancelar</button>
+      <button class="ppal" id="pinOk" style="flex:2">Entrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ HOJA DE OPCIONES ============ -->
 <div id="hoja" class="hoja" hidden>
   <div class="hoja-caja">
@@ -483,8 +498,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.46 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbzBvWGrgaNgwxaKfxs9ZaNrs3O5WpWyuzaiMBP_tnT8d1RP2KoKIpbQDFf1ePPlAMCD/exec";
+const VERSION = "v1.47 · 7-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxaJfM3w-3LK2qSbHVLFj6RDNaoYLY1rWJnAhbcDlNuwI_Vbk-OYTP8jvIIwrJu-fry/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1259,33 +1274,70 @@ function csvAjustes(){
 
 /* ---------- Modo administración ---------- */
 function esAdmin(){ return leer("admin") === VERSION; }
+/* Pide el PIN en una ventana propia con teclado numérico.
+   validar(pin) devuelve true/false o un texto de error; la ventana sigue abierta hasta acertar o cancelar. */
+function pedirPin(titulo, validar){
+  return new Promise(resolve => {
+    const v = $("pinVentana"), campo = $("pinCampo"), err = $("pinError"), ok = $("pinOk");
+    $("pinTitulo").textContent = titulo || "PIN de administrador";
+    campo.value = ""; err.textContent = ""; ok.disabled = false; ok.textContent = "Entrar";
+    // Teclado numérico por defecto; si la clave tiene letras, se recuerda y abre el completo
+    const letras = () => leer("pin_letras") === "1";
+    const ponerTeclado = () => {
+      campo.inputMode = letras() ? "text" : "numeric";
+      campo.pattern = letras() ? "" : "[0-9]*";
+      $("pinTeclado").textContent = letras() ? "123 · solo números" : "ABC · usar letras";
+    };
+    ponerTeclado();
+    $("pinTeclado").onclick = () => { guardar("pin_letras", letras() ? "0" : "1"); ponerTeclado(); campo.blur(); setTimeout(() => campo.focus(), 60); };
+    v.hidden = false;
+    setTimeout(() => campo.focus(), 80);
+    const cerrar = valor => { v.hidden = true; ok.onclick = null; $("pinCancelar").onclick = null; campo.onkeydown = null; campo.blur(); resolve(valor); };
+    const intentar = async () => {
+      const pin = campo.value.trim();
+      if(!pin){ err.textContent = "Escribe el PIN."; return; }
+      if(!validar) return cerrar(pin);
+      ok.disabled = true; ok.textContent = "Revisando…"; err.textContent = "";
+      let r;
+      try{ r = await validar(pin); }catch(e){ r = e.message || "No se pudo validar"; }
+      ok.disabled = false; ok.textContent = "Entrar";
+      if(r === true) return cerrar(pin);
+      err.textContent = r === false ? "PIN incorrecto" : String(r);
+      campo.value = ""; campo.focus();
+    };
+    ok.onclick = intentar;
+    $("pinCancelar").onclick = () => cerrar(null);
+    campo.onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); intentar(); } };
+  });
+}
+async function validarPinServidor(pin){
+  const url = apiUrl();
+  if(!url) return "Falta configurar la URL de Apps Script";
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body: JSON.stringify({accion:"clave", clave:pin})});
+  const d = leerRespuesta(await r.text());
+  return !!d.ok;
+}
 async function entrar(){
   if(esAdmin()){ irMenu("principal"); return; }
-  const c = prompt("Clave de administrador:");
-  if(c === null) return;
-  const url = apiUrl();
-  try{
-    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({accion:"clave", clave:c.trim()})});
-    const d = leerRespuesta(await r.text());
-    if(!d.ok) return alert("Clave incorrecta.");
-    claveAdmin = c.trim();
-    guardar("clave_admin", claveAdmin);
-    guardar("admin", VERSION);
-    pedirQuien(false);
-    irMenu("principal");
-  }catch(e){ alert("No se pudo validar la clave: " + e.message); }
+  const pin = await pedirPin("PIN de administrador", validarPinServidor);
+  if(pin === null) return;
+  claveAdmin = pin;
+  guardar("clave_admin", claveAdmin);
+  guardar("admin", VERSION);
+  pedirQuien(false);
+  irMenu("principal");
 }
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
 
 /* ---------- Llamadas de administración (piden la clave una vez por sesión) ---------- */
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const plata = n => (n === null || n === undefined || n === "" || isNaN(Number(n))) ? "—" : (Number(n) < 0 ? "-$" : "$") + pesos(Math.abs(Number(n)));
-function pedirClave(){
+async function pedirClave(){
   if(claveAdmin) return claveAdmin;
-  const c = prompt("Clave de administrador:");
+  const c = await pedirPin("PIN de administrador", validarPinServidor);
   if(c === null) return null;
-  claveAdmin = c.trim();
+  claveAdmin = c;
   guardar("clave_admin", claveAdmin);
   return claveAdmin;
 }
@@ -1304,7 +1356,7 @@ function leerRespuesta(texto){
 async function postAdmin(cuerpo){
   const url = apiUrl();
   if(!url) throw new Error("Falta configurar la URL de Apps Script.");
-  const clave = pedirClave();
+  const clave = await pedirClave();
   if(clave === null) throw new Error("Cancelado");
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
     body: JSON.stringify(Object.assign({}, cuerpo, {clave, quien}))});
@@ -1326,7 +1378,7 @@ async function cargarKpis(actualizar){
   if(cargandoKpis) return;
   const url = apiUrl();
   if(!url) return;
-  const clave = pedirClave();
+  const clave = await pedirClave();
   if(clave === null) return;
   cargandoKpis = true;
   const btn = $("btnKpiActualizar"), msg = $("kpiEstado");
