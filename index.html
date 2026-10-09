@@ -278,15 +278,30 @@
   <div class="menu">
     <button class="ppal" id="btnCatalogo">Catálogo completo</button>
     <button class="ghost" id="btnConteo">Conteo físico</button>
-    <button class="ghost" id="btnAlertasPrecio">Alertas de precio</button>
+    <button class="ghost" id="btnDesarmes">Desarmes</button>
   </div>
 </section>
 
-<!-- ============ ALERTAS DE PRECIO ============ -->
-<section class="pantalla" id="alertasPrecio">
-  <div class="cabeza"><h2>Alertas de precio</h2><button class="sec" id="btnVolverAlertas">Volver</button></div>
-  <p class="nota" style="margin:0" id="alertasNota"></p>
-  <div class="items" id="alertasItems"></div>
+<!-- ============ DESARMES ============ -->
+<section class="pantalla" id="desarmes">
+  <div class="cabeza"><h2>Desarmes</h2><button class="sec" id="btnVolverDesarmes">Volver</button></div>
+  <div class="acciones" style="margin:0">
+    <button class="ppal" id="btnDesDesarmar">Desarmar</button>
+    <button class="ghost" id="btnDesReceta">Registrar productos para desarme</button>
+  </div>
+  <p id="desEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="desPanel"></div>
+  <div class="acciones">
+    <button class="ppal chico" id="btnDesPlantilla" style="flex:2">Generar plantilla Siigo</button>
+    <button class="sec chico" id="btnDesAjustados" style="flex:2">Marcar como ajustados</button>
+  </div>
+</section>
+
+<!-- ============ FORMULARIO DE DESARME / RECETA ============ -->
+<section class="pantalla" id="desarmeForm">
+  <div class="cabeza"><h2 id="desFormTitulo">Desarmar</h2><button class="sec" id="btnDesFormCancelar">Cancelar</button></div>
+  <div class="panel" id="desFormPanel"></div>
+  <div class="acciones"><button class="ppal" id="btnDesFormGuardar">Guardar</button></div>
 </section>
 
 <!-- ============ COMPRAS ============ -->
@@ -522,8 +537,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.48 · 9-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxC1MOW3NjG0TAAtJB-rD2d_oXQQKNWbXolmtki2K9WpyfD6ckpRvdjlQxRivnFLrS3/exec";
+const VERSION = "v1.50 · 9-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyekhMEZu1m0yYtXnjMSx-qxZyPf-XGmDrFDdh_XzQZ8_gw0ukikkcA34dJAphmbXwc/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -730,8 +745,9 @@ async function abrirCamara(modo){
   if(ocupado) return; ocupado = true;
   modoCamara = modo || "precio";
   clearTimeout(tResultado); clearTimeout(tLista);
-  $("tituloEscaneo").textContent = modoCamara === "conteo" ? "Conteo · escanea el producto" : "Escanea el producto";
-  $("btnDigitarEsc").hidden = modoCamara !== "conteo";
+  $("tituloEscaneo").textContent = modoCamara === "conteo" ? "Conteo · escanea el producto"
+    : modoCamara === "desarme" ? "Desarme · escanea el producto" : "Escanea el producto";
+  $("btnDigitarEsc").hidden = modoCamara !== "conteo" && modoCamara !== "desarme";
   ir("escaneo");
   let quedan = SEGUNDOS_CAMARA;
   $("cuenta").textContent = quedan;
@@ -761,7 +777,8 @@ async function abrirCamara(modo){
         if(navigator.vibrate) navigator.vibrate(80);
         const m = modoCamara;
         await cerrarCamara();
-        if(m === "conteo") pedirCantidad(codigo); else if(m === "lista") buscarEnLista(codigo); else mostrar(codigo);
+        if(m === "conteo") pedirCantidad(codigo); else if(m === "lista") buscarEnLista(codigo);
+        else if(m === "desarme") desRecibirCodigo(codigo); else mostrar(codigo);
       }, ()=>{});
   }catch(err){
     await cerrarCamara();
@@ -913,7 +930,7 @@ function tocarLista(){
   clearTimeout(tLista);
   const act = document.querySelector(".pantalla.activa");
   // durante el conteo físico la app NO vuelve sola al inicio
-  if(act && ["conteo","conteoItem","ajustar"].includes(act.id)) return;
+  if(act && ["conteo","conteoItem","ajustar","desarmes","desarmeForm"].includes(act.id)) return;
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
 }
 
@@ -923,38 +940,6 @@ function actualizarBadgeAlertas(){
   const b = $("btnAlertasPrecio");
   if(b) b.textContent = n ? `⚠ Alertas de precio (${n})` : "Alertas de precio";
 }
-function pintarAlertas(){
-  const cont = $("alertasItems");
-  $("alertasNota").textContent = alertasPrecio.length
-    ? "Precio de hoy comparado contra el del día anterior."
-    : "";
-  if(!alertasPrecio.length){
-    cont.innerHTML = `<div class="vacio">Sin cambios de precio fuera de lo normal.</div>`;
-    return;
-  }
-  cont.replaceChildren(...alertasPrecio.map(a=>{
-    const b = document.createElement("button");
-    b.className = "item";
-    const sube = a.variacion_abs > 0;
-    b.innerHTML = `<span class="cod"></span>
-      <span class="nom"><span class="t"></span><small></small></span>
-      <span class="pre"><span class="${sube ? "mas" : "menos"}"></span><small>${sube ? "+" : ""}${a.variacion_pct}%</small></span>`;
-    b.querySelector(".cod").textContent = a.codigo || "";
-    b.querySelector(".t").textContent = a.nombre || "";
-    b.querySelector("small").textContent = a.categoria || "";
-    b.querySelector(".pre .mas, .pre .menos").textContent = "$" + pesos(a.precio_actual);
-    b.onclick = ()=>{
-      alert(`${a.nombre}\n\nAntes: $${pesos(a.precio_anterior)}\nAhora: $${pesos(a.precio_actual)}\n` +
-        `Cambio: ${sube ? "+" : ""}${pesos(a.variacion_abs)} (${sube ? "+" : ""}${a.variacion_pct}%)`);
-    };
-    return b;
-  }));
-}
-function abrirAlertas(){
-  pintarAlertas();
-  ir("alertasPrecio");
-}
-
 /* ---------- Conteo físico ---------- */
 function cargarConteo(){
   try{ conteo = JSON.parse(leer("conteo") || "[]"); }catch(e){ conteo = []; }
@@ -1578,9 +1563,25 @@ function alertasCompras(k, det, lista, mas){
     ? `<p class="nota" style="margin:0 0 6px">${script} · actualizado ${esc(x.generado || "")}${x.url ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener" style="color:inherit">abrir hoja</a>` : ""}</p>`
     : `<p class="nota" style="margin:0 0 6px">Sin datos todavía: corre <b>${fn}</b> desde el editor.</p>`;
   const nC = nota(cn, "Conciliación de compras (12)", "conciliarCompras()");
+  const ds = ac.desarmes || {};
+  const nD = nota(ac.desarmes, "Desarmes (14)", "probarDesarmes()");
   const nP = nota(pr, "Productos por proveedor (13)", "actualizarProductosProveedor()");
   const c = cn || {}, p = pr || {};
   let h = "";
+  // Cambios de precio (antes era una pantalla aparte en Inventario)
+  const ap = Array.isArray(alertasPrecio) ? alertasPrecio : [];
+  h += det("Cambios de precio fuera de lo normal", ap.length, "amarillo",
+    `<p class="nota" style="margin:0 0 6px">Precio de hoy comparado contra el del día anterior.</p>` +
+    lista(ap, x => dos(x.nombre, `${esc(x.categoria || "")} · antes ${plata(x.precio_anterior)} · ${x.variacion_abs > 0 ? "+" : ""}${x.variacion_pct}%`, plata(x.precio_actual))));
+  // Desarmes
+  h += det("Códigos de desarmes que no existen en Siigo", ds.n_no_existe || 0, "", nD +
+    `<p class="nota" style="margin:0 0 6px">Quedaron guardados con alerta. Créalos en Siigo (o corrige la receta) y el desarme entra solo a la siguiente plantilla.</p>` +
+    lista(ds.no_existe, x => dos(x.nombre || "Sin nombre", "código " + x.codigo + " · " + (x.donde || ""))) +
+    mas(ds.n_no_existe, (ds.no_existe || []).length));
+  h += det("Desarmes pendientes de subir a Siigo", ds.n_pendientes || 0, "amarillo", nD +
+    `<p class="nota" style="margin:0">Genera la plantilla en Inventario → Desarmes e impórtala en Siigo.</p>`);
+  h += det("Plantilla de desarmes sin marcar como ajustada", ds.n_en_plantilla || 0, "gris", nD +
+    `<p class="nota" style="margin:0">Cuando la importes en Siigo, toca "Marcar como ajustados" en Desarmes.</p>`);
   h += det("Facturas del correo sin registrar en Siigo", c.n_no_en_siigo || 0, "", nC +
     lista(c.no_en_siigo, x => dos(x.proveedor || "Proveedor", x.numero + (x.fecha ? " · " + x.fecha : ""), plata(x.total))) +
     mas(c.n_no_en_siigo, (c.no_en_siigo || []).length));
@@ -2754,7 +2755,8 @@ $("btnVolverPedido").addEventListener("click", () => { ir("pedidos"); pintarPedi
 let prodSel = null;
 const normCod = c => String(c || "").trim().replace(/^0+(?=\d)/, "");
 function volverDeCamara(){
-  if(modoCamara === "conteo") abrirConteo();
+  if(modoCamara === "desarme") ir("desarmeForm");
+  else if(modoCamara === "conteo") abrirConteo();
   else if(modoCamara === "lista") abrirLista(false);
   else inicio();
 }
@@ -3052,8 +3054,6 @@ $("btnPedidos").addEventListener("click", abrirPedidos);
 $("btnAbastosPlaza").addEventListener("click", abrirAbastos);
 $("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
-$("btnAlertasPrecio").addEventListener("click", abrirAlertas);
-$("btnVolverAlertas").addEventListener("click", ()=>irMenu("inventario"));
 
 $("btnVolverLista").addEventListener("click", ()=>irMenu("inventario"));
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
@@ -3068,6 +3068,11 @@ $("resultado").addEventListener("click", volverDeResultado);
 $("btnCancelar").addEventListener("click", ()=>cerrarCamara().then(volverDeCamara));
 $("btnDigitarEsc").addEventListener("click", async ()=>{
   await cerrarCamara();
+  if(modoCamara === "desarme"){
+    const c = prompt("Código del producto:");
+    if(c && c.trim()) desRecibirCodigo(c.trim()); else ir("desarmeForm");
+    return;
+  }
   const v = prompt("Código del producto:");
   if(v && v.trim()) pedirCantidad(v.trim()); else abrirConteo();
 });
@@ -3165,8 +3170,12 @@ entrada.addEventListener("keydown", async e=>{
   const v = entrada.value.trim(); entrada.value = "";
   if(!v) return;
   const enConteo = modoCamara === "conteo" && (escaner || $("conteo").classList.contains("activa"));
+  const enDesarme = $("desarmeForm").classList.contains("activa") || (escaner && modoCamara === "desarme");
+  const enDesarmes = $("desarmes").classList.contains("activa");
   if(escaner) await cerrarCamara();
-  if(enConteo) pedirCantidad(v); else mostrar(v);
+  if(enDesarme) desRecibirCodigo(v);
+  else if(enDesarmes){ nuevoDesForm("desarme"); desRecibirCodigo(v); }
+  else if(enConteo) pedirCantidad(v); else mostrar(v);
 });
 /* El lector físico escribe en un campo oculto. Se le devuelve el foco cada segundo,
    salvo que el usuario esté usando una lista, un campo o un selector de la pantalla. */
@@ -3180,6 +3189,295 @@ setInterval(()=>{
   const act = document.querySelector(".pantalla.activa");
   if(act && !ESCRIBIBLES.includes(act.id) && document.activeElement !== entrada) enfocarLector();
 }, 1000);
+
+/* ---------- Desarmes (14_desarmes.gs) ---------- */
+let desDatos = null, desForm = null, desCargando = false;
+try{ desDatos = JSON.parse(leer("desarmes") || "null"); }catch(e){ desDatos = null; }
+
+function desRecetaDe(cod){
+  const k = normCod(cod);
+  return ((desDatos && desDatos.recetas) || []).find(r => normCod(r.grande) === k) || null;
+}
+function abrirDesarmes(){
+  clearTimeout(tLista);
+  pintarDesarmes();
+  ir("desarmes");
+  cargarDesarmes();
+}
+async function cargarDesarmes(){
+  if(desCargando) return;
+  desCargando = true;
+  $("desEstado").textContent = "Cargando…";
+  try{
+    const d = await postApp({accion:"desarmes_datos"}, 60000);
+    desDatos = d; guardar("desarmes", JSON.stringify(d));
+    $("desEstado").textContent = "";
+  }catch(e){
+    $("desEstado").textContent = (desDatos ? "Mostrando la última copia · " : "") + "No se pudo cargar: " + e.message;
+  }finally{ desCargando = false; pintarDesarmes(); }
+}
+function desAplicar(d){
+  if(d && d.datos){ desDatos = d.datos; guardar("desarmes", JSON.stringify(d.datos)); }
+}
+function desLineasTxt(e){
+  return e.lineas.map(x => `${num(x.cantidad)} × ${x.nombre || x.codigo}${x.existe ? "" : " ⚠"}`).join(" · ");
+}
+function pintarDesarmes(){
+  const p = $("desPanel"), D = desDatos || {};
+  const rec = D.recetas || [], pen = D.pendientes || [], enp = D.en_plantilla || [], aju = D.ajustados || [];
+  const malos = pen.filter(e => e.estado === "CÓDIGO NO EXISTE");
+  const caja = (n, t) => `<div class="caja"><b>${n}</b><span>${t}</span></div>`;
+  let h = `<div class="resumen">${caja(rec.length, "productos para desarme")}${caja(pen.length - malos.length, "pendientes Siigo")}${caja(malos.length, "con código malo")}${caja(enp.length, "en plantilla")}</div>`;
+  const ev = (e, borrar) => `<div class="fila-dato" style="align-items:flex-start"><span>${esc(e.nombre || e.grande)} · ${num(e.cajas)} ${e.cajas == 1 ? "unidad" : "unidades"}
+      <small style="display:block;opacity:.7">${esc(fechaHora(e.fecha))}${e.quien ? " · " + esc(e.quien) : ""}${e.grande_existe ? "" : " · ⚠ el producto grande no existe en Siigo"}</small>
+      <small style="display:block;opacity:.85">${esc(desLineasTxt(e))}</small>
+      ${e.observacion ? `<small style="display:block;color:#ffd23f">${esc(e.observacion)}</small>` : ""}</span>
+      ${borrar ? `<button class="sec chico" data-des="borrar" data-id="${esc(e.id)}">Borrar</button>` : ""}</div>`;
+  const sec = (titulo, n, clase, cuerpo, abierto) => `<details class="alerta"${abierto ? " open" : ""}><summary><span>${titulo}</span>
+      <span class="num-alerta ${n ? clase : "cero"}">${n}</span></summary>${cuerpo}</details>`;
+  const vacio = t => `<p class="nota" style="margin:0">${t}</p>`;
+  h += `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">`;
+  h += sec("Pendientes de subir a Siigo", pen.length, malos.length ? "" : "amarillo",
+    pen.length ? pen.map(e => ev(e, true)).join("") : vacio("No hay desarmes pendientes."), pen.length > 0);
+  h += sec("En plantilla · falta marcar como ajustados", enp.length, "gris",
+    (enp.length ? `<p class="nota" style="margin:0 0 6px">Plantilla: ${esc(enp[0].plantilla || "")}</p>` + enp.map(e => ev(e, false)).join("") : vacio("Nada en plantilla.")));
+  h += sec("Productos registrados para desarme", rec.length, "gris",
+    rec.length ? rec.map((r, i) => `<button class="item" data-des="editar" data-i="${i}" style="width:100%">
+      <span class="nom"><span class="t">${esc(r.nombre || r.grande)}${r.existe ? "" : " ⚠"}</span>
+      <small>${r.tipo === "SURTIDO" ? "Surtido · " + num(r.total) + " unidades" : r.individuales.map(x => num(x.cantidad) + " × " + (x.nombre || x.codigo) + (x.existe ? "" : " ⚠")).join(" · ")}</small></span></button>`).join("")
+      : vacio("Todavía no hay productos registrados. Toca \"Registrar productos para desarme\"."));
+  if(aju.length) h += sec("Últimos ajustados en Siigo", aju.length, "gris", aju.map(e => ev(e, false)).join(""));
+  if(D.url_base) h += `<p class="nota" style="text-align:center"><a href="${esc(D.url_base)}" target="_blank" rel="noopener" style="color:inherit">Abrir base de desarmes en Drive</a></p>`;
+  p.innerHTML = h + `</div>`;
+}
+
+/* --- Formulario: registrar receta o hacer un desarme --- */
+function nuevoDesForm(modo, receta){
+  desForm = {modo, grande:null, tipo:"FIJO", total:"", cajas:1, individuales:[]};
+  if(receta){
+    desForm.grande = {codigo:receta.grande, nombre:receta.nombre, existe:receta.existe};
+    desForm.tipo = receta.tipo; desForm.total = receta.total || "";
+    desForm.individuales = receta.individuales.map(x => Object.assign({}, x));
+    desForm.editando = true;
+  }
+  pintarDesForm(); ir("desarmeForm");
+}
+function desProdHtml(x){
+  return `<div class="fila-dato"><span>${esc(x.nombre || "Sin nombre")}<small style="display:block;opacity:.7">código ${esc(x.codigo)}</small>
+    ${x.existe ? "" : `<small style="display:block;color:#ffd23f">⚠ No existe en Siigo: se guarda igual y queda con alerta</small>`}</span></div>`;
+}
+function desEntradaHtml(texto){
+  return `<p class="nota" style="margin:4px 0">${texto}</p><div class="acciones" style="margin:0">
+    <input class="buscador" id="desCod" type="text" inputmode="numeric" placeholder="Digita el código" autocomplete="off" enterkeyhint="done" style="flex:3">
+    <button class="sec chico" data-des="agregar">Agregar</button>
+    <button class="ppal chico" data-des="camara">📷</button></div>`;
+}
+function desSurtidoEsperado(){
+  const r = desForm.grande ? desRecetaDe(desForm.grande.codigo) : null;
+  return r ? (Number(r.total) || 0) * (Number(desForm.cajas) || 0) : 0;
+}
+function desSuma(){ return desForm.individuales.reduce((s, x) => s + (Number(x.cantidad) || 0), 0); }
+function desPintarSuma(){
+  const el = $("desSuma"); if(!el) return;
+  const esp = desSurtidoEsperado(), sum = desSuma();
+  el.textContent = `Llevas ${num(sum)} de ${num(esp)} unidades`;
+  el.style.color = sum === esp ? "#4fd6a8" : "#ffd23f";
+}
+function pintarDesForm(){
+  const f = desForm, p = $("desFormPanel");
+  const receta = f.modo === "receta";
+  $("desFormTitulo").textContent = receta ? "Registrar para desarme" : "Desarmar";
+  $("btnDesFormGuardar").textContent = receta ? "Guardar producto para desarme" : "Registrar desarme";
+  let h = `<div class="bloque"><h3>1. Producto grande · paca, caja o arroba</h3>`;
+  if(f.grande) h += desProdHtml(f.grande) + (f.editando ? "" : `<button class="sec chico" data-des="cambiarGrande">Cambiar</button>`);
+  else h += desEntradaHtml("Escanéalo con la cámara o el lector, o digita su código.");
+  h += `</div>`;
+  if(f.grande && receta){
+    h += `<div class="bloque"><h3>2. ¿Cómo viene?</h3><div class="acciones" style="margin:0">
+      <button class="${f.tipo === "FIJO" ? "ppal" : "sec"} chico" data-des="tipo" data-v="FIJO">Fijo (siempre lo mismo)</button>
+      <button class="${f.tipo === "SURTIDO" ? "ppal" : "sec"} chico" data-des="tipo" data-v="SURTIDO">Surtido (sabores al azar)</button></div>`;
+    if(f.tipo === "SURTIDO"){
+      h += `<p class="nota" style="margin:8px 0 4px">¿Cuántas unidades trae en total? Los sabores se escanean cada vez que lo desarmes.</p>
+        <input class="buscador" type="text" inputmode="numeric" data-campo="total" value="${esc(f.total)}" placeholder="Ej. 14">`;
+    }
+    h += `</div><div class="bloque"><h3>3. ${f.tipo === "SURTIDO" ? "Sabores que suelen venir (opcional)" : "Individuales y cuántos trae de cada uno"}</h3>`;
+    h += f.individuales.map((x, i) => `<div class="fila-dato" style="align-items:center"><span>${esc(x.nombre || "Sin nombre")}
+        <small style="display:block;opacity:.7">código ${esc(x.codigo)}${x.existe ? "" : " · ⚠ no existe en Siigo"}</small></span>
+        ${f.tipo === "FIJO" ? `<input class="buscador" style="width:72px;text-align:center" type="text" inputmode="numeric" data-campo="cant" data-i="${i}" value="${esc(x.cantidad)}" placeholder="cant.">` : ""}
+        <button class="sec chico" data-des="quitar" data-i="${i}">✕</button></div>`).join("");
+    h += desEntradaHtml("Escanea o digita el individual.") + `</div>`;
+    if(f.editando) h += `<div class="acciones"><button class="sec chico" data-des="borrarReceta">Eliminar este producto de desarmes</button></div>`;
+  }
+  if(f.grande && !receta){
+    const r = desRecetaDe(f.grande.codigo);
+    if(!r){
+      h += `<div class="bloque"><p class="nota" style="margin:0 0 8px">Este producto todavía no está registrado para desarme.</p>
+        <button class="ppal" data-des="aReceta">Registrarlo ahora</button></div>`;
+    }else{
+      h += `<div class="bloque"><h3>2. ¿Cuántas desarmaste?</h3>
+        <input class="buscador" type="text" inputmode="numeric" data-campo="cajas" value="${esc(f.cajas)}" placeholder="1"></div>`;
+      if(r.tipo === "FIJO"){
+        const n = Number(f.cajas) || 0;
+        h += `<div class="bloque"><h3>3. Entran al inventario</h3>` + r.individuales.map(x =>
+          `<div class="fila-dato"><span>${esc(x.nombre || x.codigo)}${x.existe ? "" : " ⚠"}</span><b>${num(x.cantidad * n)}</b></div>`).join("") +
+          `<p class="nota" style="margin:6px 0 0">Y sale${n === 1 ? "" : "n"} ${num(n)} de ${esc(r.nombre || r.grande)}.</p></div>`;
+      }else{
+        h += `<div class="bloque"><h3>3. Escanea los sabores que vinieron</h3>
+          <p class="nota" style="margin:0 0 6px">Cada escaneo suma 1. También puedes escribir la cantidad.</p>
+          <p id="desSuma" style="margin:0 0 6px;font-weight:600"></p>`;
+        const yaEsta = new Set(f.individuales.map(x => normCod(x.codigo)));
+        const sugeridos = r.individuales.filter(x => !yaEsta.has(normCod(x.codigo)));
+        if(sugeridos.length) h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">` + sugeridos.map(x =>
+          `<button class="chip" data-des="sabor" data-cod="${esc(x.codigo)}">+ ${esc(x.nombre || x.codigo)}</button>`).join("") + `</div>`;
+        h += f.individuales.map((x, i) => `<div class="fila-dato" style="align-items:center"><span>${esc(x.nombre || "Sin nombre")}
+            <small style="display:block;opacity:.7">código ${esc(x.codigo)}${x.existe ? "" : " · ⚠ no existe en Siigo"}</small></span>
+            <input class="buscador" style="width:72px;text-align:center" type="text" inputmode="numeric" data-campo="cant" data-i="${i}" value="${esc(x.cantidad)}">
+            <button class="sec chico" data-des="quitar" data-i="${i}">✕</button></div>`).join("");
+        h += desEntradaHtml("Escanea o digita cada sabor.") + `</div>`;
+      }
+    }
+  }
+  p.innerHTML = h;
+  desPintarSuma();
+}
+function desRecibirCodigo(codigo){
+  codigo = String(codigo || "").trim();
+  if(!desForm) nuevoDesForm("desarme");
+  if(!codigo){ ir("desarmeForm"); return; }
+  const it = buscar(codigo);
+  let prod = it ? {codigo: it.c || codigo, nombre: it.n, existe: true} : {codigo, nombre: "", existe: false};
+  if(!it){
+    const n = prompt(`El código ${codigo} no está en Siigo.\nSe guarda igual y queda con alerta hasta que lo crees.\n\nNombre del producto (opcional):`, "");
+    if(n === null){ ir("desarmeForm"); return; }
+    prod.nombre = n.trim().toUpperCase();
+  }
+  const f = desForm;
+  if(!f.grande){
+    f.grande = prod;
+    const r = desRecetaDe(prod.codigo);
+    if(f.modo === "receta" && r){
+      f.tipo = r.tipo; f.total = r.total || ""; f.individuales = r.individuales.map(x => Object.assign({}, x)); f.editando = true;
+    }
+  }else{
+    const r = desRecetaDe(f.grande.codigo);
+    if(normCod(prod.codigo) === normCod(f.grande.codigo)){ alert("Ese es el producto grande. Ahora escanea el individual."); ir("desarmeForm"); return; }
+    if(f.modo === "desarme" && (!r || r.tipo !== "SURTIDO")){ ir("desarmeForm"); return; }
+    const ya = f.individuales.find(x => normCod(x.codigo) === normCod(prod.codigo));
+    if(f.modo === "desarme"){
+      if(ya) ya.cantidad = (Number(ya.cantidad) || 0) + 1;
+      else f.individuales.push(Object.assign(prod, {cantidad: 1}));
+    }else if(!ya){
+      f.individuales.push(Object.assign(prod, {cantidad: ""}));
+    }
+  }
+  if(navigator.vibrate) navigator.vibrate(60);
+  pintarDesForm(); ir("desarmeForm");
+}
+async function guardarDesForm(){
+  const f = desForm; if(!f) return;
+  if(!f.grande) return alert("Primero escanea o digita el producto grande.");
+  const btn = $("btnDesFormGuardar"); btn.disabled = true;
+  try{
+    let d;
+    if(f.modo === "receta"){
+      if(f.tipo === "FIJO"){
+        const malos = f.individuales.filter(x => !(Number(x.cantidad) > 0));
+        if(!f.individuales.length) throw new Error("Agrega al menos un individual.");
+        if(malos.length) throw new Error("Falta la cantidad de: " + malos.map(x => x.nombre || x.codigo).join(", "));
+      }else if(!(Number(f.total) > 0)) throw new Error("Escribe cuántas unidades trae en total.");
+      d = await postApp({accion:"desarme_receta_guardar", tipo:f.tipo, total:Number(f.total) || 0,
+        grande:{codigo:f.grande.codigo, nombre:f.grande.nombre},
+        individuales:f.individuales.map(x => ({codigo:x.codigo, nombre:x.nombre, cantidad:Number(x.cantidad) || 0}))}, 60000);
+    }else{
+      const r = desRecetaDe(f.grande.codigo);
+      if(!r) throw new Error("Primero registra este producto para desarme.");
+      const cajas = Number(f.cajas) || 0;
+      if(cajas <= 0) throw new Error("Escribe cuántas desarmaste.");
+      let individuales = [];
+      if(r.tipo === "SURTIDO"){
+        individuales = f.individuales.filter(x => Number(x.cantidad) > 0)
+          .map(x => ({codigo:x.codigo, nombre:x.nombre, cantidad:Number(x.cantidad)}));
+        if(!individuales.length) throw new Error("Escanea los sabores que vinieron.");
+        const esp = desSurtidoEsperado(), sum = desSuma();
+        if(sum !== esp && !confirm(`Se esperaban ${num(esp)} unidades y llevas ${num(sum)}.\n\n¿Registrar así de todas formas?`)) return;
+      }else if(!confirm(`¿Registrar el desarme de ${num(cajas)} × ${r.nombre || r.grande}?`)) return;
+      d = await postApp({accion:"desarme_registrar", grande:f.grande.codigo, cajas, individuales}, 60000);
+    }
+    desAplicar(d);
+    let msg = d.mensaje || "Listo";
+    if(d.no_existen && d.no_existen.length) msg += `\n\nCódigos que no existen en Siigo:\n${d.no_existen.join("\n")}\n\nQuedó guardado con alerta. Créalos en Siigo y entrará solo en la siguiente plantilla.`;
+    alert(msg);
+    desForm = null; pintarDesarmes(); ir("desarmes");
+  }catch(e){ alert("No se pudo guardar: " + e.message); }
+  finally{ btn.disabled = false; }
+}
+async function desAccion(cuerpo, confirmar, ms){
+  if(confirmar && !confirm(confirmar)) return null;
+  $("desEstado").textContent = "Procesando…";
+  try{
+    const d = await postApp(cuerpo, ms || 60000);
+    desAplicar(d); $("desEstado").textContent = d.mensaje || "";
+    pintarDesarmes();
+    return d;
+  }catch(e){ $("desEstado").textContent = "No se pudo: " + e.message; return null; }
+}
+async function desGenerarPlantilla(){
+  const btn = $("btnDesPlantilla"); btn.disabled = true; btn.textContent = "Generando…";
+  try{
+    const d = await desAccion({accion:"desarme_plantilla"}, "¿Generar la plantilla de ajuste para Siigo con los desarmes pendientes?", 180000);
+    if(!d) return;
+    if(!d.filas){ alert(d.mensaje + (d.excluidos ? `\n\n${d.excluidos} desarme(s) con códigos que no existen en Siigo no se incluyeron.` : "")); return; }
+    let msg = `Plantilla lista: ${d.desarmes} desarme(s), ${d.filas} líneas.\n\nGuardada en Drive (Compras/Desarmes/Plantillas):\n${d.archivo}`;
+    if(d.excluidos) msg += `\n\n⚠ ${d.excluidos} desarme(s) no se incluyeron porque tienen códigos que no existen en Siigo.`;
+    if(d.sin_costo && d.sin_costo.length) msg += `\n\n⚠ Sin costo de compra (columna de costo vacía): ${d.sin_costo.join(", ")}.`;
+    msg += `\n\nImpórtala en Siigo y luego toca "Marcar como ajustados".`;
+    alert(msg);
+    $("desEstado").innerHTML = `<a href="${esc(d.descarga || d.url)}" target="_blank" rel="noopener" style="color:inherit">⬇ Descargar ${esc(d.archivo)}</a>`;
+    window.open(d.descarga || d.url, "_blank");
+  }finally{ btn.disabled = false; btn.textContent = "Generar plantilla Siigo"; }
+}
+
+$("btnDesarmes").addEventListener("click", abrirDesarmes);
+$("btnVolverDesarmes").addEventListener("click", ()=>irMenu("inventario"));
+$("btnDesDesarmar").addEventListener("click", ()=>nuevoDesForm("desarme"));
+$("btnDesReceta").addEventListener("click", ()=>nuevoDesForm("receta"));
+$("btnDesPlantilla").addEventListener("click", desGenerarPlantilla);
+$("btnDesAjustados").addEventListener("click", ()=>desAccion({accion:"desarme_ajustados"},
+  "¿Ya importaste la plantilla en Siigo?\n\nLos desarmes en plantilla quedarán como ajustados."));
+$("btnDesFormCancelar").addEventListener("click", ()=>{ desForm = null; pintarDesarmes(); ir("desarmes"); });
+$("btnDesFormGuardar").addEventListener("click", guardarDesForm);
+$("desPanel").addEventListener("click", e=>{
+  const b = e.target.closest("[data-des]"); if(!b) return;
+  if(b.dataset.des === "borrar") desAccion({accion:"desarme_borrar", id:b.dataset.id}, "¿Borrar este desarme?");
+  if(b.dataset.des === "editar"){ const r = (desDatos.recetas || [])[Number(b.dataset.i)]; if(r) nuevoDesForm("receta", r); }
+});
+$("desFormPanel").addEventListener("click", async e=>{
+  const b = e.target.closest("[data-des]"); if(!b || !desForm) return;
+  const a = b.dataset.des, f = desForm;
+  if(a === "camara") abrirCamara("desarme");
+  else if(a === "agregar"){ const v = ($("desCod") || {}).value; if(v && v.trim()) desRecibirCodigo(v.trim()); }
+  else if(a === "cambiarGrande"){ f.grande = null; f.individuales = []; pintarDesForm(); }
+  else if(a === "tipo"){ f.tipo = b.dataset.v; pintarDesForm(); }
+  else if(a === "quitar"){ f.individuales.splice(Number(b.dataset.i), 1); pintarDesForm(); }
+  else if(a === "aReceta"){ const g = f.grande; nuevoDesForm("receta"); desForm.grande = g; pintarDesForm(); }
+  else if(a === "sabor"){ desRecibirCodigo(b.dataset.cod); }
+  else if(a === "borrarReceta"){
+    const r = await desAccion({accion:"desarme_receta_borrar", grande:f.grande.codigo},
+      `¿Eliminar ${f.grande.nombre || f.grande.codigo} de los productos para desarme?\n\nLos desarmes ya registrados no se borran.`);
+    if(r){ desForm = null; ir("desarmes"); }
+  }
+});
+$("desFormPanel").addEventListener("input", e=>{
+  const c = e.target.dataset.campo; if(!c || !desForm) return;
+  const v = e.target.value.replace(/[^\d]/g, "");
+  if(c === "total") desForm.total = v;
+  if(c === "cajas"){ desForm.cajas = v; const r = desForm.grande && desRecetaDe(desForm.grande.codigo); if(r && r.tipo === "FIJO") { pintarDesForm(); const i = document.querySelector('[data-campo="cajas"]'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } } }
+  if(c === "cant") desForm.individuales[Number(e.target.dataset.i)].cantidad = v;
+  desPintarSuma();
+});
+$("desFormPanel").addEventListener("keydown", e=>{
+  if(e.key === "Enter" && e.target.id === "desCod"){ e.preventDefault(); const v = e.target.value.trim(); if(v) desRecibirCodigo(v); }
+});
 
 /* ---------- Ajustes (5 toques en el logo) ---------- */
 let toques = 0, tToques;
