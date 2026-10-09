@@ -523,7 +523,7 @@
 <script>
 /* =========== CONFIGURACIÓN =========== */
 const VERSION = "v1.48 · 9-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbzvDu03BWcjwMvMiaWyUHiZEcXGkB_DHlYeTnWvkXhRTg_RVME_EgsnOu42Fjo-ZgUI/exec";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxC1MOW3NjG0TAAtJB-rD2d_oXQQKNWbXolmtki2K9WpyfD6ckpRvdjlQxRivnFLrS3/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1570,6 +1570,46 @@ function bloqueUtilidad(u){
   }
   return h + "</div>";
 }
+function alertasCompras(k, det, lista, mas){
+  // Alertas de 12_conciliacion_compras.gs y 13_productos_proveedor.gs
+  const ac = k.alertas_compras || {}, cn = ac.conciliacion, pr = ac.productos;
+  const dos = (a, b, der) => `<div class="fila-dato"><span>${esc(a)}<small style="display:block;opacity:.65">${esc(b)}</small></span><b>${der || ""}</b></div>`;
+  const nota = (x, script, fn) => x
+    ? `<p class="nota" style="margin:0 0 6px">${script} · actualizado ${esc(x.generado || "")}${x.url ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener" style="color:inherit">abrir hoja</a>` : ""}</p>`
+    : `<p class="nota" style="margin:0 0 6px">Sin datos todavía: corre <b>${fn}</b> desde el editor.</p>`;
+  const nC = nota(cn, "Conciliación de compras (12)", "conciliarCompras()");
+  const nP = nota(pr, "Productos por proveedor (13)", "actualizarProductosProveedor()");
+  const c = cn || {}, p = pr || {};
+  let h = "";
+  h += det("Facturas del correo sin registrar en Siigo", c.n_no_en_siigo || 0, "", nC +
+    lista(c.no_en_siigo, x => dos(x.proveedor || "Proveedor", x.numero + (x.fecha ? " · " + x.fecha : ""), plata(x.total))) +
+    mas(c.n_no_en_siigo, (c.no_en_siigo || []).length));
+  h += det("Facturas con diferencia contra Siigo", c.n_diferencias || 0, "amarillo", nC +
+    lista(c.diferencias, x => dos(x.proveedor || "Proveedor", `${x.numero} · ${x.doc || ""} · diferencia en ${x.motivo}`, plata(x.dif))) +
+    mas(c.n_diferencias, (c.diferencias || []).length));
+  h += det("Notas crédito por aplicar", c.n_notas || 0, "amarillo", nC +
+    `<p class="nota" style="margin:0 0 6px">Rebajan una factura (devolución, descuento o averiado). Regístralas en Siigo sobre la factura que afectan.</p>` +
+    lista(c.notas, x => dos(x.proveedor || "Proveedor", x.numero + (x.fecha ? " · " + x.fecha : ""), plata(x.total))) +
+    mas(c.n_notas, (c.notas || []).length));
+  h += det("Compras en Siigo sin factura en el correo", c.n_sin_correo || 0, "gris", nC +
+    lista(c.sin_correo, x => dos(x.doc || "Compra", "fac. " + x.numero + (x.fecha ? " · " + x.fecha : ""), plata(x.total))) +
+    mas(c.n_sin_correo, (c.sin_correo || []).length));
+  h += det("Producto registrado como varios en Siigo", p.n_conflictos || 0, "", nP +
+    `<p class="nota" style="margin:0 0 6px">El mismo producto del proveedor entró como productos distintos en tus compras. Elige el correcto en la hoja (Código Siigo) y corrige las compras.</p>` +
+    lista(p.conflictos, x => dos(x.descripcion, (x.proveedor || "") + (x.revisar ? " · revisar: " + x.revisar : ""))) +
+    mas(p.n_conflictos, (p.conflictos || []).length));
+  h += det("Compras con el producto equivocado", p.n_manual_compra || 0, "amarillo", nP +
+    lista(p.manual_compra, x => dos(x.descripcion, `debe ser ${x.nombre_siigo || "—"} · revisar: ${x.revisar || "—"}`)) +
+    mas(p.n_manual_compra, (p.manual_compra || []).length));
+  h += det("Código Siigo que no existe", p.n_no_existe || 0, "", nP +
+    lista(p.no_existe, x => dos(x.descripcion, (x.proveedor || "") + " · código " + x.codigo)) +
+    mas(p.n_no_existe, (p.no_existe || []).length));
+  h += det("Productos de proveedor sin asociar", p.n_pendientes || 0, "gris", nP +
+    `<p class="nota" style="margin:0 0 6px">Escribe su Código Siigo una vez en la hoja Productos_proveedor y quedan asociados para las próximas facturas.</p>` +
+    lista(p.pendientes, x => dos(x.descripcion, x.proveedor)) +
+    mas(p.n_pendientes, (p.pendientes || []).length));
+  return h;
+}
 function bloqueAlertas(k){
   const r = k.reposicion || {}, inv = k.inventario || {};
   const fila = (n, der) => `<div class="fila-dato"><span>${esc(n)}</span><b>${der}</b></div>`;
@@ -1602,6 +1642,7 @@ function bloqueAlertas(k){
   h += det("IVA e impuestos a revisar", ivaAl.length, "amarillo",
     `<p class="nota" style="margin:0 0 6px">Compara el IVA cobrado en las facturas contra el que tiene configurado el producto en Siigo (10_revision_iva.gs). Corre <b>revisarIva()</b> desde el editor para actualizar esta lista.</p>` +
     lista(ivaAl, x => `<div class="fila-dato"><span>${esc(x.nombre)}<small style="display:block;opacity:.65">${esc(x.estado)}</small></span><b>${esc(x.detalle || "")}</b></div>`));
+  h += alertasCompras(k, det, lista, mas);
   h += `</div>`;
   if(inv.valor_costo != null){
     const cc = inv.con_costo || [];
