@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#07323c">
+<meta name="theme-color" content="#0f1f4d">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icono-192.png">
@@ -14,8 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
-    --verde:#07323c; --verde2:#11525c; --verde3:#1a6b73; --amarillo:#3fd0c9;
-    --papel:#f4fbfa; --tinta:#10272c; --gris:#5c7177; --rojo:#e05a45; --azul:#6fb8ff;
+    --verde:#0f1f4d; --verde2:#15339e; --verde3:#1d4ed8; --amarillo:#8fc9ff;
+    --papel:#eef5ff; --tinta:#0b1733; --gris:#7b89ad; --rojo:#e05a45; --azul:#3b82f6;
     box-sizing:border-box;
   }
   *,*::before,*::after{box-sizing:inherit}
@@ -522,8 +522,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.48 · 9-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyzXhwdQowmQFRHLexN-PYWI4LX23WOZ_TD2etiePP4-PSnGJHWSYY8e6YRsHHx99XR/exec";
+const VERSION = "v1.48 · 7-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxDdJGdQ010f8XYTRzNQx5v_5nortSFSGIZPuZZqENNoAQybJmRO9gDBYYeScF5720/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -1543,7 +1543,7 @@ function bloqueTendencia(t){
     const bh = Math.max(1, (x.ventas || 0) / max * (H - 4));
     const domingo = new Date(x.fecha + "T12:00:00").getDay() === 0;
     return `<rect x="${(i*bw + 1).toFixed(1)}" y="${(H - bh).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}"
-      height="${bh.toFixed(1)}" rx="1.5" fill="${domingo ? "#6fb8ff" : "#3fd0c9"}"></rect>`;
+      height="${bh.toFixed(1)}" rx="1.5" fill="${domingo ? "#3b82f6" : "#8fc9ff"}"></rect>`;
   }).join("");
   const prom = t.reduce((s, x) => s + (x.ventas || 0), 0) / t.length;
   const mejor = t.reduce((a, x) => (x.ventas || 0) > (a.ventas || 0) ? x : a, t[0]);
@@ -1595,6 +1595,13 @@ function bloqueAlertas(k){
   h += det("Sin venta en 30 días", inv.n_sin_movimiento || 0, "gris",
     (inv.sin_movimiento_nota ? `<p class="nota" style="margin:0 0 6px">${esc(inv.sin_movimiento_nota)}</p>` : "") +
     lista(inv.sin_movimiento, x => fila(x.nombre, `${num(x.stock)} und · ${esc(x.ultima_venta)}`)) + mas(inv.n_sin_movimiento, (inv.sin_movimiento || []).length));
+  const costosAl = k.alertas_costos || [], ivaAl = k.alertas_iva || [];
+  h += det("Costo fuera de lo normal", costosAl.length, "amarillo",
+    `<p class="nota" style="margin:0 0 6px">Última compra comparada contra el promedio del producto (03_costos.gs).</p>` +
+    lista(costosAl, x => `<div class="fila-dato"><span>${esc(x.nombre)}<small style="display:block;opacity:.65">${esc(x.alerta)}</small></span><b>${x.costo_ultimo != null ? plata(x.costo_ultimo) : "—"}</b></div>`));
+  h += det("IVA e impuestos a revisar", ivaAl.length, "amarillo",
+    `<p class="nota" style="margin:0 0 6px">Compara el IVA cobrado en las facturas contra el que tiene configurado el producto en Siigo (10_revision_iva.gs). Corre <b>revisarIva()</b> desde el editor para actualizar esta lista.</p>` +
+    lista(ivaAl, x => `<div class="fila-dato"><span>${esc(x.nombre)}<small style="display:block;opacity:.65">${esc(x.estado)}</small></span><b>${esc(x.detalle || "")}</b></div>`));
   h += `</div>`;
   if(inv.valor_costo != null){
     const cc = inv.con_costo || [];
@@ -1650,8 +1657,8 @@ function htmlHoras(horas, dia){
       <button class="chip" data-horas="abierto" style="text-transform:none">Solo ${Math.min(...conDatos)}h a ${Math.max(...conDatos) + 1}h</button></div>
     <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">
       <line x1="${PL}" x2="${W - PR}" y1="${H - PB}" y2="${H - PB}" stroke="rgba(251,250,245,.25)"/>
-      <polyline points="${pts}" fill="none" stroke="#3fd0c9" stroke-width="2.5" stroke-linejoin="round"/>
-      ${rango.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(r.ventas).toFixed(1)}" r="${r.ventas ? 3.5 : 2}" fill="${r.ventas === max ? "#ffd23f" : "#3fd0c9"}"><title>${r.hora}:00 · ${plata(r.ventas)} · ${r.t} tickets</title></circle>`).join("")}
+      <polyline points="${pts}" fill="none" stroke="#8fc9ff" stroke-width="2.5" stroke-linejoin="round"/>
+      ${rango.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(r.ventas).toFixed(1)}" r="${r.ventas ? 3.5 : 2}" fill="${r.ventas === max ? "#ffd23f" : "#8fc9ff"}"><title>${r.hora}:00 · ${plata(r.ventas)} · ${r.t} tickets</title></circle>`).join("")}
       ${rango.map((r, i) => i % paso === 0 ? `<text x="${X(i).toFixed(1)}" y="${H - 6}" font-size="10" fill="rgba(251,250,245,.7)" text-anchor="middle">${r.hora}h</text>` : "").join("")}
       <text x="${W - PR}" y="10" font-size="10" fill="rgba(251,250,245,.7)" text-anchor="end">máx ${plata(max)}</text>
     </svg>
