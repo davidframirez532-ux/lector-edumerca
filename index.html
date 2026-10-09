@@ -300,6 +300,7 @@
 <!-- ============ FORMULARIO DE DESARME / RECETA ============ -->
 <section class="pantalla" id="desarmeForm">
   <div class="cabeza"><h2 id="desFormTitulo">Desarmar</h2><button class="sec" id="btnDesFormCancelar">Cancelar</button></div>
+  <p id="desFormEstado" style="margin:0;font-size:.95rem;text-align:center;min-height:1.2em;font-weight:600"></p>
   <div class="panel" id="desFormPanel"></div>
   <div class="acciones"><button class="ppal" id="btnDesFormGuardar">Guardar</button></div>
 </section>
@@ -537,8 +538,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.50 · 9-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyekhMEZu1m0yYtXnjMSx-qxZyPf-XGmDrFDdh_XzQZ8_gw0ukikkcA34dJAphmbXwc/exec";
+const VERSION = "v1.51 · 9-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycby-gxdXTJ1sO5uuGH1tW_ulIcpwKmifMKGfv0_BH7l6FdsIS_k9Fu_v2s6vmWik9L-H/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -3232,7 +3233,8 @@ function pintarDesarmes(){
       <small style="display:block;opacity:.7">${esc(fechaHora(e.fecha))}${e.quien ? " · " + esc(e.quien) : ""}${e.grande_existe ? "" : " · ⚠ el producto grande no existe en Siigo"}</small>
       <small style="display:block;opacity:.85">${esc(desLineasTxt(e))}</small>
       ${e.observacion ? `<small style="display:block;color:#ffd23f">${esc(e.observacion)}</small>` : ""}</span>
-      ${borrar ? `<button class="sec chico" data-des="borrar" data-id="${esc(e.id)}">Borrar</button>` : ""}</div>`;
+      ${borrar ? `<span style="display:flex;flex-direction:column;gap:4px"><button class="sec chico" data-des="editarDes" data-id="${esc(e.id)}">Editar</button>
+        <button class="sec chico" data-des="borrar" data-id="${esc(e.id)}">Borrar</button></span>` : ""}</div>`;
   const sec = (titulo, n, clase, cuerpo, abierto) => `<details class="alerta"${abierto ? " open" : ""}><summary><span>${titulo}</span>
       <span class="num-alerta ${n ? clase : "cero"}">${n}</span></summary>${cuerpo}</details>`;
   const vacio = t => `<p class="nota" style="margin:0">${t}</p>`;
@@ -3247,6 +3249,7 @@ function pintarDesarmes(){
       <small>${r.tipo === "SURTIDO" ? "Surtido · " + num(r.total) + " unidades" : r.individuales.map(x => num(x.cantidad) + " × " + (x.nombre || x.codigo) + (x.existe ? "" : " ⚠")).join(" · ")}</small></span></button>`).join("")
       : vacio("Todavía no hay productos registrados. Toca \"Registrar productos para desarme\"."));
   if(aju.length) h += sec("Últimos ajustados en Siigo", aju.length, "gris", aju.map(e => ev(e, false)).join(""));
+  if(pen.length || enp.length || aju.length) h += `<button class="sec chico" data-des="borrarTodos" style="margin-top:4px">Borrar registros de desarmes…</button>`;
   if(D.url_base) h += `<p class="nota" style="text-align:center"><a href="${esc(D.url_base)}" target="_blank" rel="noopener" style="color:inherit">Abrir base de desarmes en Drive</a></p>`;
   p.innerHTML = h + `</div>`;
 }
@@ -3268,9 +3271,56 @@ function desProdHtml(x){
 }
 function desEntradaHtml(texto){
   return `<p class="nota" style="margin:4px 0">${texto}</p><div class="acciones" style="margin:0">
-    <input class="buscador" id="desCod" type="text" inputmode="numeric" placeholder="Digita el código" autocomplete="off" enterkeyhint="done" style="flex:3">
-    <button class="sec chico" data-des="agregar">Agregar</button>
-    <button class="ppal chico" data-des="camara">📷</button></div>`;
+    <input class="buscador" id="desCod" type="search" placeholder="Busca por nombre o código" autocomplete="off" enterkeyhint="search" style="flex:3">
+    <button class="ppal chico" data-des="camara">📷</button></div>
+    <div id="desSug" style="display:flex;flex-direction:column;gap:4px;margin-top:6px"></div>`;
+}
+/* Sugerencias: al desarmar (paso 1) solo productos registrados para desarme; si no, todo el catálogo */
+function desSoloRecetas(){ return desForm && desForm.modo === "desarme" && !desForm.grande; }
+function desCoincide(q, nombre, codigos){
+  const t = normal(q).trim(); if(!t) return true;
+  const n = normal(nombre || "");
+  if(t.split(/\s+/).every(w => n.includes(w))) return true;
+  const d = t.replace(/\s+/g, "");
+  return codigos.some(c => c && normal(c).includes(d));
+}
+function desSugerencias(q){
+  if(desSoloRecetas()){
+    return ((desDatos && desDatos.recetas) || []).map((r, i) => ({i, codigo:r.grande, nombre:r.nombre, receta:r}))
+      .filter(x => desCoincide(q, x.nombre, [x.codigo])).slice(0, 40);
+  }
+  if(!String(q || "").trim()) return [];
+  return productos.filter(it => desCoincide(q, it.n, [it.c, it.b])).slice(0, 15)
+    .map(it => ({codigo: it.c || it.b, nombre: it.n, existencias: it.q}));
+}
+function desPintarSug(){
+  const cont = $("desSug"); if(!cont) return;
+  const q = ($("desCod") || {}).value || "";
+  const lista = desSugerencias(q);
+  if(desSoloRecetas() && !((desDatos && desDatos.recetas) || []).length){
+    cont.innerHTML = `<p class="nota" style="margin:0">No hay productos registrados para desarme. Regístralos primero desde "Registrar productos para desarme".</p>`; return;
+  }
+  if(!lista.length){
+    cont.innerHTML = q.trim() ? `<p class="nota" style="margin:0">Sin resultados.${/^\d{3,}$/.test(q.trim()) && !desSoloRecetas() ? " Toca Enter para usar el código " + esc(q.trim()) + " aunque no exista en Siigo." : ""}</p>` : ""; return;
+  }
+  cont.innerHTML = lista.map(x => `<button class="item" data-des="${x.receta ? "elegirReceta" : "elegir"}" data-i="${x.i ?? ""}" data-cod="${esc(x.codigo)}" style="width:100%">
+    <span class="nom"><span class="t">${esc(x.nombre || "Sin nombre")}${x.receta && !x.receta.existe ? " ⚠" : ""}</span>
+    <small>${esc(x.codigo)}${x.receta ? " · " + (x.receta.tipo === "SURTIDO" ? "surtido x" + num(x.receta.total) : x.receta.individuales.map(y => num(y.cantidad) + " × " + (y.nombre || y.codigo)).join(" · ")) : (x.existencias != null ? " · " + num(x.existencias) + " en Siigo" : "")}</small></span></button>`).join("");
+}
+function desEnter(v){
+  v = String(v || "").trim(); if(!v) return;
+  if(desSoloRecetas()){
+    const r = desRecetaDe(v) || (buscar(v) && desRecetaDe(buscar(v).c));
+    if(r){ desForm.grande = {codigo:r.grande, nombre:r.nombre, existe:r.existe}; pintarDesForm(); return; }
+    const l = desSugerencias(v);
+    if(l.length === 1){ desForm.grande = {codigo:l[0].receta.grande, nombre:l[0].receta.nombre, existe:l[0].receta.existe}; pintarDesForm(); return; }
+    if(!l.length) alert("Ese producto no está registrado para desarme.");
+    return;
+  }
+  if(buscar(v)) return desRecibirCodigo(v);
+  const l = desSugerencias(v);
+  if(l.length === 1) return desRecibirCodigo(l[0].codigo);
+  if(!l.length && /^\d{3,}$/.test(v)) return desRecibirCodigo(v);   // código que no está en Siigo: se guarda con alerta
 }
 function desSurtidoEsperado(){
   const r = desForm.grande ? desRecetaDe(desForm.grande.codigo) : null;
@@ -3286,11 +3336,12 @@ function desPintarSuma(){
 function pintarDesForm(){
   const f = desForm, p = $("desFormPanel");
   const receta = f.modo === "receta";
-  $("desFormTitulo").textContent = receta ? "Registrar para desarme" : "Desarmar";
-  $("btnDesFormGuardar").textContent = receta ? "Guardar producto para desarme" : "Registrar desarme";
+  $("desFormTitulo").textContent = receta ? "Registrar para desarme" : (f.editId ? "Editar desarme" : "Desarmar");
+  $("btnDesFormGuardar").textContent = receta ? "Guardar producto para desarme" : (f.editId ? "Guardar cambios" : "Registrar desarme");
   let h = `<div class="bloque"><h3>1. Producto grande · paca, caja o arroba</h3>`;
-  if(f.grande) h += desProdHtml(f.grande) + (f.editando ? "" : `<button class="sec chico" data-des="cambiarGrande">Cambiar</button>`);
-  else h += desEntradaHtml("Escanéalo con la cámara o el lector, o digita su código.");
+  if(f.grande) h += desProdHtml(f.grande) + (f.editando || f.editId ? "" : `<button class="sec chico" data-des="cambiarGrande">Cambiar</button>`);
+  else h += desEntradaHtml(f.modo === "desarme" ? "Elige uno de los productos registrados para desarme, búscalo o escanéalo."
+                                                   : "Búscalo por nombre o código, escanéalo con 📷 o con el lector.");
   h += `</div>`;
   if(f.grande && receta){
     h += `<div class="bloque"><h3>2. ¿Cómo viene?</h3><div class="acciones" style="margin:0">
@@ -3305,7 +3356,7 @@ function pintarDesForm(){
         <small style="display:block;opacity:.7">código ${esc(x.codigo)}${x.existe ? "" : " · ⚠ no existe en Siigo"}</small></span>
         ${f.tipo === "FIJO" ? `<input class="buscador" style="width:72px;text-align:center" type="text" inputmode="numeric" data-campo="cant" data-i="${i}" value="${esc(x.cantidad)}" placeholder="cant.">` : ""}
         <button class="sec chico" data-des="quitar" data-i="${i}">✕</button></div>`).join("");
-    h += desEntradaHtml("Escanea o digita el individual.") + `</div>`;
+    h += desEntradaHtml("Busca el individual por nombre o código, o escanéalo.") + `</div>`;
     if(f.editando) h += `<div class="acciones"><button class="sec chico" data-des="borrarReceta">Eliminar este producto de desarmes</button></div>`;
   }
   if(f.grande && !receta){
@@ -3333,12 +3384,13 @@ function pintarDesForm(){
             <small style="display:block;opacity:.7">código ${esc(x.codigo)}${x.existe ? "" : " · ⚠ no existe en Siigo"}</small></span>
             <input class="buscador" style="width:72px;text-align:center" type="text" inputmode="numeric" data-campo="cant" data-i="${i}" value="${esc(x.cantidad)}">
             <button class="sec chico" data-des="quitar" data-i="${i}">✕</button></div>`).join("");
-        h += desEntradaHtml("Escanea o digita cada sabor.") + `</div>`;
+        h += desEntradaHtml("Escanea cada sabor (suma 1), o búscalo por nombre o código.") + `</div>`;
       }
     }
   }
   p.innerHTML = h;
   desPintarSuma();
+  desPintarSug();
 }
 function desRecibirCodigo(codigo){
   codigo = String(codigo || "").trim();
@@ -3346,6 +3398,11 @@ function desRecibirCodigo(codigo){
   if(!codigo){ ir("desarmeForm"); return; }
   const it = buscar(codigo);
   let prod = it ? {codigo: it.c || codigo, nombre: it.n, existe: true} : {codigo, nombre: "", existe: false};
+  if(desSoloRecetas()){
+    const r = desRecetaDe(prod.codigo) || desRecetaDe(codigo);
+    if(r){ desForm.grande = {codigo:r.grande, nombre:r.nombre, existe:r.existe}; pintarDesForm(); ir("desarmeForm"); return; }
+    if(!it){ alert(`El código ${codigo} no está registrado para desarme ni existe en Siigo.`); ir("desarmeForm"); return; }
+  }
   if(!it){
     const n = prompt(`El código ${codigo} no está en Siigo.\nSe guarda igual y queda con alerta hasta que lo crees.\n\nNombre del producto (opcional):`, "");
     if(n === null){ ir("desarmeForm"); return; }
@@ -3376,7 +3433,15 @@ function desRecibirCodigo(codigo){
 async function guardarDesForm(){
   const f = desForm; if(!f) return;
   if(!f.grande) return alert("Primero escanea o digita el producto grande.");
-  const btn = $("btnDesFormGuardar"); btn.disabled = true;
+  const btn = $("btnDesFormGuardar"), estado = $("desFormEstado"), panel = $("desFormPanel");
+  const textoBtn = btn.textContent, t0 = Date.now();
+  let reloj = null;
+  const ocupar = () => {
+    btn.disabled = true; btn.textContent = f.modo === "receta" ? "Guardando…" : "Registrando…";
+    panel.style.opacity = ".45"; panel.style.pointerEvents = "none"; $("btnDesFormCancelar").disabled = true;
+    const txt = (f.modo === "receta" ? "Guardando producto para desarme" : f.editId ? "Guardando cambios" : "Registrando desarme") + " en Drive… ";
+    estado.textContent = txt; reloj = setInterval(() => { estado.textContent = txt + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  };
   try{
     let d;
     if(f.modo === "receta"){
@@ -3385,6 +3450,7 @@ async function guardarDesForm(){
         if(!f.individuales.length) throw new Error("Agrega al menos un individual.");
         if(malos.length) throw new Error("Falta la cantidad de: " + malos.map(x => x.nombre || x.codigo).join(", "));
       }else if(!(Number(f.total) > 0)) throw new Error("Escribe cuántas unidades trae en total.");
+      ocupar();
       d = await postApp({accion:"desarme_receta_guardar", tipo:f.tipo, total:Number(f.total) || 0,
         grande:{codigo:f.grande.codigo, nombre:f.grande.nombre},
         individuales:f.individuales.map(x => ({codigo:x.codigo, nombre:x.nombre, cantidad:Number(x.cantidad) || 0}))}, 60000);
@@ -3400,26 +3466,51 @@ async function guardarDesForm(){
         if(!individuales.length) throw new Error("Escanea los sabores que vinieron.");
         const esp = desSurtidoEsperado(), sum = desSuma();
         if(sum !== esp && !confirm(`Se esperaban ${num(esp)} unidades y llevas ${num(sum)}.\n\n¿Registrar así de todas formas?`)) return;
-      }else if(!confirm(`¿Registrar el desarme de ${num(cajas)} × ${r.nombre || r.grande}?`)) return;
-      d = await postApp({accion:"desarme_registrar", grande:f.grande.codigo, cajas, individuales}, 60000);
+      }else if(!confirm(f.editId ? `¿Guardar el desarme con ${num(cajas)} × ${r.nombre || r.grande}?`
+                                 : `¿Registrar el desarme de ${num(cajas)} × ${r.nombre || r.grande}?`)) return;
+      ocupar();
+      d = f.editId
+        ? await postApp({accion:"desarme_editar", id:f.editId, cajas, individuales}, 60000)
+        : await postApp({accion:"desarme_registrar", grande:f.grande.codigo, cajas, individuales}, 60000);
     }
     desAplicar(d);
-    let msg = d.mensaje || "Listo";
-    if(d.no_existen && d.no_existen.length) msg += `\n\nCódigos que no existen en Siigo:\n${d.no_existen.join("\n")}\n\nQuedó guardado con alerta. Créalos en Siigo y entrará solo en la siguiente plantilla.`;
-    alert(msg);
+    if(d.no_existen && d.no_existen.length){
+      alert(`${d.mensaje}\n\nCódigos que no existen en Siigo:\n${d.no_existen.join("\n")}\n\nQuedó guardado con alerta. Créalos en Siigo y entrará solo en la siguiente plantilla.`);
+    }
     desForm = null; pintarDesarmes(); ir("desarmes");
+    $("desEstado").textContent = "✓ " + (d.mensaje || "Listo");
   }catch(e){ alert("No se pudo guardar: " + e.message); }
-  finally{ btn.disabled = false; }
+  finally{
+    clearInterval(reloj); estado.textContent = "";
+    btn.disabled = false; btn.textContent = textoBtn;
+    panel.style.opacity = ""; panel.style.pointerEvents = ""; $("btnDesFormCancelar").disabled = false;
+  }
 }
 async function desAccion(cuerpo, confirmar, ms){
   if(confirmar && !confirm(confirmar)) return null;
-  $("desEstado").textContent = "Procesando…";
+  const t0 = Date.now(), txt = cuerpo.accion === "desarme_plantilla" ? "Generando plantilla… " : "Procesando… ";
+  $("desEstado").textContent = txt;
+  const reloj = setInterval(() => { $("desEstado").textContent = txt + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
   try{
     const d = await postApp(cuerpo, ms || 60000);
-    desAplicar(d); $("desEstado").textContent = d.mensaje || "";
+    clearInterval(reloj);
+    desAplicar(d); $("desEstado").textContent = d.mensaje ? "✓ " + d.mensaje : "";
     pintarDesarmes();
     return d;
-  }catch(e){ $("desEstado").textContent = "No se pudo: " + e.message; return null; }
+  }catch(e){ clearInterval(reloj); $("desEstado").textContent = "No se pudo: " + e.message; return null; }
+}
+async function desBorrarTodos(){
+  const D = desDatos || {};
+  const pen = (D.pendientes || []).length, hist = (D.en_plantilla || []).length + (D.ajustados || []).length;
+  if(pen && confirm(`¿Borrar los ${pen} desarmes pendientes (los que no han ido a plantilla)?\n\nLos productos registrados para desarme no se borran.`)){
+    await desAccion({accion:"desarme_borrar_todos", alcance:"pendientes"});
+    return;
+  }
+  if(!hist && !pen) return;
+  if(!confirm(`¿Borrar TODOS los registros de desarmes, incluido el historial ya enviado a Siigo?\n\nNo cambia nada en Siigo; solo limpia la base de desarmes. Los productos registrados para desarme no se borran.`)) return;
+  const t = prompt('Para confirmar escribe BORRAR');
+  if(!t || t.trim().toUpperCase() !== "BORRAR") return;
+  await desAccion({accion:"desarme_borrar_todos", alcance:"todo"});
 }
 async function desGenerarPlantilla(){
   const btn = $("btnDesPlantilla"); btn.disabled = true; btn.textContent = "Generando…";
@@ -3429,6 +3520,7 @@ async function desGenerarPlantilla(){
     if(!d.filas){ alert(d.mensaje + (d.excluidos ? `\n\n${d.excluidos} desarme(s) con códigos que no existen en Siigo no se incluyeron.` : "")); return; }
     let msg = `Plantilla lista: ${d.desarmes} desarme(s), ${d.filas} líneas.\n\nGuardada en Drive (Compras/Desarmes/Plantillas):\n${d.archivo}`;
     if(d.excluidos) msg += `\n\n⚠ ${d.excluidos} desarme(s) no se incluyeron porque tienen códigos que no existen en Siigo.`;
+    if(d.plantilla_base === false) msg += `\n\n⚠ No encontré Plantilla_desarme_base.xlsx en Drive: se usó un Excel genérico.`;
     if(d.sin_costo && d.sin_costo.length) msg += `\n\n⚠ Sin costo de compra (columna de costo vacía): ${d.sin_costo.join(", ")}.`;
     msg += `\n\nImpórtala en Siigo y luego toca "Marcar como ajustados".`;
     alert(msg);
@@ -3449,13 +3541,23 @@ $("btnDesFormGuardar").addEventListener("click", guardarDesForm);
 $("desPanel").addEventListener("click", e=>{
   const b = e.target.closest("[data-des]"); if(!b) return;
   if(b.dataset.des === "borrar") desAccion({accion:"desarme_borrar", id:b.dataset.id}, "¿Borrar este desarme?");
+  if(b.dataset.des === "editarDes"){
+    const ev = ((desDatos && desDatos.pendientes) || []).find(x => x.id === b.dataset.id); if(!ev) return;
+    nuevoDesForm("desarme");
+    Object.assign(desForm, {grande:{codigo:ev.grande, nombre:ev.nombre, existe:ev.grande_existe}, cajas:ev.cajas, editId:ev.id,
+      individuales: ev.tipo === "SURTIDO" ? ev.lineas.map(x => Object.assign({}, x)) : []});
+    pintarDesForm();
+  }
+  if(b.dataset.des === "borrarTodos") desBorrarTodos();
   if(b.dataset.des === "editar"){ const r = (desDatos.recetas || [])[Number(b.dataset.i)]; if(r) nuevoDesForm("receta", r); }
 });
 $("desFormPanel").addEventListener("click", async e=>{
   const b = e.target.closest("[data-des]"); if(!b || !desForm) return;
   const a = b.dataset.des, f = desForm;
   if(a === "camara") abrirCamara("desarme");
-  else if(a === "agregar"){ const v = ($("desCod") || {}).value; if(v && v.trim()) desRecibirCodigo(v.trim()); }
+  else if(a === "elegir"){ desRecibirCodigo(b.dataset.cod); }
+  else if(a === "elegirReceta"){ const r = (desDatos.recetas || [])[Number(b.dataset.i)];
+    if(r){ f.grande = {codigo:r.grande, nombre:r.nombre, existe:r.existe}; pintarDesForm(); } }
   else if(a === "cambiarGrande"){ f.grande = null; f.individuales = []; pintarDesForm(); }
   else if(a === "tipo"){ f.tipo = b.dataset.v; pintarDesForm(); }
   else if(a === "quitar"){ f.individuales.splice(Number(b.dataset.i), 1); pintarDesForm(); }
@@ -3468,6 +3570,7 @@ $("desFormPanel").addEventListener("click", async e=>{
   }
 });
 $("desFormPanel").addEventListener("input", e=>{
+  if(e.target.id === "desCod"){ desPintarSug(); return; }
   const c = e.target.dataset.campo; if(!c || !desForm) return;
   const v = e.target.value.replace(/[^\d]/g, "");
   if(c === "total") desForm.total = v;
@@ -3476,7 +3579,7 @@ $("desFormPanel").addEventListener("input", e=>{
   desPintarSuma();
 });
 $("desFormPanel").addEventListener("keydown", e=>{
-  if(e.key === "Enter" && e.target.id === "desCod"){ e.preventDefault(); const v = e.target.value.trim(); if(v) desRecibirCodigo(v); }
+  if(e.key === "Enter" && e.target.id === "desCod"){ e.preventDefault(); desEnter(e.target.value); }
 });
 
 /* ---------- Ajustes (5 toques en el logo) ---------- */
