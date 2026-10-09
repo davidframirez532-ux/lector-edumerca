@@ -278,7 +278,15 @@
   <div class="menu">
     <button class="ppal" id="btnCatalogo">Catálogo completo</button>
     <button class="ghost" id="btnConteo">Conteo físico</button>
+    <button class="ghost" id="btnAlertasPrecio">Alertas de precio</button>
   </div>
+</section>
+
+<!-- ============ ALERTAS DE PRECIO ============ -->
+<section class="pantalla" id="alertasPrecio">
+  <div class="cabeza"><h2>Alertas de precio</h2><button class="sec" id="btnVolverAlertas">Volver</button></div>
+  <p class="nota" style="margin:0" id="alertasNota"></p>
+  <div class="items" id="alertasItems"></div>
 </section>
 
 <!-- ============ COMPRAS ============ -->
@@ -514,8 +522,8 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v1.48 · 7-oct-2026";
-const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbxDdJGdQ010f8XYTRzNQx5v_5nortSFSGIZPuZZqENNoAQybJmRO9gDBYYeScF5720/exec";
+const VERSION = "v1.48 · 9-oct-2026";
+const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyzXhwdQowmQFRHLexN-PYWI4LX23WOZ_TD2etiePP4-PSnGJHWSYY8e6YRsHHx99XR/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
 const SEGUNDOS_LISTA = 90;
@@ -542,6 +550,7 @@ let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "",
 let escaner = null, modoCamara = "precio", pendiente = null;
 let tCuenta = null, tResultado = null, tLista = null, ocupado = false;
 let conteo = [], cola = [], ultimos = {}, quien = "", ultimaPlantilla = "";
+let alertasPrecio = [];
 
 const guardar=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const leer=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
@@ -658,6 +667,9 @@ async function descargarCatalogo(){
     guardar("catalogo", JSON.stringify(d.productos));
     guardar("catalogo_fecha", new Date().toISOString());
     estado.textContent = `${d.productos.length} productos`;
+    alertasPrecio = Array.isArray(d.alertas) ? d.alertas : [];
+    guardar("alertas_precio", JSON.stringify(alertasPrecio));
+    actualizarBadgeAlertas();
   }catch(e){
     console.warn("No se pudieron actualizar los precios:", e);
     const copia = leer("catalogo");
@@ -903,6 +915,44 @@ function tocarLista(){
   // durante el conteo físico la app NO vuelve sola al inicio
   if(act && ["conteo","conteoItem","ajustar"].includes(act.id)) return;
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
+}
+
+/* ---------- Alertas de precio ---------- */
+function actualizarBadgeAlertas(){
+  const n = alertasPrecio.length;
+  const b = $("btnAlertasPrecio");
+  if(b) b.textContent = n ? `⚠ Alertas de precio (${n})` : "Alertas de precio";
+}
+function pintarAlertas(){
+  const cont = $("alertasItems");
+  $("alertasNota").textContent = alertasPrecio.length
+    ? "Precio de hoy comparado contra el del día anterior."
+    : "";
+  if(!alertasPrecio.length){
+    cont.innerHTML = `<div class="vacio">Sin cambios de precio fuera de lo normal.</div>`;
+    return;
+  }
+  cont.replaceChildren(...alertasPrecio.map(a=>{
+    const b = document.createElement("button");
+    b.className = "item";
+    const sube = a.variacion_abs > 0;
+    b.innerHTML = `<span class="cod"></span>
+      <span class="nom"><span class="t"></span><small></small></span>
+      <span class="pre"><span class="${sube ? "mas" : "menos"}"></span><small>${sube ? "+" : ""}${a.variacion_pct}%</small></span>`;
+    b.querySelector(".cod").textContent = a.codigo || "";
+    b.querySelector(".t").textContent = a.nombre || "";
+    b.querySelector("small").textContent = a.categoria || "";
+    b.querySelector(".pre .mas, .pre .menos").textContent = "$" + pesos(a.precio_actual);
+    b.onclick = ()=>{
+      alert(`${a.nombre}\n\nAntes: $${pesos(a.precio_anterior)}\nAhora: $${pesos(a.precio_actual)}\n` +
+        `Cambio: ${sube ? "+" : ""}${pesos(a.variacion_abs)} (${sube ? "+" : ""}${a.variacion_pct}%)`);
+    };
+    return b;
+  }));
+}
+function abrirAlertas(){
+  pintarAlertas();
+  ir("alertasPrecio");
 }
 
 /* ---------- Conteo físico ---------- */
@@ -2954,6 +3004,8 @@ $("btnPedidos").addEventListener("click", abrirPedidos);
 $("btnAbastosPlaza").addEventListener("click", abrirAbastos);
 $("btnCatalogo").addEventListener("click", ()=>abrirLista());
 $("btnConteo").addEventListener("click", abrirConteo);
+$("btnAlertasPrecio").addEventListener("click", abrirAlertas);
+$("btnVolverAlertas").addEventListener("click", ()=>irMenu("inventario"));
 
 $("btnVolverLista").addEventListener("click", ()=>irMenu("inventario"));
 $("buscador").addEventListener("input", ()=>{ pintarLista(); tocarLista(); });
@@ -3148,6 +3200,8 @@ if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch
 setTimeout(soltarTeclado, 100);
 cargarConteo();
 try{ const c = leer("catalogo"); if(c) cargarEnMapa(JSON.parse(c)); }catch(e){}
+try{ const a = leer("alertas_precio"); if(a) alertasPrecio = JSON.parse(a); }catch(e){}
+actualizarBadgeAlertas();
 descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 </script>
