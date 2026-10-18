@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v13";
+const COMPRAS_VERSION = "compras v14";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -255,6 +255,13 @@ function abrirDetalle(){
   $("cpDetPanel").scrollTop = 0;
 }
 /* Lo que entra a Siigo por cada producto: cantidad (con factor), costo unitario sin IVA y con IVA */
+/* "15", "0,5" o "1/30" → número */
+function leerFactor(v){
+  const t = String(v || "").trim().replace(",", ".");
+  const m = /^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/.exec(t);
+  const n = m ? Number(m[1]) / Number(m[2]) : Number(t);
+  return n > 0 && isFinite(n) ? n : 0;
+}
 function detalleTxt(l){
   if(!l.detalle || !l.detalle.length) return "";
   const varios = l.detalle.length > 1;
@@ -271,7 +278,7 @@ function lineaTxt(l){
   if(l.destino === "GASTO") return l.precio !== undefined
     ? `🧾 Gasto · ${esc(l.nombre || l.cuenta)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "gasto sin cuenta")}</span>`;
   if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
-  return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} × ${num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
+  return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} ${l.factor < 1 ? "÷ " + num(Math.round(1 / l.factor)) : "× " + num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
     (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") +
     (l.iva_cuenta ? ` · IVA ${plata(l.iva_cuenta)} a IVA descontable` : "") +
     (l.alerta ? `<br><span style="color:#ffd23f">⚠ ${esc(l.alerta)}</span>` : "");
@@ -452,12 +459,13 @@ $("cpDetPanel").addEventListener("click", e => {
     const actual = l.codigo ? [{codigo: l.codigo, nombre: l.nombre + " (el actual: solo cambiar el factor)"}] : [];
     const p = await elegirProducto("¿Qué producto es?", actual, l.desc);
     if(!p) return;
-    const r = await pedirForm(p.nombre, [{id: "f", label: "¿Cuántas unidades de Siigo trae 1 unidad de la factura? (factor: caja de 15 → 15; suelto → 1)",
-      valor: l.factor_sugerido || l.factor || 1, inputmode: "decimal",
-      validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Asociar");
+    const fx = l.factor && l.factor < 1 ? "1/" + Math.round(1 / l.factor) : (l.factor_sugerido || l.factor || 1);
+    const r = await pedirForm(p.nombre, [{id: "f", label: "Factor. Caja de 15 que se vende suelta → 15 · Igual que en Siigo → 1 · " +
+      "Viene suelto y en Siigo se vende por paquete (30 huevos = 1 cubeta) → 1/30", valor: fx, inputmode: "text",
+      validar: v => leerFactor(v) > 0 || "Escribe un número (15) o una fracción (1/30)"}], "Asociar");
     if(!r) return;
     const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, linea: l.clave,
-      codigo: p.codigo, factor: Number(String(r.f).replace(",", ".")), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
+      codigo: p.codigo, factor: leerFactor(r.f), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
     if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal hasta que subas la factura)"; }
   }}];
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
