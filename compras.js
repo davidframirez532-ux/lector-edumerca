@@ -51,7 +51,7 @@ const html = `
   <p id="cpDetEstado" style="margin:0;font-size:.9rem;text-align:center;min-height:1.2em;font-weight:600"></p>
   <div class="panel" id="cpDetPanel"></div>
   <div class="acciones">
-    <button class="sec" id="btnCpIgnorar">Ignorar</button>
+    <button class="sec" id="btnCpIgnorar">Gasto / Ignorar</button>
     <button class="ppal" id="btnCpAprobar" style="flex:2">Aprobar y subir a Siigo</button>
   </div>
 </section>
@@ -381,12 +381,6 @@ $("cpDetPanel").addEventListener("click", e => {
       codigo: p.codigo, factor: Number(String(r.f).replace(",", ".")), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
     if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal hasta que subas la factura)"; }
   }}];
-  (cola.cuentas_gasto || []).forEach(c => ops.push({t: "🧾 Gasto: " + c.nombre, sub: "Cuenta " + c.cuenta + " · no entra al inventario", fn: async () => {
-    const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "GASTO",
-      cuenta: c.cuenta, proveedor: sel.proveedor, descripcion: l.desc}));
-    if(d) reemplazar(d.factura);
-  }}));
-  if(!(cola.cuentas_gasto || []).length) ops.push({t: "🧾 Gasto", sub: "Pide a tu contador las cuentas y llénalas en CP.CUENTAS_GASTO", fn: () => {}});
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "INVENTARIO"}));
@@ -413,10 +407,17 @@ $("btnCpAprobar").addEventListener("click", async () => {
 });
 $("btnCpIgnorar").addEventListener("click", async () => {
   const f = sel; if(!f) return;
-  const r = await pedirForm(`Ignorar ${f.numero}`, [{id: "m", label: "Motivo (no se registra en Siigo)", valor: "Personal", obligatorio: true,
-    validar: v => !!v.trim() || "Escribe el motivo"}], "Ignorar factura");
-  if(!r) return;
-  const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_ignorar", id: f.id, motivo: r.m}));
+  let motivo = await preguntar(`${f.proveedor} · ${f.numero}`, [
+    ["🧾 Gasto del negocio", "Bolsas, aseo del local, papelería, arreglos… No entra al inventario", "Gasto"],
+    ["🙋 Personal", "No es del negocio", "Personal"],
+    ["✏️ Otro motivo", "Lo escribes tú", "otro"]]);
+  if(motivo === "otro"){
+    const r = await pedirForm(`Ignorar ${f.numero}`, [{id: "m", label: "Motivo", valor: "", obligatorio: true,
+      validar: v => !!v.trim() || "Escribe el motivo"}], "Guardar");
+    if(!r) return;
+    motivo = r.m;
+  }
+  const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_ignorar", id: f.id, motivo}));
   if(!d) return;
   quitarDeCola(f.id);
   historial = null;
@@ -611,8 +612,10 @@ function pintarTodas(){
                nit: f.nit, total: f.total, sub: [f.tipo === "DS" ? "Documento soporte" : "Factura", f.doc, f.quien,
                /^CUADRA|SIN ENVIAR|ENVIADO/.test(f.conciliacion) ? f.conciliacion.toLowerCase() : "⚠ " + f.conciliacion].filter(Boolean).join(" · "),
                url: f.soporte}))],
-    ignoradas: ["Ignoradas", (H.ignoradas || []).map(f => ({fecha: f.fecha, numero: f.numero, proveedor: f.proveedor, nit: f.nit,
-               total: f.total, sub: "Motivo: " + (f.motivo || "") + (f.quien ? " · " + f.quien : ""), ignorada: true}))]
+    gastos: ["Gastos", (H.ignoradas || []).filter(f => /^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
+               proveedor: f.proveedor, nit: f.nit, total: f.total, sub: "🧾 Gasto" + (f.quien ? " · " + f.quien : ""), ignorada: true}))],
+    ignoradas: ["Ignoradas", (H.ignoradas || []).filter(f => !/^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
+               proveedor: f.proveedor, nit: f.nit, total: f.total, sub: "Motivo: " + (f.motivo || "") + (f.quien ? " · " + f.quien : ""), ignorada: true}))]
   };
   $("cpTodasChips").innerHTML = Object.keys(grupos).map(k =>
     `<button class="chip" data-vt="${k}" aria-pressed="${vistaTodas === k}" style="text-transform:none">${grupos[k][0]} · ${grupos[k][1].length}</button>`).join("");
