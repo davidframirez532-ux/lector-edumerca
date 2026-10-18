@@ -3655,12 +3655,10 @@ descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 </script>
 <script>
-  /* Carga compras.js y busca la versión nueva cada hora (no hay que cambiar números) */
+  /* Carga siempre la versión más reciente de compras.js */
   (function(){
     var s = document.createElement("script");
-    s.src = "compras.js?h=" + Math.floor(Date.now() / 3600000);
+    s.src = "compras.js?t=" + Date.now();
     document.body.appendChild(s);
   })();
 </script>
-</body>
-</html>
