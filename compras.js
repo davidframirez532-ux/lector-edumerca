@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v9";
+const COMPRAS_VERSION = "compras v10";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -256,7 +256,8 @@ function abrirDetalle(){
 }
 function lineaTxt(l){
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
-  if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)`;
+  if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` +
+    (l.iva_cuenta ? ` · su IVA ${plata(l.iva_cuenta)} a IVA descontable` : "");
   const bon = l.bonificacion ? `🎁 Bonificación · ` : "";
   const extra = l.bonif_unidades ? ` · <b>+${num(l.bonif_unidades)} de bonificación</b>, costo promedio ${plata(l.precio)}` : "";
   if(l.destino === "MEZCLA") return bon + (l.precio !== undefined ? `🔀 ${esc(l.nombre)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "mezcla incompleta")}</span>`);
@@ -265,6 +266,7 @@ function lineaTxt(l){
   if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
   return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} × ${num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
     (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") +
+    (l.iva_cuenta ? ` · IVA ${plata(l.iva_cuenta)} a IVA descontable` : "") +
     (l.alerta ? `<br><span style="color:#ffd23f">⚠ ${esc(l.alerta)}</span>` : "");
 }
 function pintarDetalle(){
@@ -275,7 +277,8 @@ function pintarDetalle(){
     <p class="nota" style="margin:0">NIT ${esc(f.nit)} · ${fechaTxt(f.fecha)} · vence ${fechaTxt(f.vence)}${
       f.pdf ? ` · <a href="${esc(f.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
     <div class="grilla" style="margin-top:10px">
-      <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}</div></div>
+      <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
+        t.iva_cuenta ? ` (${plata(t.iva_cuenta)} en IVA descontable)` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
   const pagos = cola.pagos || [];
