@@ -137,6 +137,16 @@ function pintarDetalle(){
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
+  const pagos = cola.pagos || [];
+  if(pagos.length){
+    if(!f.pagoElegido) f.pagoElegido = f.pago;
+    const pg = pagos.find(x => x.id === Number(f.pagoElegido)) || pagos[0];
+    h += `<div class="bloque"><h3>¿Cómo la pagaste? <small>sugerido: ${esc(f.pago_origen || "")}</small></h3>
+      <div style="display:flex;flex-direction:column;gap:6px">` + pagos.map(x =>
+        `<button class="chip" data-pago="${x.id}" aria-pressed="${x.id === pg.id}" style="text-transform:none;text-align:left">${esc(x.nombre)}</button>`).join("") +
+      `</div><p class="nota">${pg.credito ? "Queda como cuenta por pagar, vence " + fechaTxt(f.vence) + ". La marcas pagada en Proveedores cuando le pagues al repartidor."
+        : "Queda pagada en Siigo y marcada como pagada en Proveedores. No queda cuenta por pagar."}</p></div>`;
+  }
   h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}</div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
   h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
@@ -144,7 +154,7 @@ function pintarDetalle(){
       <span class="cod">${esc(l.n)}</span>
       <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · otros imp. " + plata(l.otros) : ""}<br>${lineaTxt(l)}</small></span>
       <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") + `</div>`;
-  h += `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo (no se envía a la DIAN) y queda pendiente de pago en Proveedores.</p>`;
+  h += `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
   const ap = $("btnCpAprobar");
   ap.disabled = !f.lista; ap.style.opacity = f.lista ? "1" : ".45";
@@ -196,6 +206,8 @@ function avisoNuevo(l){
   alert(`Producto nuevo: créalo primero en Siigo.\n\nNombre: ${String(l.desc).toUpperCase()}\nCódigo: ${cod.replace(/^0+(?=\d{8})/, "")}\nIVA: ${l.iva ? l.iva + "%" : "0% / excluido (verifícalo)"}\nCategoría: la que corresponda (no se puede cambiar después de la primera venta).\n\nDespués de crearlo, en Inventario toca "Actualizar inventario desde Siigo" y vuelve aquí a asociarlo.`);
 }
 $("cpDetPanel").addEventListener("click", e => {
+  const pg = e.target.closest("[data-pago]");
+  if(pg && sel){ sel.pagoElegido = Number(pg.dataset.pago); const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; return; }
   const b = e.target.closest("[data-l]"); if(!b || !sel) return;
   const l = sel.lineas[Number(b.dataset.l)];
   if(l.destino === "OBSEQUIO") return alert("Las líneas en $0 (obsequios) no se suben a Siigo porque exige precio mayor que cero. Si entra al inventario, ajústalo aparte.");
@@ -224,11 +236,14 @@ $("cpDetPanel").addEventListener("click", e => {
 });
 $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
-  if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(f.totales.total)} · vence ${fechaTxt(f.vence)}\n\nQueda como cuenta por pagar. No se envía a la DIAN.`)) return;
-  const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id}));
+  const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
+  if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(f.totales.total)}\nForma de pago: ${pg.nombre}\n` +
+    (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA. No queda cuenta por pagar.`) +
+    `\n\nNo se envía a la DIAN.`)) return;
+  const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
   if(!d){ cargarCola(false); return; }
   quitarDeCola(f.id);
-  alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre}\n\nConciliación después de subir:\n` +
+  alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}${d.credito ? "" : " (pagada)"}\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con el XML."));
   abrir("cpCola");
