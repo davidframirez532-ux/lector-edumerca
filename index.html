@@ -3654,6 +3654,13 @@ actualizarBadgeAlertas();
 descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 </script>
-<script src="compras.js?v=15"></script>
+<script>
+  /* Carga compras.js y busca la versión nueva cada hora (no hay que cambiar números) */
+  (function(){
+    var s = document.createElement("script");
+    s.src = "compras.js?h=" + Math.floor(Date.now() / 3600000);
+    document.body.appendChild(s);
+  })();
+</script>
 </body>
 </html>
