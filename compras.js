@@ -3,7 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v14";
+const COMPRAS_VERSION = "compras v15";
+const SERVIDOR_MINIMO = 15;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -216,6 +217,10 @@ function pintarCola(){
   $("cpResumen").innerHTML = caja(listasT.length, "listas") + caja(todasF.length - listasT.length, "con pendientes") +
     caja(plata(listasT.reduce((s, f) => s + f.totales.total, 0)), "por subir");
   let h = "";
+  if((cola.version_servidor || 0) < SERVIDOR_MINIMO) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0;opacity:1">
+    ⚠ <b>El servidor no está actualizado</b> (versión ${cola.version_servidor || "anterior"}, se necesita ${SERVIDOR_MINIMO}).
+    En Apps Script: Implementar → Gestionar implementaciones → ✏️ → Nueva versión. Luego toca ↻.
+    Mientras tanto no apruebes facturas: el servidor viejo no crea los recibos de pago.</p></div>`;
   if(cola.config_ok === false) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0">
     Falta configurar en 15_compras.gs: <b>${esc((cola.config_falta || []).join(", "))}</b>. Ejecuta cpDiagnostico() en el editor.</p></div>`;
   if(!todasF.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
@@ -488,6 +493,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
   historial = null;
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
+    (!d.credito && !d.recibo && !d.recibo_error ? `\n⚠ NO se creó recibo de pago: el servidor está desactualizado. Haz "Nueva versión" en Apps Script y revisa esta compra en Siigo.` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
