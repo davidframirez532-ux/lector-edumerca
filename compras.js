@@ -26,6 +26,7 @@ const html = `
   <div class="resumen" id="cpResumen"></div>
   <input class="buscador" id="cpBuscarCola" type="search" placeholder="Buscar proveedor, número o NIT" autocomplete="off" enterkeyhint="search">
   <div class="chips" id="cpChips"></div>
+  <div id="cpColaFiltros" class="cp-filtros"></div>
   <div class="items" id="cpItems"></div>
 </section>
 <section class="pantalla" id="cpTodas">
@@ -34,6 +35,7 @@ const html = `
     <button class="sec" id="btnCpTodasVolver">Volver</button></div>
   <div class="chips" id="cpTodasChips"></div>
   <input class="buscador" id="cpTodasBuscar" type="search" placeholder="Buscar proveedor, número o NIT" autocomplete="off" enterkeyhint="search">
+  <div id="cpTodasFiltros" class="cp-filtros"></div>
   <p id="cpTodasEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
   <div class="items" id="cpTodasItems"></div>
 </section>
@@ -64,7 +66,14 @@ const html = `
     <button class="ppal" id="btnDsCrear" style="flex:2">Crear en Siigo</button>
   </div>
 </section>
-<input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>`;
+<input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>
+<style>
+  .cp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
+  .cp-filtros .sel-hora{padding:8px;font-size:.9rem}
+  .cp-filtros .ancho{grid-column:1 / -1}
+  .cp-mes{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 4px;font-weight:600;font-size:.95rem;
+    color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
+</style>`;
 document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
 ["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
@@ -96,6 +105,60 @@ $("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
 
 const abrir = id => { clearTimeout(tLista); ir(id); };
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
+
+/* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
+const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const ORDENES = [["reciente", "Más recientes"], ["antigua", "Más antiguas"], ["proveedor", "Proveedor A-Z"], ["valor", "Mayor valor"]];
+const fx = {cola: {mes: "", prov: "", orden: "reciente"}, todas: {mes: "", prov: "", orden: "reciente"}};
+const mesDe = f => String(f.fecha || "").slice(0, 7);
+const nombreMes = m => m ? MESES_L[Number(m.slice(5, 7)) - 1] + " " + m.slice(0, 4) : "Sin fecha";
+/* Pinta los 3 selectores con las opciones que existen en la lista (base = antes de filtrar por mes y proveedor) */
+function pintarFiltros(contId, base, st){
+  const meses = [...new Set(base.map(mesDe).filter(Boolean))].sort().reverse();
+  const provs = [...new Set(base.map(f => f.proveedor || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  if(st.mes && !meses.includes(st.mes)) meses.unshift(st.mes);
+  if(st.prov && !provs.includes(st.prov)) provs.unshift(st.prov);
+  const op = (v, t, sel) => `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(t)}</option>`;
+  $(contId).innerHTML =
+    `<select class="sel-hora" data-fx="mes">${op("", "📅 Todos los meses", st.mes)}${meses.map(m => op(m, nombreMes(m), st.mes)).join("")}</select>` +
+    `<select class="sel-hora" data-fx="orden">${ORDENES.map(([v, t]) => op(v, "↕ " + t, st.orden)).join("")}</select>` +
+    `<select class="sel-hora ancho" data-fx="prov">${op("", "🏪 Todos los proveedores", st.prov)}${provs.map(p => op(p, p, st.prov)).join("")}</select>` +
+    (st.mes || st.prov ? `<button class="chip ancho" data-fx="limpiar" style="text-transform:none;justify-self:start">✕ Quitar filtro de mes/proveedor</button>` : "");
+}
+function aplicarFiltros(lista, st, valor){
+  const r = lista.filter(f => (!st.mes || mesDe(f) === st.mes) && (!st.prov || f.proveedor === st.prov));
+  const porFecha = (a, b) => String(a.fecha || "").localeCompare(String(b.fecha || "")) || String(a.numero).localeCompare(String(b.numero));
+  if(st.orden === "antigua") r.sort(porFecha);
+  else if(st.orden === "proveedor") r.sort((a, b) => String(a.proveedor).localeCompare(String(b.proveedor), "es") || porFecha(b, a));
+  else if(st.orden === "valor") r.sort((a, b) => valor(b) - valor(a));
+  else r.sort((a, b) => porFecha(b, a));
+  return r;
+}
+/* Si se ordena por fecha, la lista se agrupa por mes con cuántas facturas y cuánto suman */
+function htmlAgrupado(lista, st, valor, fila){
+  if(st.orden !== "reciente" && st.orden !== "antigua") return lista.map(fila).join("");
+  let h = "", mes = null;
+  lista.forEach((f, i) => {
+    const m = mesDe(f);
+    if(m !== mes){
+      mes = m;
+      const delMes = lista.filter(x => mesDe(x) === m);
+      h += `<div class="cp-mes"><span>${nombreMes(m)}</span><span>${delMes.length} · ${plata(delMes.reduce((t, x) => t + (valor(x) || 0), 0))}</span></div>`;
+    }
+    h += fila(f, i);
+  });
+  return h;
+}
+function escucharFiltros(contId, st, repintar){
+  $(contId).addEventListener("change", e => {
+    const k = e.target.dataset.fx; if(!k) return;
+    st[k] = e.target.value; repintar();
+  });
+  $(contId).addEventListener("click", e => {
+    if(e.target.dataset.fx !== "limpiar") return;
+    st.mes = ""; st.prov = ""; repintar();
+  });
+}
 
 /* ══════════════ FACTURAS POR APROBAR ══════════════ */
 let cola = null, sel = null, cargandoCola = false;
@@ -140,7 +203,10 @@ function pintarCola(){
     `<button class="chip" data-fc="${k}" aria-pressed="${filtroCola === k}" style="text-transform:none">${t} · ${todasF.filter(fn).length}</button>`).join("");
   const q = normal($("cpBuscarCola").value.trim());
   const fn = (FILTROS_COLA.find(x => x[0] === filtroCola) || FILTROS_COLA[0])[2];
-  const fs = todasF.filter(fn).filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
+  const base = todasF.filter(fn).filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
+  const valorF = f => (f.totales || {}).xml || 0;
+  pintarFiltros("cpColaFiltros", base, fx.cola);
+  const fs = aplicarFiltros(base, fx.cola, valorF);
   const listas = fs.filter(f => f.lista);
   const caja = (n, t) => `<div class="caja"><b>${n}</b><span>${t}</span></div>`;
   const listasT = todasF.filter(f => f.lista);
@@ -151,15 +217,14 @@ function pintarCola(){
     Falta configurar en 15_compras.gs: <b>${esc((cola.config_falta || []).join(", "))}</b>. Ejecuta cpDiagnostico() en el editor.</p></div>`;
   if(!todasF.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
   else if(!fs.length) h += `<div class="vacio">Ninguna factura con ese filtro.</div>`;
-  h += fs.map((f, i) => {
+  h += htmlAgrupado(fs, fx.cola, valorF, f => {
     const malo = (f.conciliacion || []).filter(c => !c.ok)[0];
-    return `<button class="item" data-i="${i}">
+    return `<button class="item" data-id="${esc(f.id)}">
       <span class="cod" style="${f.lista ? "background:#4fd6a8;color:var(--verde)" : "background:#ffd23f;color:var(--verde)"}">${f.lista ? "✓" : "!"}</span>
       <span class="nom">${esc(f.proveedor)}
         <small>${esc(f.numero)} · ${fechaTxt(f.fecha)} · ${f.lineas.length} líneas${malo ? `<br><span style="color:#ffd23f">${esc(malo.texto)}</span>` : ""}</small></span>
       <span class="pre">${plata(f.totales.xml)}<small>›</small></span></button>`;
-  }).join("");
-  h = h.replace(/data-i="(\d+)"/g, (m, i) => `data-id="${esc(fs[Number(i)].id)}"`);
+  });
   h += `<p class="nota" style="text-align:center">${cola.ya_en_siigo || 0} ya en Siigo · ${cola.ignoradas || 0} ignoradas${
     cola.notas_credito ? " · " + cola.notas_credito + " notas crédito (en KPIs → Alertas)" : ""}<br>Revisado ${esc(cola.generado || "")}</p>`;
   box.innerHTML = h;
@@ -174,6 +239,7 @@ $("cpChips").addEventListener("click", e => {
   filtroCola = b.dataset.fc; pintarCola();
 });
 $("cpBuscarCola").addEventListener("input", pintarCola);
+escucharFiltros("cpColaFiltros", fx.cola, pintarCola);
 $("btnCpActualizar").addEventListener("click", () => cargarCola(true));
 $("btnCpVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpPorAprobar").addEventListener("click", abrirCola);
@@ -620,12 +686,15 @@ function pintarTodas(){
   $("cpTodasChips").innerHTML = Object.keys(grupos).map(k =>
     `<button class="chip" data-vt="${k}" aria-pressed="${vistaTodas === k}" style="text-transform:none">${grupos[k][0]} · ${grupos[k][1].length}</button>`).join("");
   const q = normal($("cpTodasBuscar").value.trim());
-  const lista = grupos[vistaTodas][1].filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
-  $("cpTodasItems").innerHTML = lista.length ? lista.map((f, i) => `<button class="item" data-ti="${i}">
+  const base = grupos[vistaTodas][1].filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
+  const valorT = f => Number(f.total) || 0;
+  pintarFiltros("cpTodasFiltros", base, fx.todas);
+  const lista = aplicarFiltros(base, fx.todas, valorT);
+  $("cpTodasItems").innerHTML = lista.length ? htmlAgrupado(lista, fx.todas, valorT, (f, i) => `<button class="item" data-ti="${i}">
       <span class="cod">${esc(dmy(f.fecha).slice(0, 5))}</span>
       <span class="nom">${esc(f.proveedor || "Proveedor")}<small>${esc(f.numero)} · ${esc(f.sub || "")}</small></span>
-      <span class="pre">${plata(f.total)}<small>›</small></span></button>`).join("")
-    : `<div class="vacio">${historial || vistaTodas === "aprobar" ? "Nada por aquí." : "Cargando…"}</div>`;
+      <span class="pre">${plata(f.total)}<small>›</small></span></button>`)
+    : `<div class="vacio">${historial || vistaTodas === "aprobar" ? (base.length ? "Ninguna factura con ese mes o proveedor." : "Nada por aquí.") : "Cargando…"}</div>`;
   $("cpTodasItems").dataset.vista = vistaTodas;
   pintarTodas.lista = lista;
 }
@@ -634,6 +703,7 @@ $("cpTodasChips").addEventListener("click", e => {
   vistaTodas = b.dataset.vt; pintarTodas(); $("cpTodasItems").scrollTop = 0;
 });
 $("cpTodasBuscar").addEventListener("input", pintarTodas);
+escucharFiltros("cpTodasFiltros", fx.todas, pintarTodas);
 $("cpTodasItems").addEventListener("click", async e => {
   const b = e.target.closest("[data-ti]"); if(!b) return;
   const f = (pintarTodas.lista || [])[Number(b.dataset.ti)]; if(!f) return;
