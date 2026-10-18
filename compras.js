@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v12";
+const COMPRAS_VERSION = "compras v13";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -438,7 +438,7 @@ async function armarMezcla(l){
       ["+ Agregar otro producto", "", "otro"]]);
     if(sig === "guardar") break;
   }
-  const d = await conEspera("Guardando mezcla…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "MEZCLA",
+  const d = await conEspera("Guardando mezcla…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA",
     partes, proveedor: sel.proveedor, descripcion: l.desc}));
   if(d) reemplazar(d.factura);
 }
@@ -456,13 +456,13 @@ $("cpDetPanel").addEventListener("click", e => {
       valor: l.factor_sugerido || l.factor || 1, inputmode: "decimal",
       validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Asociar");
     if(!r) return;
-    const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, clave: l.clave,
+    const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, linea: l.clave,
       codigo: p.codigo, factor: Number(String(r.f).replace(",", ".")), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
     if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal hasta que subas la factura)"; }
   }}];
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
-    const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "INVENTARIO"}));
+    const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
     if(d) reemplazar(d.factura);
   }});
   ops.push({t: "🆕 Es un producto nuevo", sub: "Te digo con qué datos crearlo en Siigo", fn: () => avisoNuevo(l)});
