@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v11";
+const COMPRAS_VERSION = "compras v12";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -254,6 +254,13 @@ function abrirDetalle(){
   abrir("cpDet");
   $("cpDetPanel").scrollTop = 0;
 }
+/* Lo que entra a Siigo por cada producto: cantidad (con factor), costo unitario sin IVA y con IVA */
+function detalleTxt(l){
+  if(!l.detalle || !l.detalle.length) return "";
+  const varios = l.detalle.length > 1;
+  return l.detalle.map(d => `<span style="display:block;margin-top:3px;color:#bcd9dc">↳ ${varios ? esc(d.nombre) + ": " : ""}<b>${num(d.cantidad)} und</b> × ${plata(d.costo)}` +
+    `${Math.abs(d.costo_iva - d.costo) >= 0.5 ? ` · con IVA <b>${plata(d.costo_iva)}</b>` : " · sin IVA"} c/u</span>`).join("");
+}
 function lineaTxt(l){
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
   if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` +
@@ -296,7 +303,7 @@ function pintarDetalle(){
   h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
       <span class="cod">${esc(l.n)}</span>
-      <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · otros imp. " + plata(l.otros) : ""}<br>${lineaTxt(l)}</small></span>
+      <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · otros imp. " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
       <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") + `</div>`;
   h += `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
