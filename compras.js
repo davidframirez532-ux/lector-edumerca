@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v10";
+const COMPRAS_VERSION = "compras v11";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -657,7 +657,7 @@ $("btnCpDs").addEventListener("click", abrirDs);
 /* ══════════════ VER TODAS LAS FACTURAS ══════════════ */
 let historial = null, vistaTodas = "aprobar", cargandoHist = false, pagos = null, cargandoPagos = false, estadoPago = "";
 try{ pagos = JSON.parse(localStorage.getItem("cp_pagos") || "null"); }catch(e){ pagos = null; }
-const COLOR_PAGO = {"PAGADA": "#4fd6a8", "PAGADA SIN RECIBO": "#8fc9ff", "PENDIENTE": "#ffd23f", "PAGO PARCIAL": "#ff9a86", "FALTA RECIBO EN SIIGO": "#ff9a86"};
+const COLOR_PAGO = {"PAGADA": "#4fd6a8", "PAGADA SIN RECIBO": "#8fc9ff", "PENDIENTE": "#ffd23f", "VENCIDA": "#ff9a86", "PAGO PARCIAL": "#ff9a86", "FALTA RECIBO EN SIIGO": "#ff9a86"};
 async function cargarPagos(){
   if(cargandoPagos) return;
   cargandoPagos = true;
@@ -705,7 +705,8 @@ function pintarTodas(){
     pagos: ["Pagos", ((pagos && pagos.filas) || []).filter(f => !estadoPago || f.estado === estadoPago).map(f => ({fecha: f.fecha,
                numero: f.factura + " · " + f.doc, proveedor: f.proveedor, nit: f.nit, total: f.total, pago: f,
                sub: `<b style="color:${COLOR_PAGO[f.estado] || "inherit"}">${esc(f.estado)}</b>` +
-                 (f.saldo > 0.5 ? " · saldo " + plata(f.saldo) : "") + (f.recibos ? " · " + esc(f.recibos) : "")}))],
+                 (f.saldo > 0.5 ? " · saldo " + plata(f.saldo) : "") + (f.saldo > 0.5 && f.vence ? " · vence " + esc(dmy(f.vence)) : "") +
+                 (f.recibos ? " · " + esc(f.recibos) : "")}))],
     gastos: ["Gastos", (H.ignoradas || []).filter(f => /^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
                proveedor: f.proveedor, nit: f.nit, total: f.total, sub: "🧾 Gasto" + (f.quien ? " · " + f.quien : ""), ignorada: true}))],
     ignoradas: ["Ignoradas", (H.ignoradas || []).filter(f => !/^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
@@ -788,4 +789,39 @@ $("btnCpTodasActualizar").addEventListener("click", () => {
 });
 $("btnCpTodasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpTodas").addEventListener("click", abrirTodas);
+
+/* ══════════════ ALERTAS DE PAGOS EN KPIs ══════════════ */
+function abrirPagosFiltrado(estado){
+  vistaTodas = "pagos"; estadoPago = estado || "";
+  abrirTodas();
+}
+const pintarKpisApp = window.pintarKpis;
+window.pintarKpis = function(){
+  pintarKpisApp.apply(this, arguments);
+  try{
+    const pg = ((kpis || {}).alertas_compras || {}).pagos;
+    const bloque = [...$("kpiPanel").querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
+    if(!bloque) return;
+    const cont = bloque.querySelector("div");
+    const fila = x => `<div class="fila-dato"><span>${esc(x.proveedor || "")}<small style="display:block;opacity:.65">${esc(x.doc)} · ${esc(x.factura || "")}${
+      x.vence ? " · vence " + esc(dmy(x.vence)) : ""}</small></span><b>${plata(x.saldo)}</b></div>`;
+    const det = (titulo, n, valor, clase, lista, estado, nota) => `<details class="alerta"><summary><span>${titulo}</span>
+      <span class="num-alerta ${n ? clase : "cero"}">${n}</span></summary>
+      <p class="nota" style="margin:0 0 6px">${nota}${n ? " · total " + plata(valor) : ""}</p>${(lista || []).map(fila).join("")}
+      ${n ? `<button class="sec chico" data-ir-pagos="${estado}" style="margin-top:8px">Ver en Facturas → Pagos</button>` : ""}</details>`;
+    const nota = pg ? `Revisado ${esc(pg.generado || "")}. ` : "Sin datos todavía: se revisa cada madrugada o al abrir Facturas → Ver todas → Pagos. ";
+    const p = pg || {};
+    const h = det("Facturas marcadas pagadas sin recibo en Siigo", p.n_falta_recibo || 0, p.valor_falta_recibo, "", p.falta_recibo,
+        "FALTA RECIBO EN SIIGO", nota + "En la app están pagadas pero en Siigo siguen con saldo. Crea el recibo de pago desde Pagos.") +
+      det("Facturas vencidas sin pagar", p.n_vencidas || 0, p.valor_vencidas, "", p.vencidas, "VENCIDA",
+        nota + "A crédito, ya pasó su vencimiento y no tienen recibo de pago.") +
+      det("Pagos parciales", p.n_parciales || 0, p.valor_parciales, "amarillo", p.parciales, "PAGO PARCIAL",
+        nota + "Tienen recibo de pago pero aún queda saldo.");
+    if(cont) cont.insertAdjacentHTML("afterbegin", h);
+  }catch(e){ console.warn("Alertas de pagos:", e); }
+};
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("[data-ir-pagos]"); if(!b) return;
+  abrirPagosFiltrado(b.dataset.irPagos);
+});
 })();
