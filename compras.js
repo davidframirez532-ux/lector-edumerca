@@ -6,13 +6,45 @@
 
 /* ---------- Pantallas ---------- */
 const html = `
+<section class="pantalla" id="cpMenuProv">
+  <div class="cabeza"><h2>Proveedores</h2><button class="sec" id="btnCpMenuProvVolver">Volver</button></div>
+  <div class="menu" id="cpMenuProvBotones"></div>
+</section>
+<section class="pantalla" id="cpMenuFact">
+  <div class="cabeza"><h2>Facturas</h2><button class="sec" id="btnCpMenuFactVolver">Volver</button></div>
+  <div class="menu">
+    <button class="ghost" id="btnCpTodas">Ver todas las facturas</button>
+    <button class="ppal" id="btnCpPorAprobar">Facturas por aprobar</button>
+    <button class="ghost" id="btnCpDs">Documento soporte (foto)</button>
+  </div>
+</section>
 <section class="pantalla" id="cpCola">
   <div class="cabeza"><h2>Por aprobar</h2>
     <button class="sec" id="btnCpActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
     <button class="sec" id="btnCpVolver">Volver</button></div>
   <p id="cpEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
   <div class="resumen" id="cpResumen"></div>
+  <input class="buscador" id="cpBuscarCola" type="search" placeholder="Buscar proveedor, número o NIT" autocomplete="off" enterkeyhint="search">
+  <div class="chips" id="cpChips"></div>
   <div class="items" id="cpItems"></div>
+</section>
+<section class="pantalla" id="cpTodas">
+  <div class="cabeza"><h2>Todas las facturas</h2>
+    <button class="sec" id="btnCpTodasActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
+    <button class="sec" id="btnCpTodasVolver">Volver</button></div>
+  <div class="chips" id="cpTodasChips"></div>
+  <input class="buscador" id="cpTodasBuscar" type="search" placeholder="Buscar proveedor, número o NIT" autocomplete="off" enterkeyhint="search">
+  <p id="cpTodasEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
+  <div class="items" id="cpTodasItems"></div>
+</section>
+<section class="pantalla" id="cpBuscar">
+  <div class="cabeza"><h2 id="cpBuscarTitulo" style="font-size:1.4rem">Elegir producto</h2><button class="sec" id="btnCpBuscarVolver">Volver</button></div>
+  <div style="display:flex;gap:8px;flex:none">
+    <input class="buscador" id="cpBuscarCampo" type="search" placeholder="Escribe nombre o código, o escanea" autocomplete="off" enterkeyhint="search" style="flex:1;min-width:0">
+    <button class="sec" id="btnCpBuscarCamara" aria-label="Escanear" style="flex:none;font-size:1.4rem;padding:0 16px">📷</button>
+  </div>
+  <p id="cpBuscarNota" style="margin:0;font-size:.85rem;opacity:.85;min-height:1.1em"></p>
+  <div class="items" id="cpBuscarItems"></div>
 </section>
 <section class="pantalla" id="cpDet">
   <div class="cabeza"><h2 id="cpDetTitulo" style="font-size:1.45rem">Factura</h2><button class="sec" id="btnCpDetVolver">Volver</button></div>
@@ -34,10 +66,10 @@ const html = `
 </section>
 <input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>`;
 document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
-["cpDet", "cpDs"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
+["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
 /* 🏠 en las pantallas nuevas */
-["cpCola", "cpDet", "cpDs"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -45,11 +77,22 @@ document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
   cab.insertBefore(b, [...cab.querySelectorAll("button")].pop());
 });
 
-/* Botones en el menú Compras */
+/* Compras → Proveedores (ver todos, pedidos, abastos) y Facturas (ver todas, por aprobar, documento soporte) */
 const menu = document.querySelector("#compras .menu");
-menu.insertAdjacentHTML("afterbegin",
-  `<button class="ppal" id="btnCpPorAprobar">Facturas por aprobar</button>
-   <button class="ghost" id="btnCpDs">Documento soporte (foto)</button>`);
+const subProv = $("cpMenuProvBotones");
+[["btnProveedores", "Ver todos los proveedores", "ghost"], ["btnPedidos", "Pedidos sugeridos", "ppal"], ["btnAbastosPlaza", "Lista de abastos", "ghost"]]
+  .forEach(([id, txt, cls]) => { const b = $(id); b.textContent = txt; b.className = cls; subProv.appendChild(b); });
+menu.innerHTML = `<button class="ppal" id="btnCpMenuProv">Proveedores</button><button class="ghost" id="btnCpMenuFact">Facturas</button>`;
+$("btnCpMenuProv").addEventListener("click", () => irMenu("cpMenuProv"));
+$("btnCpMenuFact").addEventListener("click", () => irMenu("cpMenuFact"));
+$("btnCpMenuProvVolver").addEventListener("click", () => irMenu("compras"));
+$("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
+/* Los "Volver" de proveedores, pedidos y abastos ahora regresan al submenú */
+["btnVolverProvs", "btnVolverPedidos", "btnVolverAbastos"].forEach(id => {
+  const viejo = $(id), nuevo = viejo.cloneNode(true);
+  viejo.replaceWith(nuevo);
+  nuevo.addEventListener("click", () => irMenu("cpMenuProv"));
+});
 
 const abrir = id => { clearTimeout(tLista); ir(id); };
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
@@ -79,18 +122,35 @@ async function cargarCola(actualizar){
     msg.textContent = (cola ? "Mostrando la última copia · " : "") + e.message;
   }finally{ clearInterval(reloj); cargandoCola = false; pintarCola(); }
 }
+let filtroCola = "";
+const FILTROS_COLA = [
+  ["", "Todas", f => true],
+  ["lista", "✓ Listas", f => f.lista],
+  ["asociar", "Sin asociar", f => !f.lista && (f.lineas || []).some(l => l.precio === undefined && l.destino !== "OBSEQUIO" &&
+      /asoci|Productos_proveedor|Sin producto|no existe|varios productos/i.test(l.motivo || ""))],
+  ["costo", "Caja / costo alto", f => (f.lineas || []).some(l => /caja|Costo|factor/i.test((l.motivo || "") + " " + (l.alerta || "")))],
+  ["prov", "Proveedor no existe", f => (f.conciliacion || []).some(c => !c.ok && /proveedor no existe/i.test(c.texto))],
+  ["otras", "Otros pendientes", f => !f.lista && !FILTROS_COLA.slice(2, 5).some(x => x[2](f))]
+];
 function pintarCola(){
   const box = $("cpItems");
   if(!cola){ box.innerHTML = '<div class="vacio">Cargando…</div>'; $("cpResumen").innerHTML = ""; return; }
-  const fs = cola.facturas || [];
+  const todasF = cola.facturas || [];
+  $("cpChips").innerHTML = FILTROS_COLA.map(([k, t, fn]) =>
+    `<button class="chip" data-fc="${k}" aria-pressed="${filtroCola === k}" style="text-transform:none">${t} · ${todasF.filter(fn).length}</button>`).join("");
+  const q = normal($("cpBuscarCola").value.trim());
+  const fn = (FILTROS_COLA.find(x => x[0] === filtroCola) || FILTROS_COLA[0])[2];
+  const fs = todasF.filter(fn).filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
   const listas = fs.filter(f => f.lista);
   const caja = (n, t) => `<div class="caja"><b>${n}</b><span>${t}</span></div>`;
-  $("cpResumen").innerHTML = caja(listas.length, "listas") + caja(fs.length - listas.length, "con pendientes") +
-    caja(plata(listas.reduce((s, f) => s + f.totales.total, 0)), "por subir");
+  const listasT = todasF.filter(f => f.lista);
+  $("cpResumen").innerHTML = caja(listasT.length, "listas") + caja(todasF.length - listasT.length, "con pendientes") +
+    caja(plata(listasT.reduce((s, f) => s + f.totales.total, 0)), "por subir");
   let h = "";
   if(cola.config_ok === false) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0">
     Falta configurar en 15_compras.gs: <b>${esc((cola.config_falta || []).join(", "))}</b>. Ejecuta cpDiagnostico() en el editor.</p></div>`;
-  if(!fs.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
+  if(!todasF.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
+  else if(!fs.length) h += `<div class="vacio">Ninguna factura con ese filtro.</div>`;
   h += fs.map((f, i) => {
     const malo = (f.conciliacion || []).filter(c => !c.ok)[0];
     return `<button class="item" data-i="${i}">
@@ -99,17 +159,23 @@ function pintarCola(){
         <small>${esc(f.numero)} · ${fechaTxt(f.fecha)} · ${f.lineas.length} líneas${malo ? `<br><span style="color:#ffd23f">${esc(malo.texto)}</span>` : ""}</small></span>
       <span class="pre">${plata(f.totales.xml)}<small>›</small></span></button>`;
   }).join("");
+  h = h.replace(/data-i="(\d+)"/g, (m, i) => `data-id="${esc(fs[Number(i)].id)}"`);
   h += `<p class="nota" style="text-align:center">${cola.ya_en_siigo || 0} ya en Siigo · ${cola.ignoradas || 0} ignoradas${
     cola.notas_credito ? " · " + cola.notas_credito + " notas crédito (en KPIs → Alertas)" : ""}<br>Revisado ${esc(cola.generado || "")}</p>`;
   box.innerHTML = h;
 }
 $("cpItems").addEventListener("click", e => {
   const b = e.target.closest(".item"); if(!b || !cola) return;
-  sel = cola.facturas[Number(b.dataset.i)];
-  abrirDetalle();
+  sel = cola.facturas.find(f => f.id === b.dataset.id);
+  if(sel) abrirDetalle();
 });
+$("cpChips").addEventListener("click", e => {
+  const b = e.target.closest("[data-fc]"); if(!b) return;
+  filtroCola = b.dataset.fc; pintarCola();
+});
+$("cpBuscarCola").addEventListener("input", pintarCola);
 $("btnCpActualizar").addEventListener("click", () => cargarCola(true));
-$("btnCpVolver").addEventListener("click", () => irMenu("compras"));
+$("btnCpVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpPorAprobar").addEventListener("click", abrirCola);
 
 /* ---------- Detalle ---------- */
@@ -120,11 +186,17 @@ function abrirDetalle(){
   $("cpDetPanel").scrollTop = 0;
 }
 function lineaTxt(l){
-  if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Obsequio en $0 · no se sube</span>`;
+  if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
+  if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)`;
+  const bon = l.bonificacion ? `🎁 Bonificación · ` : "";
+  const extra = l.bonif_unidades ? ` · <b>+${num(l.bonif_unidades)} de bonificación</b>, costo promedio ${plata(l.precio)}` : "";
+  if(l.destino === "MEZCLA") return bon + (l.precio !== undefined ? `🔀 ${esc(l.nombre)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "mezcla incompleta")}</span>`);
   if(l.destino === "GASTO") return l.precio !== undefined
     ? `🧾 Gasto · ${esc(l.nombre || l.cuenta)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "gasto sin cuenta")}</span>`;
-  if(l.precio === undefined) return `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
-  return `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} × ${num(l.factor)} = <b>${num(l.cant_siigo)}</b>` : ""}`;
+  if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
+  return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} × ${num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
+    (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") +
+    (l.alerta ? `<br><span style="color:#ffd23f">⚠ ${esc(l.alerta)}</span>` : "");
 }
 function pintarDetalle(){
   const f = sel; if(!f) return;
@@ -182,44 +254,132 @@ async function conEspera(texto, fn){
   finally{ clearInterval(reloj); $("cpDetPanel").style.opacity = ""; if(msg.textContent.startsWith(texto)) msg.textContent = ""; }
 }
 
-/* Elegir producto del catálogo de la app */
+/* Elegir producto del catálogo: pantalla con buscador que filtra mientras escribes (nombre o código)
+   y botón para escanear. Devuelve {codigo, nombre} o null si vuelves sin elegir. */
+let buscarCtx = null;
 function buscarCatalogo(q){
   const t = normal(q).trim(); if(!t) return [];
-  const pal = t.split(/\s+/), d = t.replace(/\s+/g, "");
-  return productos.filter(p => pal.every(w => normal(p.n).includes(w)) || (p.c && normal(p.c).includes(d)) || (p.b && normal(p.b).includes(d))).slice(0, 15);
+  const pal = t.split(/\s+/).filter(Boolean), d = t.replace(/\s+/g, "").replace(/^0+(?=\d)/, "");
+  const res = productos.filter(p => pal.every(w => normal(p.n).includes(w)) ||
+    (d.length >= 2 && ((p.c && normal(p.c).replace(/^0+(?=\d)/, "").includes(d)) || (p.b && normal(p.b).replace(/^0+(?=\d)/, "").includes(d)))));
+  // primero los que empiezan con lo escrito
+  res.sort((a, b) => (normal(b.n).startsWith(pal[0]) - normal(a.n).startsWith(pal[0])) || a.n.localeCompare(b.n, "es"));
+  return res.slice(0, 60);
 }
 function elegirProducto(titulo, sugeridos, textoBusqueda){
   return new Promise(resolve => {
-    const ops = (sugeridos || []).map(c => ({t: c.nombre, sub: "código " + c.codigo + (c.aprendido ? " · usado antes" : ""), fn: () => resolve(c)}));
-    ops.push({t: "🔍 Buscar en el catálogo", sub: "Por nombre o código de barras", fn: async () => {
-      const r = await pedirForm("Buscar producto", [{id: "q", label: "Nombre o código", valor: textoBusqueda || ""}], "Buscar");
-      if(!r) return resolve(null);
-      const res = buscarCatalogo(r.q);
-      if(!res.length){ alert("No encontré productos con esa búsqueda.\nSi es un producto nuevo, créalo primero en Siigo."); return resolve(null); }
-      elegir("Elige el producto", res.map(p => ({t: p.n, sub: "código " + (p.c || p.b) + " · " + plata(p.p), fn: () => resolve({codigo: p.c || p.b, nombre: p.n})})));
-    }});
-    elegir(titulo, ops);
+    buscarCtx = {resolve, volver: (document.querySelector(".pantalla.activa") || {}).id || "cpDet", sugeridos: sugeridos || []};
+    $("cpBuscarTitulo").textContent = titulo || "Elegir producto";
+    $("cpBuscarCampo").value = "";
+    $("cpBuscarNota").textContent = textoBusqueda ? "En la factura: " + textoBusqueda : "";
+    pintarBuscar();
+    abrir("cpBuscar");
+    setTimeout(() => $("cpBuscarCampo").focus(), 120);
   });
 }
+function terminarBuscar(p){
+  const c = buscarCtx; if(!c) return;
+  buscarCtx = null;
+  ir(c.volver);
+  c.resolve(p);
+}
+function pintarBuscar(){
+  if(!buscarCtx) return;
+  const q = $("cpBuscarCampo").value.trim();
+  const fila = (cod, nom, sub) => `<button class="item" data-pcod="${esc(cod)}" data-pnom="${esc(nom)}" style="width:100%">
+    <span class="cod">${esc(cod)}</span><span class="nom">${esc(nom)}<small>${sub || ""}</small></span><span class="pre">›</span></button>`;
+  let h = "";
+  if(!q){
+    if(buscarCtx.sugeridos.length) h += `<p class="nota" style="margin:6px 0">Sugeridos</p>` +
+      buscarCtx.sugeridos.map(x => fila(x.codigo, x.nombre, x.aprendido ? "usado antes" : "")).join("");
+    h += `<div class="vacio">Escribe parte del nombre o del código, o toca 📷 para escanear.</div>`;
+  }else{
+    const res = buscarCatalogo(q);
+    h = res.length ? res.map(p => fila(p.c || p.b, p.n, (p.b && p.b !== p.c ? "barras " + esc(p.b) + " · " : "") + plata(p.p) +
+                                     (p.q != null ? " · " + num(p.q) + " en Siigo" : ""))).join("")
+      : `<div class="vacio">No hay productos con "${esc(q)}".<br>Si es un producto nuevo, créalo en Siigo y actualiza el inventario desde Ajustes.</div>`;
+  }
+  $("cpBuscarItems").innerHTML = h;
+}
+$("cpBuscarCampo").addEventListener("input", pintarBuscar);
+$("cpBuscarCampo").addEventListener("keydown", e => {
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  const v = e.target.value.trim(), it = buscar(v);          // lector de código de barras: escribe y da Enter
+  if(it) return terminarBuscar({codigo: it.c || it.b, nombre: it.n});
+  const res = buscarCatalogo(v);
+  if(res.length === 1) terminarBuscar({codigo: res[0].c || res[0].b, nombre: res[0].n});
+});
+$("cpBuscarItems").addEventListener("click", e => {
+  const b = e.target.closest("[data-pcod]"); if(!b) return;
+  terminarBuscar({codigo: b.dataset.pcod, nombre: b.dataset.pnom});
+});
+$("btnCpBuscarVolver").addEventListener("click", () => terminarBuscar(null));
+$("btnCpBuscarCamara").addEventListener("click", () => abrirCamara("asociar"));
+/* La cámara de la app llama a mostrar() y volverDeCamara(); mientras se elige producto, se usan aquí */
+const mostrarApp = window.mostrar, volverCamaraApp = window.volverDeCamara;
+window.mostrar = function(codigo, volverA){
+  if(!buscarCtx) return mostrarApp(codigo, volverA);
+  const it = buscar(codigo);
+  if(it) return terminarBuscar({codigo: it.c || it.b, nombre: it.n});
+  ir("cpBuscar");
+  $("cpBuscarCampo").value = String(codigo).trim();
+  pintarBuscar();
+  $("cpBuscarNota").textContent = "El código " + codigo + " no está en el catálogo de Siigo.";
+};
+window.volverDeCamara = function(){
+  if(buscarCtx && modoCamara === "asociar"){ ir("cpBuscar"); return; }
+  return volverCamaraApp();
+};
 function avisoNuevo(l){
   const cod = l.barras || l.codProv || "(sin código)";
   alert(`Producto nuevo: créalo primero en Siigo.\n\nNombre: ${String(l.desc).toUpperCase()}\nCódigo: ${cod.replace(/^0+(?=\d{8})/, "")}\nIVA: ${l.iva ? l.iva + "%" : "0% / excluido (verifícalo)"}\nCategoría: la que corresponda (no se puede cambiar después de la primera venta).\n\nDespués de crearlo, en Inventario toca "Actualizar inventario desde Siigo" y vuelve aquí a asociarlo.`);
+}
+/* Una línea del proveedor repartida en 2 o más productos con cantidades fijas.
+   (Si los sabores vienen al azar, mejor regístrala como caja y usa Desarmes.) */
+const preguntar = (titulo, ops) => new Promise(ok => elegir(titulo, ops.map(([t, sub, v]) => ({t, sub, fn: () => ok(v)}))));
+async function armarMezcla(l){
+  const partes = (l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.cantidad / (l.cant || 1)}));
+  if(partes.length){
+    const seguir = await preguntar("Mezcla actual: " + partes.map(x => num(x.cantidad) + " × " + x.nombre).join(" + "),
+      [["Empezar de nuevo", "Se borran los productos actuales", "nuevo"], ["Agregar otro producto", "", "agregar"]]);
+    if(seguir === "nuevo") partes.length = 0;
+  }
+  while(true){
+    const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1}` : "Primer producto de la mezcla", [],
+      l.desc);
+    if(!p) return;
+    const r = await pedirForm(p.nombre, [{id: "q", label: "¿Cuántas unidades de este producto trae 1 unidad de la factura?",
+      valor: "", inputmode: "decimal", obligatorio: true, validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Agregar");
+    if(!r) return;
+    partes.push({codigo: p.codigo, nombre: p.nombre, cantidad: Number(String(r.q).replace(",", "."))});
+    if(partes.length < 2) continue;
+    const resumen = partes.map(x => num(x.cantidad) + " × " + x.nombre).join(" + ");
+    const sig = await preguntar(resumen, [["✓ Guardar mezcla", "El costo se reparte según el precio de venta de cada producto", "guardar"],
+      ["+ Agregar otro producto", "", "otro"]]);
+    if(sig === "guardar") break;
+  }
+  const d = await conEspera("Guardando mezcla…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "MEZCLA",
+    partes, proveedor: sel.proveedor, descripcion: l.desc}));
+  if(d) reemplazar(d.factura);
 }
 $("cpDetPanel").addEventListener("click", e => {
   const pg = e.target.closest("[data-pago]");
   if(pg && sel){ sel.pagoElegido = Number(pg.dataset.pago); const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; return; }
   const b = e.target.closest("[data-l]"); if(!b || !sel) return;
   const l = sel.lineas[Number(b.dataset.l)];
-  if(l.destino === "OBSEQUIO") return alert("Las líneas en $0 (obsequios) no se suben a Siigo porque exige precio mayor que cero. Si entra al inventario, ajústalo aparte.");
-  const ops = [{t: "📦 Asociar a un producto de Siigo", sub: l.codigo ? "Ahora: " + l.nombre : "Queda guardado para las próximas facturas", fn: async () => {
-    const p = await elegirProducto("¿Qué producto es?", [], String(l.desc).split(" ").slice(0, 3).join(" "));
+  if(l.destino === "OBSEQUIO") return alert("Esta línea viene con cantidad 0: no se sube.");
+  const ops = [{t: "📦 Asociar a un producto de Siigo", sub: l.codigo ? "Ahora: " + l.nombre + " × " + (l.factor || 1) : "Queda guardado para las próximas facturas", fn: async () => {
+    const actual = l.codigo ? [{codigo: l.codigo, nombre: l.nombre + " (el actual: solo cambiar el factor)"}] : [];
+    const p = await elegirProducto("¿Qué producto es?", actual, l.desc);
     if(!p) return;
-    const r = await pedirForm(p.nombre, [{id: "f", label: "¿Cuántas unidades de Siigo es 1 unidad de la factura? (factor)", valor: l.factor || 1, inputmode: "decimal",
+    const r = await pedirForm(p.nombre, [{id: "f", label: "¿Cuántas unidades de Siigo trae 1 unidad de la factura? (factor: caja de 15 → 15; suelto → 1)",
+      valor: l.factor_sugerido || l.factor || 1, inputmode: "decimal",
       validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Asociar");
     if(!r) return;
     const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, clave: l.clave,
       codigo: p.codigo, factor: Number(String(r.f).replace(",", ".")), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
-    if(d) reemplazar(d.factura);
+    if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal hasta que subas la factura)"; }
   }}];
   (cola.cuentas_gasto || []).forEach(c => ops.push({t: "🧾 Gasto: " + c.nombre, sub: "Cuenta " + c.cuenta + " · no entra al inventario", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "GASTO",
@@ -227,7 +387,8 @@ $("cpDetPanel").addEventListener("click", e => {
     if(d) reemplazar(d.factura);
   }}));
   if(!(cola.cuentas_gasto || []).length) ops.push({t: "🧾 Gasto", sub: "Pide a tu contador las cuentas y llénalas en CP.CUENTAS_GASTO", fn: () => {}});
-  if(l.destino === "GASTO") ops.push({t: "↩ Volver a inventario", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
+  ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
+  if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, clave: l.clave, destino: "INVENTARIO"}));
     if(d) reemplazar(d.factura);
   }});
@@ -243,8 +404,10 @@ $("btnCpAprobar").addEventListener("click", async () => {
   const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
   if(!d){ cargarCola(false); return; }
   quitarDeCola(f.id);
+  historial = null;
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}${d.credito ? "" : " (pagada)"}\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
+    (d.asociaciones_definitivas ? `\n\n${d.asociaciones_definitivas} asociación(es) pasaron a Productos_proveedor.` : "") +
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con el XML."));
   abrir("cpCola");
 });
@@ -256,6 +419,7 @@ $("btnCpIgnorar").addEventListener("click", async () => {
   const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_ignorar", id: f.id, motivo: r.m}));
   if(!d) return;
   quitarDeCola(f.id);
+  historial = null;
   abrir("cpCola");
 });
 $("btnCpDetVolver").addEventListener("click", () => abrir("cpCola"));
@@ -410,7 +574,82 @@ $("btnDsOtra").addEventListener("click", () => {
 });
 $("btnDsVolver").addEventListener("click", () => {
   if(ds && !confirm("¿Salir? Se pierde lo que no hayas creado en Siigo.")) return;
-  ds = null; irMenu("compras");
+  ds = null; irMenu("cpMenuFact");
 });
 $("btnCpDs").addEventListener("click", abrirDs);
+
+/* ══════════════ VER TODAS LAS FACTURAS ══════════════ */
+let historial = null, vistaTodas = "aprobar", cargandoHist = false;
+try{ historial = JSON.parse(localStorage.getItem("cp_historial") || "null"); }catch(e){ historial = null; }
+async function abrirTodas(){
+  abrir("cpTodas");
+  pintarTodas();
+  if(!cola) cargarCola(false).then(pintarTodas);
+  await cargarHistorial();
+}
+async function cargarHistorial(){
+  if(cargandoHist) return;
+  cargandoHist = true;
+  $("cpTodasEstado").style.color = ""; $("cpTodasEstado").textContent = "Cargando…";
+  try{
+    historial = await postAdmin({accion: "compras_historial"});
+    try{ localStorage.setItem("cp_historial", JSON.stringify(historial)); }catch(e){}
+    $("cpTodasEstado").textContent = "";
+  }catch(e){
+    $("cpTodasEstado").style.color = "#ff9a86";
+    $("cpTodasEstado").textContent = (historial ? "Mostrando la última copia · " : "") + e.message;
+  }finally{ cargandoHist = false; pintarTodas(); }
+}
+function pintarTodas(){
+  const H = historial || {}, porAprobar = (cola && cola.facturas) || [];
+  const grupos = {
+    aprobar: ["Por aprobar", porAprobar.map(f => ({fecha: f.fecha, numero: f.numero, proveedor: f.proveedor, nit: f.nit,
+               total: f.totales.xml, sub: f.lista ? "✓ lista" : "con pendientes", id: f.id}))],
+    siigo: ["En Siigo", (H.en_siigo || []).map(f => ({fecha: f.fecha, numero: f.numero, proveedor: f.proveedor, nit: f.nit,
+               total: f.total, sub: f.doc, url: f.pdf}))],
+    subidas: ["Subidas desde la app", (H.subidas || []).map(f => ({fecha: String(f.fecha).slice(0, 10), numero: f.numero, proveedor: f.proveedor,
+               nit: f.nit, total: f.total, sub: [f.tipo === "DS" ? "Documento soporte" : "Factura", f.doc, f.quien,
+               /^CUADRA|SIN ENVIAR|ENVIADO/.test(f.conciliacion) ? f.conciliacion.toLowerCase() : "⚠ " + f.conciliacion].filter(Boolean).join(" · "),
+               url: f.soporte}))],
+    ignoradas: ["Ignoradas", (H.ignoradas || []).map(f => ({fecha: f.fecha, numero: f.numero, proveedor: f.proveedor, nit: f.nit,
+               total: f.total, sub: "Motivo: " + (f.motivo || "") + (f.quien ? " · " + f.quien : ""), ignorada: true}))]
+  };
+  $("cpTodasChips").innerHTML = Object.keys(grupos).map(k =>
+    `<button class="chip" data-vt="${k}" aria-pressed="${vistaTodas === k}" style="text-transform:none">${grupos[k][0]} · ${grupos[k][1].length}</button>`).join("");
+  const q = normal($("cpTodasBuscar").value.trim());
+  const lista = grupos[vistaTodas][1].filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit).includes(q));
+  $("cpTodasItems").innerHTML = lista.length ? lista.map((f, i) => `<button class="item" data-ti="${i}">
+      <span class="cod">${esc(dmy(f.fecha).slice(0, 5))}</span>
+      <span class="nom">${esc(f.proveedor || "Proveedor")}<small>${esc(f.numero)} · ${esc(f.sub || "")}</small></span>
+      <span class="pre">${plata(f.total)}<small>›</small></span></button>`).join("")
+    : `<div class="vacio">${historial || vistaTodas === "aprobar" ? "Nada por aquí." : "Cargando…"}</div>`;
+  $("cpTodasItems").dataset.vista = vistaTodas;
+  pintarTodas.lista = lista;
+}
+$("cpTodasChips").addEventListener("click", e => {
+  const b = e.target.closest("[data-vt]"); if(!b) return;
+  vistaTodas = b.dataset.vt; pintarTodas(); $("cpTodasItems").scrollTop = 0;
+});
+$("cpTodasBuscar").addEventListener("input", pintarTodas);
+$("cpTodasItems").addEventListener("click", async e => {
+  const b = e.target.closest("[data-ti]"); if(!b) return;
+  const f = (pintarTodas.lista || [])[Number(b.dataset.ti)]; if(!f) return;
+  if(f.id){ sel = cola.facturas.find(x => x.id === f.id); if(sel) abrirDetalle(); return; }
+  if(f.ignorada){
+    elegir(f.proveedor + " · " + f.numero, [{t: "↩ Volver a Facturas por aprobar", sub: "Deja de estar ignorada", fn: async () => {
+      try{
+        const d = await postAdmin({accion: "compra_reactivar", nit: f.nit, numero: f.numero});
+        historial.ignoradas = historial.ignoradas.filter(x => !(x.nit === f.nit && x.numero === f.numero));
+        pintarTodas();
+        alert(d.mensaje);
+      }catch(err){ alert("No se pudo: " + err.message); }
+    }}]);
+    return;
+  }
+  if(f.url) window.open(f.url, "_blank");
+  else alert(f.proveedor + "\n" + f.numero + "\n" + (f.sub || ""));
+});
+$("btnCpTodasActualizar").addEventListener("click", () => { cargarHistorial(); cargarCola(false).then(pintarTodas); });
+$("btnCpTodasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
+$("btnCpTodas").addEventListener("click", abrirTodas);
 })();
