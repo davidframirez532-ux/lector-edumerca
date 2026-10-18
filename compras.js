@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v8";
+const COMPRAS_VERSION = "compras v9";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -286,7 +286,7 @@ function pintarDetalle(){
       <div style="display:flex;flex-direction:column;gap:6px">` + pagos.map(x =>
         `<button class="chip" data-pago="${x.id}" aria-pressed="${x.id === pg.id}" style="text-transform:none;text-align:left">${esc(x.nombre)}</button>`).join("") +
       `</div><p class="nota">${pg.credito ? "Queda como cuenta por pagar, vence " + fechaTxt(f.vence) + ". La marcas pagada en Proveedores cuando le pagues al repartidor."
-        : "Queda pagada en Siigo y marcada como pagada en Proveedores. No queda cuenta por pagar."}</p></div>`;
+        : "Se crea como cuenta por pagar y en seguida un recibo de pago que la salda (igual al RP automático de Siigo). Queda pagada también en Proveedores."}</p></div>`;
   }
   h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}</div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
@@ -462,13 +462,16 @@ $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
   const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
   if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(f.totales.total)}\nForma de pago: ${pg.nombre}\n` +
-    (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA. No queda cuenta por pagar.`) +
+    (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Cuenta por pagar + recibo de pago: queda PAGADA.`) +
     `\n\nNo se envía a la DIAN.`)) return;
   const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
   if(!d){ cargarCola(false); return; }
   quitarDeCola(f.id);
   historial = null;
-  alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}${d.credito ? "" : " (pagada)"}\n\nConciliación después de subir:\n` +
+  alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
+    (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
+    (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
+    `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
     (d.asociaciones_definitivas ? `\n\n${d.asociaciones_definitivas} asociación(es) pasaron a Productos_proveedor.` : "") +
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con el XML."));
@@ -649,7 +652,22 @@ $("btnDsVolver").addEventListener("click", () => {
 $("btnCpDs").addEventListener("click", abrirDs);
 
 /* ══════════════ VER TODAS LAS FACTURAS ══════════════ */
-let historial = null, vistaTodas = "aprobar", cargandoHist = false;
+let historial = null, vistaTodas = "aprobar", cargandoHist = false, pagos = null, cargandoPagos = false, estadoPago = "";
+try{ pagos = JSON.parse(localStorage.getItem("cp_pagos") || "null"); }catch(e){ pagos = null; }
+const COLOR_PAGO = {"PAGADA": "#4fd6a8", "PAGADA SIN RECIBO": "#8fc9ff", "PENDIENTE": "#ffd23f", "PAGO PARCIAL": "#ff9a86", "FALTA RECIBO EN SIIGO": "#ff9a86"};
+async function cargarPagos(){
+  if(cargandoPagos) return;
+  cargandoPagos = true;
+  const msg = $("cpTodasEstado"), t0 = Date.now();
+  msg.style.color = "";
+  const reloj = setInterval(() => { msg.textContent = "Comparando compras y recibos de pago en Siigo… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  try{
+    pagos = await postAdmin({accion: "compras_pagos"});
+    try{ localStorage.setItem("cp_pagos", JSON.stringify(pagos)); }catch(e){}
+    msg.textContent = "";
+  }catch(e){ msg.style.color = "#ff9a86"; msg.textContent = (pagos ? "Mostrando la última copia · " : "") + e.message; }
+  finally{ clearInterval(reloj); cargandoPagos = false; pintarTodas(); }
+}
 try{ historial = JSON.parse(localStorage.getItem("cp_historial") || "null"); }catch(e){ historial = null; }
 async function abrirTodas(){
   abrir("cpTodas");
@@ -681,6 +699,10 @@ function pintarTodas(){
                nit: f.nit, total: f.total, sub: [f.tipo === "DS" ? "Documento soporte" : "Factura", f.doc, f.quien,
                /^CUADRA|SIN ENVIAR|ENVIADO/.test(f.conciliacion) ? f.conciliacion.toLowerCase() : "⚠ " + f.conciliacion].filter(Boolean).join(" · "),
                url: f.soporte}))],
+    pagos: ["Pagos", ((pagos && pagos.filas) || []).filter(f => !estadoPago || f.estado === estadoPago).map(f => ({fecha: f.fecha,
+               numero: f.factura + " · " + f.doc, proveedor: f.proveedor, nit: f.nit, total: f.total, pago: f,
+               sub: `<b style="color:${COLOR_PAGO[f.estado] || "inherit"}">${esc(f.estado)}</b>` +
+                 (f.saldo > 0.5 ? " · saldo " + plata(f.saldo) : "") + (f.recibos ? " · " + esc(f.recibos) : "")}))],
     gastos: ["Gastos", (H.ignoradas || []).filter(f => /^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
                proveedor: f.proveedor, nit: f.nit, total: f.total, sub: "🧾 Gasto" + (f.quien ? " · " + f.quien : ""), ignorada: true}))],
     ignoradas: ["Ignoradas", (H.ignoradas || []).filter(f => !/^gasto/i.test(f.motivo || "")).map(f => ({fecha: f.fecha, numero: f.numero,
@@ -695,22 +717,54 @@ function pintarTodas(){
   const lista = aplicarFiltros(base, fx.todas, valorT);
   $("cpTodasItems").innerHTML = lista.length ? htmlAgrupado(lista, fx.todas, valorT, (f, i) => `<button class="item" data-ti="${i}">
       <span class="cod">${esc(dmy(f.fecha).slice(0, 5))}</span>
-      <span class="nom">${esc(f.proveedor || "Proveedor")}<small>${esc(f.numero)} · ${esc(f.sub || "")}</small></span>
+      <span class="nom">${esc(f.proveedor || "Proveedor")}<small>${esc(f.numero)} · ${f.pago ? f.sub : esc(f.sub || "")}</small></span>
       <span class="pre">${plata(f.total)}<small>›</small></span></button>`)
     : `<div class="vacio">${historial || vistaTodas === "aprobar" ? (base.length ? "Ninguna factura con ese mes o proveedor." : "Nada por aquí.") : "Cargando…"}</div>`;
   $("cpTodasItems").dataset.vista = vistaTodas;
   pintarTodas.lista = lista;
+  // Pagos: resumen por estado (toca uno para filtrar) y carga la primera vez
+  if(vistaTodas === "pagos"){
+    if(!pagos && !cargandoPagos) cargarPagos();
+    if(pagos && !cargandoPagos){
+      const c = pagos.conteo || {};
+      $("cpTodasEstado").innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">` +
+        [["", "Todas"], ...Object.keys(COLOR_PAGO).map(k => [k, k.charAt(0) + k.slice(1).toLowerCase()])].filter(([k]) => !k || c[k])
+          .map(([k, t]) => `<button class="chip" data-est="${esc(k)}" aria-pressed="${estadoPago === k}" style="text-transform:none">${esc(t)}${k ? " · " + c[k] : ""}</button>`).join("") +
+        `</div><span style="opacity:.7">Compras desde ${esc(dmy(pagos.desde))} · revisado ${esc(pagos.generado || "")}</span>`;
+    }
+  }else if(!cargandoHist && !/Cargando|Mostrando/.test($("cpTodasEstado").textContent)) $("cpTodasEstado").textContent = "";
 }
 $("cpTodasChips").addEventListener("click", e => {
   const b = e.target.closest("[data-vt]"); if(!b) return;
   vistaTodas = b.dataset.vt; pintarTodas(); $("cpTodasItems").scrollTop = 0;
 });
 $("cpTodasBuscar").addEventListener("input", pintarTodas);
+$("cpTodasEstado").addEventListener("click", e => {
+  const b = e.target.closest("[data-est]"); if(!b) return;
+  estadoPago = b.dataset.est; pintarTodas();
+});
 escucharFiltros("cpTodasFiltros", fx.todas, pintarTodas);
 $("cpTodasItems").addEventListener("click", async e => {
   const b = e.target.closest("[data-ti]"); if(!b) return;
   const f = (pintarTodas.lista || [])[Number(b.dataset.ti)]; if(!f) return;
   if(f.id){ sel = cola.facturas.find(x => x.id === f.id); if(sel) abrirDetalle(); return; }
+  if(f.pago){
+    const p = f.pago;
+    if(p.saldo <= 0.5) return alert(`${p.proveedor} · ${p.doc}\n${p.estado}${p.recibos ? "\nRecibos: " + p.recibos : ""}`);
+    const crear = async (idPago, nombre) => {
+      if(!confirm(`¿Crear en Siigo el recibo de pago de ${p.doc} (${p.proveedor}) por ${plata(p.saldo)}, ${nombre}?`)) return;
+      $("cpTodasEstado").textContent = "Creando recibo de pago…";
+      try{
+        const d = await postAdmin({accion: "compra_recibo", id: p.id, pago: idPago, fecha: hoyISO()});
+        alert(`✅ Recibo ${d.recibo} por ${plata(d.valor)}. La factura queda pagada en Siigo y en Proveedores.`);
+        cargarPagos();
+      }catch(err){ $("cpTodasEstado").textContent = ""; alert("No se pudo: " + err.message); }
+    };
+    const ops = ((cola && cola.pagos) || []).filter(x => x.rp).map(x => ({t: "💵 Crear recibo de pago · " + x.nombre.replace("Contado · ", ""),
+      sub: "Salda " + plata(p.saldo) + " en Siigo", fn: () => crear(x.rp, x.nombre.replace("Contado · ", ""))}));
+    elegir(`${p.proveedor} · ${p.doc} · ${p.estado}`, ops.length ? ops : [{t: "Actualiza Por aprobar (↻) para cargar las formas de pago", fn: () => {}}]);
+    return;
+  }
   if(f.ignorada){
     elegir(f.proveedor + " · " + f.numero, [{t: "↩ Volver a Facturas por aprobar", sub: "Deja de estar ignorada", fn: async () => {
       try{
@@ -725,7 +779,10 @@ $("cpTodasItems").addEventListener("click", async e => {
   if(f.url) window.open(f.url, "_blank");
   else alert(f.proveedor + "\n" + f.numero + "\n" + (f.sub || ""));
 });
-$("btnCpTodasActualizar").addEventListener("click", () => { cargarHistorial(); cargarCola(false).then(pintarTodas); });
+$("btnCpTodasActualizar").addEventListener("click", () => {
+  if(vistaTodas === "pagos") return cargarPagos();
+  cargarHistorial(); cargarCola(false).then(pintarTodas);
+});
 $("btnCpTodasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpTodas").addEventListener("click", abrirTodas);
 })();
