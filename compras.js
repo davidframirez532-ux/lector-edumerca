@@ -3,6 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
+const COMPRAS_VERSION = "compras v8";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -104,6 +105,8 @@ $("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
 });
 
 const abrir = id => { clearTimeout(tLista); ir(id); };
+/* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
+$("verApp").textContent += " · " + COMPRAS_VERSION;
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
