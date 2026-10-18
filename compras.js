@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v15";
+const COMPRAS_VERSION = "compras v16";
 const SERVIDOR_MINIMO = 15;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -493,7 +493,10 @@ $("btnCpAprobar").addEventListener("click", async () => {
   historial = null;
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
-    (!d.credito && !d.recibo && !d.recibo_error ? `\n⚠ NO se creó recibo de pago: el servidor está desactualizado. Haz "Nueva versión" en Apps Script y revisa esta compra en Siigo.` : "") +
+    (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
+    (!d.credito && !d.recibo && !d.recibo_error && !d.recibo_nota && !d.version_servidor
+      ? `\n⚠ NO se creó recibo de pago: el servidor está desactualizado. Haz "Nueva versión" en Apps Script.` : "") +
+    (d.saldo_siigo !== undefined && d.saldo_siigo !== null ? `\nSaldo que informa Siigo al crearla: ${plata(d.saldo_siigo)}` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
