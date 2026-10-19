@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v19";
+const COMPRAS_VERSION = "compras v20";
 const SERVIDOR_MINIMO = 18;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -106,6 +106,15 @@ $("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
 });
 
 const abrir = id => { clearTimeout(tLista); ir(id); };
+/* Sin zoom en la app: ni con dos dedos ni con doble toque */
+(function(){
+  const vp = document.querySelector('meta[name="viewport"]');
+  if(vp) vp.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+  const st = document.createElement("style");
+  st.textContent = "*{touch-action:pan-x pan-y}html,body{-webkit-text-size-adjust:100%}";
+  document.head.appendChild(st);
+  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {passive:false}));
+})();
 /* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
