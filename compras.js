@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v17";
-const SERVIDOR_MINIMO = 16;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v18";
+const SERVIDOR_MINIMO = 17;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -312,7 +312,11 @@ function pintarDetalle(){
       `</div><p class="nota">${pg.credito ? "Queda como cuenta por pagar, vence " + fechaTxt(f.vence) + ". La marcas pagada en Proveedores cuando le pagues al repartidor."
         : "Se crea como cuenta por pagar y en seguida un recibo de pago que la salda (igual al RP automático de Siigo). Queda pagada también en Proveedores."}</p></div>`;
   }
-  h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}</div>`;
+  const malTer = (f.conciliacion || []).find(c => !c.ok && /proveedor no existe|solo como CLIENTE|INACTIVO/i.test(c.texto));
+  const botonTer = !malTer ? "" : /no existe/i.test(malTer.texto)
+    ? `<button class="ppal chico" data-tercero="crear" style="width:100%;margin-top:8px">➕ Crear proveedor en Siigo con los datos de la factura</button>`
+    : `<button class="ppal chico" data-tercero="habilitar" style="width:100%;margin-top:8px">🛠 Habilitarlo como proveedor activo en Siigo</button>`;
+  h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}${botonTer}</div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
   h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
@@ -456,7 +460,17 @@ async function armarMezcla(l){
     partes, proveedor: sel.proveedor, descripcion: l.desc}));
   if(d) reemplazar(d.factura);
 }
-$("cpDetPanel").addEventListener("click", e => {
+$("cpDetPanel").addEventListener("click", async e => {
+  const bt = e.target.closest("[data-tercero]");
+  if(bt && sel){
+    const crear = bt.dataset.tercero === "crear";
+    if(!confirm(crear ? `¿Crear en Siigo el proveedor ${sel.proveedor} (NIT ${sel.nit}) con los datos que trae la factura?`
+                      : `¿Habilitar en Siigo a ${sel.proveedor} (NIT ${sel.nit}) como proveedor activo?\n\nSe conservan sus demás datos.`)) return;
+    const d = await conEspera(crear ? "Creando proveedor en Siigo…" : "Actualizando el tercero en Siigo…",
+      () => postAdmin({accion: crear ? "compra_crear_tercero" : "compra_habilitar_tercero", id: sel.id}));
+    if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ " + d.mensaje; }
+    return;
+  }
   const pg = e.target.closest("[data-pago]");
   if(pg && sel){ sel.pagoElegido = Number(pg.dataset.pago); const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; return; }
   const b = e.target.closest("[data-l]"); if(!b || !sel) return;
@@ -490,7 +504,16 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Cuenta por pagar + recibo de pago: queda PAGADA.`) +
     `\n\nNo se envía a la DIAN.`)) return;
   const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
-  if(!d){ cargarCola(false); return; }
+  if(!d){
+    // Siigo no deja usar el tercero como proveedor: ofrecer habilitarlo ahí mismo
+    if(/habilitado como proveedor|customer_settings/i.test($("cpDetEstado").textContent) &&
+       confirm(`Siigo no deja usar a ${f.proveedor} (NIT ${f.nit}) como proveedor.\n\n¿Lo habilito como proveedor activo en Siigo ahora? Luego vuelves a tocar Aprobar.`)){
+      const h = await conEspera("Actualizando el tercero en Siigo…", () => postAdmin({accion: "compra_habilitar_tercero", id: f.id}));
+      if(h){ reemplazar(h.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ " + h.mensaje + ". Ya puedes aprobar."; }
+      return;
+    }
+    cargarCola(false); return;
+  }
   quitarDeCola(f.id);
   historial = null;
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
