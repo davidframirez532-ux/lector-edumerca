@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v21";
-const SERVIDOR_MINIMO = 19;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v23";
+const SERVIDOR_MINIMO = 20;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -174,12 +174,40 @@ function escucharFiltros(contId, st, repintar){
 }
 
 /* ══════════════ FACTURAS POR APROBAR ══════════════ */
-let cola = null, sel = null, cargandoCola = false;
+let cola = null, sel = null, cargandoCola = false, porGuardar = null, revisandoGuardar = false;
+try{ porGuardar = JSON.parse(localStorage.getItem("cp_por_guardar") || "null"); }catch(e){ porGuardar = null; }
+async function revisarPorGuardar(){
+  if(revisandoGuardar) return;
+  revisandoGuardar = true; pintarPorGuardar(true);
+  try{
+    porGuardar = await postAdmin({accion: "compras_por_guardar"});
+    try{ localStorage.setItem("cp_por_guardar", JSON.stringify(porGuardar)); }catch(e){}
+  }catch(e){ console.warn(e); }
+  finally{ revisandoGuardar = false; pintarPorGuardar(false); }
+}
+function pintarPorGuardar(cargando){
+  let caja = $("cpPorGuardar");
+  if(!caja){ caja = document.createElement("div"); caja.id = "cpPorGuardar"; caja.style.flex = "none";
+             $("cpResumen").insertAdjacentElement("beforebegin", caja); }
+  const l = (porGuardar && porGuardar.pendientes) || [];
+  if(!l.length){ caja.innerHTML = cargando ? "" : ""; return; }
+  const st = v => v === null || v === undefined ? "?" : num(v);
+  caja.innerHTML = `<details class="alerta" open style="border:2px solid #ffd23f"><summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
+    <span class="num-alerta amarillo">${l.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → <b>Editar</b> → <b>Guardar</b> (sin cambiar nada). Siigo solo suma el inventario así.</p>` +
+    l.map(c => `<div class="fila-dato" style="display:block"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
+      (c.productos || []).map(p => `<small style="display:block;opacity:.85">${esc(p.nombre || p.codigo)}: antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}</small>`).join("") +
+      `</div>`).join("") +
+    `<button class="sec chico" id="btnCpYaGuarde" style="margin-top:8px;width:100%">${cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
+  const b = $("btnCpYaGuarde"); if(b) b.onclick = revisarPorGuardar;
+}
 try{ cola = JSON.parse(localStorage.getItem("cp_cola") || "null"); }catch(e){ cola = null; }
 
 async function abrirCola(){
   abrir("cpCola");
   pintarCola();
+  pintarPorGuardar(false);
+  revisarPorGuardar();
   await cargarCola(false);
 }
 async function cargarCola(actualizar){
@@ -525,10 +553,12 @@ $("btnCpAprobar").addEventListener("click", async () => {
   }
   quitarDeCola(f.id);
   historial = null;
+  revisarPorGuardar();
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
+    (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar.` : "") +
     (d.saldo_siigo !== undefined && d.saldo_siigo !== null ? `\nSaldo que informa Siigo al crearla: ${plata(d.saldo_siigo)}` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
@@ -714,7 +744,7 @@ $("btnCpDs").addEventListener("click", abrirDs);
 /* ══════════════ VER TODAS LAS FACTURAS ══════════════ */
 let historial = null, vistaTodas = "aprobar", cargandoHist = false, pagos = null, cargandoPagos = false, estadoPago = "";
 try{ pagos = JSON.parse(localStorage.getItem("cp_pagos") || "null"); }catch(e){ pagos = null; }
-const COLOR_PAGO = {"PAGADA": "#4fd6a8", "PAGADA SIN RECIBO": "#8fc9ff", "PENDIENTE": "#ffd23f", "VENCIDA": "#ff9a86", "PAGO PARCIAL": "#ff9a86", "FALTA RECIBO EN SIIGO": "#ff9a86"};
+const COLOR_PAGO = {"PAGADA": "#4fd6a8", "PAGADA DE CONTADO": "#4fd6a8", "PAGADA SIN RECIBO": "#8fc9ff", "PENDIENTE": "#ffd23f", "VENCIDA": "#ff9a86", "PAGO PARCIAL": "#ff9a86", "FALTA RECIBO EN SIIGO": "#ff9a86"};
 async function cargarPagos(){
   if(cargandoPagos) return;
   cargandoPagos = true;
@@ -874,7 +904,12 @@ window.pintarKpis = function(){
         nota + "A crédito, ya pasó su vencimiento y no tienen recibo de pago.") +
       det("Pagos parciales", p.n_parciales || 0, p.valor_parciales, "amarillo", p.parciales, "PAGO PARCIAL",
         nota + "Tienen recibo de pago pero aún queda saldo.");
-    if(cont) cont.insertAdjacentHTML("afterbegin", h);
+    const g = ((kpis || {}).alertas_compras || {}).guardar;
+    const hg = g && g.n ? `<details class="alerta"><summary><span>Compras subidas que no han movido el stock</span>
+      <span class="num-alerta amarillo">${g.n}</span></summary><p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → Editar → Guardar.</p>` +
+      (g.lista || []).map(c => `<div class="fila-dato"><span>${esc(c.doc)}<small style="display:block;opacity:.65">${esc(c.proveedor)} · fac. ${esc(c.factura)}</small></span></div>`).join("") +
+      `</details>` : "";
+    if(cont) cont.insertAdjacentHTML("afterbegin", hg + h);
   }catch(e){ console.warn("Alertas de pagos:", e); }
 };
 $("kpiPanel").addEventListener("click", e => {
