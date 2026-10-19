@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v25";
-const SERVIDOR_MINIMO = 20;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v26";
+const SERVIDOR_MINIMO = 21;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -220,10 +220,12 @@ function pintarPorGuardar(cargando){
   caja.innerHTML = `<details class="alerta" open style="border:2px solid #ffd23f"><summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
     <span class="num-alerta amarillo">${l.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → <b>Editar</b> → <b>Guardar</b> (sin cambiar nada). Siigo solo suma el inventario así.
-      Si vendiste algo desde que la subiste, el stock quedará un poco por debajo de lo indicado.</p>` +
+      El stock esperado ya descuenta lo que vendiste desde que la subiste.</p>` +
     l.map(c => `<div class="fila-dato" style="display:block"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
-      (c.productos || []).map(p => `<small style="display:block;opacity:.85">${esc(p.nombre || p.codigo)}: antes ${st(p.antes)} · ahora ${st(p.ahora)} · ` +
-        (p.antes === null || p.antes === undefined ? `debe sumar +${num(p.suma)}` : `debe quedar en <b>${num(p.antes + p.suma)}</b>`) + `</small>`).join("") +
+      (c.productos || []).map(p => `<small style="display:block;opacity:.85">${p.sumo === false ? "❌" : p.sumo ? "✅" : "•"} ${esc(p.nombre || p.codigo)}: ` +
+        (p.esperado !== undefined && p.esperado !== null
+          ? `debería tener <b>${num(p.esperado)}</b> (antes ${st(p.antes)} + compra ${num(p.suma)}${p.vendido ? " − vendido " + num(p.vendido) : ""}) · tiene <b>${st(p.ahora)}</b>`
+          : `antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}`) + `</small>`).join("") +
       `</div>`).join("") +
     `<button class="sec chico" id="btnCpYaGuarde" style="margin-top:8px;width:100%">${cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
   const b = $("btnCpYaGuarde"); if(b) b.onclick = revisarPorGuardar;
@@ -905,6 +907,32 @@ $("btnCpTodasActualizar").addEventListener("click", () => {
 });
 $("btnCpTodasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpTodas").addEventListener("click", abrirTodas);
+
+/* ══════════════ ORDENAR PROVEEDORES ══════════════ */
+const ORDEN_PROV = [["nombre", "↕ Nombre A-Z"], ["debo", "↕ Lo que más les debo"], ["reciente", "↕ Compra más reciente"],
+                    ["comprado", "↕ Lo que más les compro"], ["productos", "↕ Más productos"]];
+let ordenProv = (function(){ try{ return localStorage.getItem("orden_prov") || "nombre"; }catch(e){ return "nombre"; } })();
+(function(){
+  const sel = document.createElement("select");
+  sel.className = "sel-hora"; sel.id = "provOrden"; sel.style.flex = "none";
+  sel.innerHTML = ORDEN_PROV.map(([v, t]) => `<option value="${v}"${v === ordenProv ? " selected" : ""}>${t}</option>`).join("");
+  $("provChips").insertAdjacentElement("afterend", sel);
+  sel.addEventListener("change", () => { ordenProv = sel.value; try{ localStorage.setItem("orden_prov", ordenProv); }catch(e){} pintarProveedores(); });
+  const pintarProvApp = window.pintarProveedores;
+  window.pintarProveedores = function(){
+    const fecha = p => /^\d{4}-\d{2}-\d{2}$/.test(String(p.ultima_compra || "")) ? p.ultima_compra : "";
+    const nom = (a, b) => String(a.nombre || "").localeCompare(String(b.nombre || ""), "es");
+    const f = {
+      nombre: nom,
+      debo: (a, b) => (Number(b.pendiente) || 0) - (Number(a.pendiente) || 0) || nom(a, b),
+      reciente: (a, b) => fecha(b).localeCompare(fecha(a)) || nom(a, b),
+      comprado: (a, b) => (Number(b.total_comprado) || 0) - (Number(a.total_comprado) || 0) || nom(a, b),
+      productos: (a, b) => (Number(b.productos) || 0) - (Number(a.productos) || 0) || nom(a, b)
+    }[ordenProv] || nom;
+    try{ provs.sort(f); }catch(e){}
+    return pintarProvApp.apply(this, arguments);
+  };
+})();
 
 /* ══════════════ ALERTAS DE PAGOS EN KPIs ══════════════ */
 function abrirPagosFiltrado(estado){
