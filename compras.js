@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v20";
-const SERVIDOR_MINIMO = 18;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v21";
+const SERVIDOR_MINIMO = 19;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
