@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v16";
-const SERVIDOR_MINIMO = 15;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v17";
+const SERVIDOR_MINIMO = 16;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -275,6 +275,8 @@ function detalleTxt(l){
 }
 function lineaTxt(l){
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
+  if(l.por_fuera) return `🎁 Bonificación de un producto no facturado: queda por fuera (registro en observaciones)` +
+    (l.iva_cuenta ? ` · su IVA ${plata(l.iva_cuenta)} sí se registra` : "");
   if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` +
     (l.iva_cuenta ? ` · su IVA ${plata(l.iva_cuenta)} a IVA descontable` : "");
   const bon = l.bonificacion ? `🎁 Bonificación · ` : "";
@@ -471,7 +473,7 @@ $("cpDetPanel").addEventListener("click", e => {
     if(!r) return;
     const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, linea: l.clave,
       codigo: p.codigo, factor: leerFactor(r.f), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
-    if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal hasta que subas la factura)"; }
+    if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal: se borra a medianoche; al subir la factura queda guardada desde Siigo)"; }
   }}];
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
@@ -500,7 +502,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
-    (d.asociaciones_definitivas ? `\n\n${d.asociaciones_definitivas} asociación(es) pasaron a Productos_proveedor.` : "") +
+
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con el XML."));
   abrir("cpCola");
 });
