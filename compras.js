@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v24";
+const COMPRAS_VERSION = "compras v25";
 const SERVIDOR_MINIMO = 20;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -219,9 +219,11 @@ function pintarPorGuardar(cargando){
   const st = v => v === null || v === undefined ? "?" : num(v);
   caja.innerHTML = `<details class="alerta" open style="border:2px solid #ffd23f"><summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
     <span class="num-alerta amarillo">${l.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → <b>Editar</b> → <b>Guardar</b> (sin cambiar nada). Siigo solo suma el inventario así.</p>` +
+    <p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → <b>Editar</b> → <b>Guardar</b> (sin cambiar nada). Siigo solo suma el inventario así.
+      Si vendiste algo desde que la subiste, el stock quedará un poco por debajo de lo indicado.</p>` +
     l.map(c => `<div class="fila-dato" style="display:block"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
-      (c.productos || []).map(p => `<small style="display:block;opacity:.85">${esc(p.nombre || p.codigo)}: antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}</small>`).join("") +
+      (c.productos || []).map(p => `<small style="display:block;opacity:.85">${esc(p.nombre || p.codigo)}: antes ${st(p.antes)} · ahora ${st(p.ahora)} · ` +
+        (p.antes === null || p.antes === undefined ? `debe sumar +${num(p.suma)}` : `debe quedar en <b>${num(p.antes + p.suma)}</b>`) + `</small>`).join("") +
       `</div>`).join("") +
     `<button class="sec chico" id="btnCpYaGuarde" style="margin-top:8px;width:100%">${cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
   const b = $("btnCpYaGuarde"); if(b) b.onclick = revisarPorGuardar;
@@ -584,6 +586,8 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
     (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar.` : "") +
+    ((d.stock || []).length ? `\nDespués de guardarla, el stock debe quedar así:\n` + d.stock.map(x =>
+      `• ${x.nombre}: tenías ${x.antes === null || x.antes === undefined ? "?" : num(x.antes)} → debe quedar en ${x.esperado === null || x.esperado === undefined ? "(+" + num(x.suma) + ")" : num(x.esperado)}`).join("\n") : "") +
     (d.saldo_siigo !== undefined && d.saldo_siigo !== null ? `\nSaldo que informa Siigo al crearla: ${plata(d.saldo_siigo)}` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
