@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v18";
-const SERVIDOR_MINIMO = 17;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v19";
+const SERVIDOR_MINIMO = 18;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -310,7 +310,7 @@ function pintarDetalle(){
       <div style="display:flex;flex-direction:column;gap:6px">` + pagos.map(x =>
         `<button class="chip" data-pago="${x.id}" aria-pressed="${x.id === pg.id}" style="text-transform:none;text-align:left">${esc(x.nombre)}</button>`).join("") +
       `</div><p class="nota">${pg.credito ? "Queda como cuenta por pagar, vence " + fechaTxt(f.vence) + ". La marcas pagada en Proveedores cuando le pagues al repartidor."
-        : "Se crea como cuenta por pagar y en seguida un recibo de pago que la salda (igual al RP automático de Siigo). Queda pagada también en Proveedores."}</p></div>`;
+        : "Se registra en Siigo pagada con " + (/transfer/i.test(pg.nombre) ? "Pagos por cuenta bancaria" : "Efectivo") + ", sin cuenta por pagar. Queda pagada también en Proveedores."}</p></div>`;
   }
   const malTer = (f.conciliacion || []).find(c => !c.ok && /proveedor no existe|solo como CLIENTE|INACTIVO/i.test(c.texto));
   const botonTer = !malTer ? "" : /no existe/i.test(malTer.texto)
@@ -501,7 +501,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
   const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
   if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(f.totales.total)}\nForma de pago: ${pg.nombre}\n` +
-    (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Cuenta por pagar + recibo de pago: queda PAGADA.`) +
+    (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
     `\n\nNo se envía a la DIAN.`)) return;
   const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
   if(!d){
@@ -519,8 +519,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
-    (!d.credito && !d.recibo && !d.recibo_error && !d.recibo_nota && !d.version_servidor
-      ? `\n⚠ NO se creó recibo de pago: el servidor está desactualizado. Haz "Nueva versión" en Apps Script.` : "") +
+    (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
     (d.saldo_siigo !== undefined && d.saldo_siigo !== null ? `\nSaldo que informa Siigo al crearla: ${plata(d.saldo_siigo)}` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
