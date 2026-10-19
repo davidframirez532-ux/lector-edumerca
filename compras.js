@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v26";
-const SERVIDOR_MINIMO = 21;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v28";
+const SERVIDOR_MINIMO = 22;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -210,25 +210,26 @@ async function revisarPorGuardar(){
   }catch(e){ console.warn(e); }
   finally{ revisandoGuardar = false; pintarPorGuardar(false); }
 }
+let htmlPorGuardar = "";
 function pintarPorGuardar(cargando){
-  let caja = $("cpPorGuardar");
-  if(!caja){ caja = document.createElement("div"); caja.id = "cpPorGuardar"; caja.style.flex = "none";
-             $("cpResumen").insertAdjacentElement("beforebegin", caja); }
   const l = (porGuardar && porGuardar.pendientes) || [];
-  if(!l.length){ caja.innerHTML = cargando ? "" : ""; return; }
   const st = v => v === null || v === undefined ? "?" : num(v);
-  caja.innerHTML = `<details class="alerta" open style="border:2px solid #ffd23f"><summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
+  htmlPorGuardar = !l.length ? "" :
+    `<details class="alerta" open style="border:2px solid #ffd23f;margin-bottom:10px;box-sizing:border-box;max-width:100%;overflow:hidden">
+    <summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
     <span class="num-alerta amarillo">${l.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → <b>Editar</b> → <b>Guardar</b> (sin cambiar nada). Siigo solo suma el inventario así.
       El stock esperado ya descuenta lo que vendiste desde que la subiste.</p>` +
-    l.map(c => `<div class="fila-dato" style="display:block"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
+    l.map(c => `<div class="fila-dato" style="display:block;white-space:normal"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
       (c.productos || []).map(p => `<small style="display:block;opacity:.85">${p.sumo === false ? "❌" : p.sumo ? "✅" : "•"} ${esc(p.nombre || p.codigo)}: ` +
         (p.esperado !== undefined && p.esperado !== null
           ? `debería tener <b>${num(p.esperado)}</b> (antes ${st(p.antes)} + compra ${num(p.suma)}${p.vendido ? " − vendido " + num(p.vendido) : ""}) · tiene <b>${st(p.ahora)}</b>`
           : `antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}`) + `</small>`).join("") +
       `</div>`).join("") +
-    `<button class="sec chico" id="btnCpYaGuarde" style="margin-top:8px;width:100%">${cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
-  const b = $("btnCpYaGuarde"); if(b) b.onclick = revisarPorGuardar;
+    `<button class="sec chico" id="btnCpYaGuarde" style="display:block;margin:10px 0 2px;width:100%;box-sizing:border-box;white-space:normal">${
+      cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
+  const vieja = $("cpPorGuardar"); if(vieja) vieja.remove();
+  if($("cpCola").classList.contains("activa")) pintarCola();
 }
 try{ cola = JSON.parse(localStorage.getItem("cp_cola") || "null"); }catch(e){ cola = null; }
 
@@ -289,6 +290,7 @@ function pintarCola(){
     Mientras tanto no apruebes facturas: el servidor viejo no crea los recibos de pago.</p></div>`;
   if(cola.config_ok === false) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0">
     Falta configurar en 15_compras.gs: <b>${esc((cola.config_falta || []).join(", "))}</b>. Ejecuta cpDiagnostico() en el editor.</p></div>`;
+  h = htmlPorGuardar + h;
   if(!todasF.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
   else if(!fs.length) h += `<div class="vacio">Ninguna factura con ese filtro.</div>`;
   h += htmlAgrupado(fs, fx.cola, valorF, f => {
@@ -304,6 +306,7 @@ function pintarCola(){
   box.innerHTML = h;
 }
 $("cpItems").addEventListener("click", e => {
+  if(e.target.closest("#btnCpYaGuarde")){ revisarPorGuardar(); return; }
   const b = e.target.closest(".item"); if(!b || !cola) return;
   sel = cola.facturas.find(f => f.id === b.dataset.id);
   if(sel) abrirDetalle();
@@ -502,29 +505,32 @@ function avisoNuevo(l){
    (Si los sabores vienen al azar, mejor regístrala como caja y usa Desarmes.) */
 const preguntar = (titulo, ops) => new Promise(ok => elegir(titulo, ops.map(([t, sub, v]) => ({t, sub, fn: () => ok(v)}))));
 async function armarMezcla(l){
-  const partes = (l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.cantidad / (l.cant || 1)}));
+  // Se pide el TOTAL de cada producto en esta factura (ej. 305 huevos → 10 cubetas + 5 unidades);
+  // al servidor va por cada unidad de la factura (total ÷ cantidad de la factura).
+  const cantFac = Number(l.cant) || 1;
+  const partes = (l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, total: x.cantidad}));
   if(partes.length){
-    const seguir = await preguntar("Mezcla actual: " + partes.map(x => num(x.cantidad) + " × " + x.nombre).join(" + "),
+    const seguir = await preguntar("Reparto actual: " + partes.map(x => num(x.total) + " × " + x.nombre).join(" + "),
       [["Empezar de nuevo", "Se borran los productos actuales", "nuevo"], ["Agregar otro producto", "", "agregar"]]);
     if(seguir === "nuevo") partes.length = 0;
   }
   while(true){
-    const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1}` : "Primer producto de la mezcla", [],
-      l.desc);
+    const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1}` : "Primer producto del reparto", [], l.desc);
     if(!p) return;
-    const r = await pedirForm(p.nombre, [{id: "q", label: "¿Cuántas unidades de este producto trae 1 unidad de la factura?",
+    const r = await pedirForm(p.nombre, [{id: "q", label: `¿Cuántas unidades de este producto entran en total? (la factura trae ${num(cantFac)})`,
       valor: "", inputmode: "decimal", obligatorio: true, validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Agregar");
     if(!r) return;
-    partes.push({codigo: p.codigo, nombre: p.nombre, cantidad: Number(String(r.q).replace(",", "."))});
+    partes.push({codigo: p.codigo, nombre: p.nombre, total: Number(String(r.q).replace(",", "."))});
     if(partes.length < 2) continue;
-    const resumen = partes.map(x => num(x.cantidad) + " × " + x.nombre).join(" + ");
-    const sig = await preguntar(resumen, [["✓ Guardar mezcla", "El costo se reparte según el precio de venta de cada producto", "guardar"],
+    const resumen = partes.map(x => num(x.total) + " × " + x.nombre).join(" + ");
+    const sig = await preguntar(resumen, [["✓ Guardar reparto", "Temporal: se borra a medianoche. El costo se reparte según el precio de venta", "guardar"],
       ["+ Agregar otro producto", "", "otro"]]);
     if(sig === "guardar") break;
   }
-  const d = await conEspera("Guardando mezcla…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA",
-    partes, proveedor: sel.proveedor, descripcion: l.desc}));
-  if(d) reemplazar(d.factura);
+  const envio = partes.map(x => ({codigo: x.codigo, cantidad: x.total / cantFac}));
+  const d = await conEspera("Guardando reparto…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA",
+    partes: envio, proveedor: sel.proveedor, descripcion: l.desc}));
+  if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Reparto guardado (temporal: se borra a medianoche)"; }
 }
 $("cpDetPanel").addEventListener("click", async e => {
   const bt = e.target.closest("[data-tercero]");
