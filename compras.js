@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v23";
+const COMPRAS_VERSION = "compras v24";
 const SERVIDOR_MINIMO = 20;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -106,6 +106,31 @@ $("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
 });
 
 const abrir = id => { clearTimeout(tLista); ir(id); };
+/* Sin teclado al abrir la app: el campo oculto del lector ya no se enfoca. El lector de código de barras
+   (Bluetooth/USB) se escucha desde todo el documento: escribe muy rápido y termina en Enter. */
+(function(){
+  window.enfocarLector = function(){ if(document.activeElement === entrada) entrada.blur(); };
+  entrada.setAttribute("readonly", "readonly");
+  entrada.blur();
+  let buffer = "", ultimo = 0;
+  const editable = el => el && el !== entrada && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+  document.addEventListener("keydown", e => {
+    if(editable(e.target) || editable(document.activeElement)) return;      // escribiendo en un campo: no es el lector
+    const ahora = Date.now();
+    if(ahora - ultimo > 80) buffer = "";                                     // el lector escribe muy rápido; una persona no
+    ultimo = ahora;
+    if(e.key === "Enter"){
+      const codigo = buffer.trim(); buffer = "";
+      if(codigo.length < 3) return;
+      e.preventDefault();
+      entrada.value = codigo;
+      entrada.dispatchEvent(new KeyboardEvent("keydown", {key: "Enter", bubbles: false}));   // lo procesa la app como siempre
+      return;
+    }
+    if(e.key && e.key.length === 1) buffer += e.key;
+  }, true);
+})();
+
 /* Sin zoom en la app: ni con dos dedos ni con doble toque */
 (function(){
   const vp = document.querySelector('meta[name="viewport"]');
