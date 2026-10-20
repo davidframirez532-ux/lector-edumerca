@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v29";
+const COMPRAS_VERSION = "compras v31";
 const SERVIDOR_MINIMO = 23;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -144,8 +144,9 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
 
-/* Instrucciones para agregar el impoconsumo en Siigo (la API no lo deja subir) */
-const PASOS_IC = `En Siigo: <b>Editar</b> la compra → en cada línea, botón de impuestos → <b>Impuesto cargo 2: Impoconsumo por valor</b>
+/* Impoconsumo / IBUA: normalmente la app lo sube como impuesto de la línea (IMPOCONSUMO_MODO 'impuesto' en
+   15_compras.gs). Estas instrucciones solo aparecen si el servidor está en modo 'agregar_a_mano'. */
+const PASOS_IC = `En Siigo: <b>Editar</b> la compra → marca <b>"Incluye otros Impuestos cargo"</b> → en cada línea, botón de impuestos → <b>Impuesto cargo 2: Impoconsumo por valor</b>
   con el valor de abajo y <b>"Impuesto como mayor valor de la compra"</b> marcado → cambia el valor de la forma de pago al
   <b>total final</b> → <b>Guardar</b>. Esa misma edición hace que la compra mueva el stock.`;
 const lineasIc = ls => (ls || []).map(x => `<small style="display:block;opacity:.9">• ${esc(x.nombre || x.codigo)} (${num(x.cantidad)} und): ` +
@@ -363,7 +364,8 @@ function detalleTxt(l){
 }
 /* Notas de IVA e impoconsumo de una línea */
 function notasIva(l){
-  return (l.ic_pendiente ? `<br><span style="color:#ffd23f">➕ ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.ic_pendiente)}: lo agregas tú en Siigo (va al costo)</span>` : "") +
+  return (l.impoconsumo ? `<br><span style="color:#4fd6a8">🧾 ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.impoconsumo)} sube como impuesto (mayor valor, al costo)</span>` : "") +
+    (l.ic_pendiente ? `<br><span style="color:#ffd23f">➕ ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.ic_pendiente)}: lo agregas tú en Siigo (va al costo)</span>` : "") +
     (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "");
 }
 function lineaTxt(l){
@@ -389,6 +391,7 @@ function pintarDetalle(){
       f.pdf ? ` · <a href="${esc(f.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
     <div class="grilla" style="margin-top:10px">
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
+        t.impoconsumo ? ` · impoconsumo ${plata(t.impoconsumo)}` : ""}${
         t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
         t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
@@ -619,7 +622,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
-    (ic ? `\n\n➕ FALTA EL IMPOCONSUMO. Edita ${ic.doc} en Siigo y en cada línea pon Impuesto cargo 2 "Impoconsumo por valor", ` +
+    (ic ? `\n\n➕ FALTA EL IMPOCONSUMO. Edita ${ic.doc} en Siigo, marca "Incluye otros Impuestos cargo" y en cada línea pon Impuesto cargo 2 "Impoconsumo por valor", ` +
       `con "Impuesto como mayor valor de la compra" marcado:\n` +
       (ic.lineas || []).map(x => `• ${x.nombre} (${num(x.cantidad)} und): ${x.nom || "impoconsumo"} ${num(x.valor)}`).join("\n") +
       `\nTotal final ${plata(ic.total_final)}: cambia también el valor de la forma de pago a ${plata(ic.total_final)}.` +
