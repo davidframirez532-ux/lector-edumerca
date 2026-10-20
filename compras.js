@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v28";
-const SERVIDOR_MINIMO = 22;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v29";
+const SERVIDOR_MINIMO = 23;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -144,6 +144,13 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
 
+/* Instrucciones para agregar el impoconsumo en Siigo (la API no lo deja subir) */
+const PASOS_IC = `En Siigo: <b>Editar</b> la compra → en cada línea, botón de impuestos → <b>Impuesto cargo 2: Impoconsumo por valor</b>
+  con el valor de abajo y <b>"Impuesto como mayor valor de la compra"</b> marcado → cambia el valor de la forma de pago al
+  <b>total final</b> → <b>Guardar</b>. Esa misma edición hace que la compra mueva el stock.`;
+const lineasIc = ls => (ls || []).map(x => `<small style="display:block;opacity:.9">• ${esc(x.nombre || x.codigo)} (${num(x.cantidad)} und): ` +
+  `${esc(x.nom || "impoconsumo")} <b>${num(x.valor)}</b></small>`).join("");
+
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ORDENES = [["reciente", "Más recientes"], ["antigua", "Más antiguas"], ["proveedor", "Proveedor A-Z"], ["valor", "Mayor valor"]];
@@ -213,8 +220,20 @@ async function revisarPorGuardar(){
 let htmlPorGuardar = "";
 function pintarPorGuardar(cargando){
   const l = (porGuardar && porGuardar.pendientes) || [];
+  const ic = (porGuardar && porGuardar.impoconsumo) || [];
   const st = v => v === null || v === undefined ? "?" : num(v);
-  htmlPorGuardar = !l.length ? "" :
+  const boton = (id, txt) => `<button class="sec chico" id="${id}" style="display:block;margin:10px 0 2px;width:100%;box-sizing:border-box;white-space:normal">${
+    cargando ? "Revisando…" : txt}</button>`;
+  const htmlIc = !ic.length ? "" :
+    `<details class="alerta" open style="border:2px solid #ff9a86;margin-bottom:10px;box-sizing:border-box;max-width:100%;overflow:hidden">
+    <summary><span>➕ ${ic.length} compra${ic.length > 1 ? "s" : ""} sin el impoconsumo en Siigo</span>
+    <span class="num-alerta">${ic.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">${PASOS_IC}</p>` +
+    ic.map(c => `<div class="fila-dato" style="display:block;white-space:normal"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
+      lineasIc(c.lineas) +
+      `<small style="display:block">Total final <b>${plata(c.total_final)}</b>${c.total_siigo ? " · hoy en Siigo " + plata(c.total_siigo) : ""}</small></div>`).join("") +
+    boton("btnCpYaIc", "Ya lo agregué, revisar") + `</details>`;
+  const htmlStock = !l.length ? "" :
     `<details class="alerta" open style="border:2px solid #ffd23f;margin-bottom:10px;box-sizing:border-box;max-width:100%;overflow:hidden">
     <summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
     <span class="num-alerta amarillo">${l.length}</span></summary>
@@ -226,8 +245,8 @@ function pintarPorGuardar(cargando){
           ? `debería tener <b>${num(p.esperado)}</b> (antes ${st(p.antes)} + compra ${num(p.suma)}${p.vendido ? " − vendido " + num(p.vendido) : ""}) · tiene <b>${st(p.ahora)}</b>`
           : `antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}`) + `</small>`).join("") +
       `</div>`).join("") +
-    `<button class="sec chico" id="btnCpYaGuarde" style="display:block;margin:10px 0 2px;width:100%;box-sizing:border-box;white-space:normal">${
-      cargando ? "Revisando…" : "Ya las guardé, revisar"}</button></details>`;
+    boton("btnCpYaGuarde", "Ya las guardé, revisar") + `</details>`;
+  htmlPorGuardar = htmlIc + htmlStock;
   const vieja = $("cpPorGuardar"); if(vieja) vieja.remove();
   if($("cpCola").classList.contains("activa")) pintarCola();
 }
@@ -287,7 +306,7 @@ function pintarCola(){
   if((cola.version_servidor || 0) < SERVIDOR_MINIMO) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0;opacity:1">
     ⚠ <b>El servidor no está actualizado</b> (versión ${cola.version_servidor || "anterior"}, se necesita ${SERVIDOR_MINIMO}).
     En Apps Script: Implementar → Gestionar implementaciones → ✏️ → Nueva versión. Luego toca ↻.
-    Mientras tanto no apruebes facturas: el servidor viejo no crea los recibos de pago.</p></div>`;
+    Mientras tanto no apruebes facturas: el servidor viejo sube mal el impoconsumo y las bonificaciones.</p></div>`;
   if(cola.config_ok === false) h += `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0">
     Falta configurar en 15_compras.gs: <b>${esc((cola.config_falta || []).join(", "))}</b>. Ejecuta cpDiagnostico() en el editor.</p></div>`;
   h = htmlPorGuardar + h;
@@ -306,7 +325,7 @@ function pintarCola(){
   box.innerHTML = h;
 }
 $("cpItems").addEventListener("click", e => {
-  if(e.target.closest("#btnCpYaGuarde")){ revisarPorGuardar(); return; }
+  if(e.target.closest("#btnCpYaGuarde, #btnCpYaIc")){ revisarPorGuardar(); return; }
   const b = e.target.closest(".item"); if(!b || !cola) return;
   sel = cola.facturas.find(f => f.id === b.dataset.id);
   if(sel) abrirDetalle();
@@ -342,21 +361,23 @@ function detalleTxt(l){
   return l.detalle.map(d => `<span style="display:block;margin-top:3px;color:#bcd9dc">↳ ${varios ? esc(d.nombre) + ": " : ""}<b>${num(d.cantidad)} und</b> × ${plata(d.costo)}` +
     `${Math.abs(d.costo_iva - d.costo) >= 0.5 ? ` · con IVA <b>${plata(d.costo_iva)}</b>` : " · sin IVA"} c/u</span>`).join("");
 }
+/* Notas de IVA e impoconsumo de una línea */
+function notasIva(l){
+  return (l.ic_pendiente ? `<br><span style="color:#ffd23f">➕ ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.ic_pendiente)}: lo agregas tú en Siigo (va al costo)</span>` : "") +
+    (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "");
+}
 function lineaTxt(l){
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
-  if(l.por_fuera) return `🎁 Bonificación de un producto no facturado: queda por fuera (registro en observaciones)` +
-    (l.iva_cuenta ? ` · su IVA ${plata(l.iva_cuenta)} sí se registra` : "");
-  if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` +
-    (l.iva_cuenta ? ` · su IVA ${plata(l.iva_cuenta)} a IVA descontable` : "");
+  if(l.por_fuera) return `🎁 Bonificación de un producto no facturado: no se sube (queda en las observaciones)` + notasIva(l);
+  if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` + notasIva(l);
   const bon = l.bonificacion ? `🎁 Bonificación · ` : "";
   const extra = l.bonif_unidades ? ` · <b>+${num(l.bonif_unidades)} de bonificación</b>, costo promedio ${plata(l.precio)}` : "";
-  if(l.destino === "MEZCLA") return bon + (l.precio !== undefined ? `🔀 ${esc(l.nombre)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "mezcla incompleta")}</span>`);
+  if(l.destino === "MEZCLA") return bon + (l.precio !== undefined ? `🔀 ${esc(l.nombre)}` + notasIva(l) : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "mezcla incompleta")}</span>`);
   if(l.destino === "GASTO") return l.precio !== undefined
     ? `🧾 Gasto · ${esc(l.nombre || l.cuenta)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "gasto sin cuenta")}</span>`;
   if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
   return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} ${l.factor < 1 ? "÷ " + num(Math.round(1 / l.factor)) : "× " + num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
-    (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") +
-    (l.iva_cuenta ? ` · IVA ${plata(l.iva_cuenta)} a IVA descontable` : "") +
+    (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") + notasIva(l) +
     (l.alerta ? `<br><span style="color:#ffd23f">⚠ ${esc(l.alerta)}</span>` : "");
 }
 function pintarDetalle(){
@@ -368,7 +389,8 @@ function pintarDetalle(){
       f.pdf ? ` · <a href="${esc(f.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
     <div class="grilla" style="margin-top:10px">
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
-        t.iva_cuenta ? ` (${plata(t.iva_cuenta)} en IVA descontable)` : ""}</div></div>
+        t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
+        t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
   const pagos = cola.pagos || [];
@@ -390,7 +412,7 @@ function pintarDetalle(){
   h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
       <span class="cod">${esc(l.n)}</span>
-      <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · otros imp. " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
+      <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · " + esc(l.otros_nom || "otros imp.") + " " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
       <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") + `</div>`;
   h += `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
@@ -572,7 +594,10 @@ $("cpDetPanel").addEventListener("click", async e => {
 $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
   const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
-  if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(f.totales.total)}\nForma de pago: ${pg.nombre}\n` +
+  const t = f.totales;
+  if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(t.total)}` +
+    (t.impoconsumo_pendiente ? `\n+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú en Siigo = ${plata(t.total_final)}` : "") +
+    `\nForma de pago: ${pg.nombre}\n` +
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
     `\n\nNo se envía a la DIAN.`)) return;
   const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
@@ -589,19 +614,25 @@ $("btnCpAprobar").addEventListener("click", async () => {
   quitarDeCola(f.id);
   historial = null;
   revisarPorGuardar();
+  const ic = d.impoconsumo_pendiente;
   alert(`${d.cuadra ? "✅" : "⚠"} Creada en Siigo: ${d.nombre} · ${d.pago}` +
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
-    (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar.` : "") +
+    (ic ? `\n\n➕ FALTA EL IMPOCONSUMO. Edita ${ic.doc} en Siigo y en cada línea pon Impuesto cargo 2 "Impoconsumo por valor", ` +
+      `con "Impuesto como mayor valor de la compra" marcado:\n` +
+      (ic.lineas || []).map(x => `• ${x.nombre} (${num(x.cantidad)} und): ${x.nom || "impoconsumo"} ${num(x.valor)}`).join("\n") +
+      `\nTotal final ${plata(ic.total_final)}: cambia también el valor de la forma de pago a ${plata(ic.total_final)}.` +
+      `\nTe lo recuerdo en Por aprobar hasta que esté en Siigo.` : "") +
+    (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar` +
+      (ic ? " (la misma edición del impoconsumo)." : ".") : "") +
     ((d.stock || []).length ? `\nDespués de guardarla, el stock debe quedar así:\n` + d.stock.map(x =>
       `• ${x.nombre}: tenías ${x.antes === null || x.antes === undefined ? "?" : num(x.antes)} → debe quedar en ${x.esperado === null || x.esperado === undefined ? "(+" + num(x.suma) + ")" : num(x.esperado)}`).join("\n") : "") +
     (d.saldo_siigo !== undefined && d.saldo_siigo !== null ? `\nSaldo que informa Siigo al crearla: ${plata(d.saldo_siigo)}` : "") +
     (d.recibo_error ? `\n⚠ La compra quedó como cuenta por pagar, pero el recibo de pago falló: ${d.recibo_error}\nCréalo desde Ver todas las facturas → Pagos.` : "") +
     `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
-
-    (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con el XML."));
+    (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con lo esperado."));
   abrir("cpCola");
 });
 $("btnCpIgnorar").addEventListener("click", async () => {
@@ -972,7 +1003,15 @@ window.pintarKpis = function(){
       <span class="num-alerta amarillo">${g.n}</span></summary><p class="nota" style="margin:0 0 6px">Ábrelas en Siigo → Editar → Guardar.</p>` +
       (g.lista || []).map(c => `<div class="fila-dato"><span>${esc(c.doc)}<small style="display:block;opacity:.65">${esc(c.proveedor)} · fac. ${esc(c.factura)}</small></span></div>`).join("") +
       `</details>` : "";
-    if(cont) cont.insertAdjacentHTML("afterbegin", hg + h);
+    /* Compras sin el impoconsumo agregado en Siigo, con los valores a poner */
+    const ic = ((kpis || {}).alertas_compras || {}).impoconsumo;
+    const hic = ic && ic.n ? `<details class="alerta"><summary><span>Compras sin el impoconsumo en Siigo</span>
+      <span class="num-alerta">${ic.n}</span></summary><p class="nota" style="margin:0 0 6px">${PASOS_IC}</p>` +
+      (ic.lista || []).map(c => `<div class="fila-dato" style="display:block;white-space:normal"><b>${esc(c.doc)}</b>
+        <small style="display:block;opacity:.65">${esc(c.proveedor)} · fac. ${esc(c.factura)}</small>${lineasIc(c.lineas)}
+        <small style="display:block">Total final <b>${plata(c.total_final)}</b></small></div>`).join("") +
+      `</details>` : "";
+    if(cont) cont.insertAdjacentHTML("afterbegin", hic + hg + h);
   }catch(e){ console.warn("Alertas de pagos:", e); }
 };
 $("kpiPanel").addEventListener("click", e => {
