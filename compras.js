@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v31";
-const SERVIDOR_MINIMO = 23;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v33";
+const SERVIDOR_MINIMO = 24;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -18,7 +18,21 @@ const html = `
     <button class="ghost" id="btnCpTodas">Ver todas las facturas</button>
     <button class="ppal" id="btnCpPorAprobar">Facturas por aprobar</button>
     <button class="ghost" id="btnCpDs">Documento soporte (foto)</button>
+    <button class="ghost" id="btnCpAjustes">⚖ Pendientes por ajuste de impuestos</button>
   </div>
+</section>
+<section class="pantalla" id="cpAjustes">
+  <div class="cabeza"><h2 style="font-size:1.35rem">Ajuste de impuestos</h2>
+    <button class="sec" id="btnCpAjActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
+    <button class="sec" id="btnCpAjVolver">Volver</button></div>
+  <p id="cpAjEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
+  <div class="items" id="cpAjItems"></div>
+</section>
+<section class="pantalla" id="cpAjDet">
+  <div class="cabeza"><h2 id="cpAjDetTitulo" style="font-size:1.35rem">Paso a paso</h2><button class="sec" id="btnCpAjDetVolver">Volver</button></div>
+  <p id="cpAjDetEstado" style="margin:0;font-size:.9rem;text-align:center;min-height:1.2em;font-weight:600"></p>
+  <div class="panel" id="cpAjDetPanel"></div>
+  <div class="acciones"><button class="ppal" id="btnCpAjRevisar" style="flex:1">Ya lo hice, revisar en Siigo</button></div>
 </section>
 <section class="pantalla" id="cpCola">
   <div class="cabeza"><h2>Por aprobar</h2>
@@ -73,6 +87,9 @@ const html = `
   .cp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
   .cp-filtros .sel-hora{padding:8px;font-size:.9rem}
   .cp-filtros .ancho{grid-column:1 / -1}
+  .cp-paso{border-left:3px solid var(--amarillo);padding:4px 0 4px 10px;margin:10px 0}
+  .cp-paso b.n{color:var(--amarillo);margin-right:4px}
+  .cp-lin{border-bottom:1px solid rgba(251,250,245,.14);padding:8px 0;font-size:.92rem;line-height:1.45}
   .cp-mes{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 4px;font-weight:600;font-size:.95rem;
     color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
 </style>`;
@@ -80,7 +97,7 @@ document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
 ["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
 /* 🏠 en las pantallas nuevas */
-["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -143,14 +160,6 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 /* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
-
-/* Impoconsumo / IBUA: normalmente la app lo sube como impuesto de la línea (IMPOCONSUMO_MODO 'impuesto' en
-   15_compras.gs). Estas instrucciones solo aparecen si el servidor está en modo 'agregar_a_mano'. */
-const PASOS_IC = `En Siigo: <b>Editar</b> la compra → marca <b>"Incluye otros Impuestos cargo"</b> → en cada línea, botón de impuestos → <b>Impuesto cargo 2: Impoconsumo por valor</b>
-  con el valor de abajo y <b>"Impuesto como mayor valor de la compra"</b> marcado → cambia el valor de la forma de pago al
-  <b>total final</b> → <b>Guardar</b>. Esa misma edición hace que la compra mueva el stock.`;
-const lineasIc = ls => (ls || []).map(x => `<small style="display:block;opacity:.9">• ${esc(x.nombre || x.codigo)} (${num(x.cantidad)} und): ` +
-  `${esc(x.nom || "impoconsumo")} <b>${num(x.valor)}</b></small>`).join("");
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -225,15 +234,12 @@ function pintarPorGuardar(cargando){
   const st = v => v === null || v === undefined ? "?" : num(v);
   const boton = (id, txt) => `<button class="sec chico" id="${id}" style="display:block;margin:10px 0 2px;width:100%;box-sizing:border-box;white-space:normal">${
     cargando ? "Revisando…" : txt}</button>`;
+  if(porGuardar && porGuardar.impoconsumo){ ajustes = porGuardar.impoconsumo; guardarAjustes(); pintarBotonAjustes(); }
   const htmlIc = !ic.length ? "" :
-    `<details class="alerta" open style="border:2px solid #ff9a86;margin-bottom:10px;box-sizing:border-box;max-width:100%;overflow:hidden">
-    <summary><span>➕ ${ic.length} compra${ic.length > 1 ? "s" : ""} sin el impoconsumo en Siigo</span>
-    <span class="num-alerta">${ic.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">${PASOS_IC}</p>` +
-    ic.map(c => `<div class="fila-dato" style="display:block;white-space:normal"><b>${esc(c.doc)}</b> · ${esc(c.proveedor)} <small style="opacity:.7">fac. ${esc(c.factura)}</small>` +
-      lineasIc(c.lineas) +
-      `<small style="display:block">Total final <b>${plata(c.total_final)}</b>${c.total_siigo ? " · hoy en Siigo " + plata(c.total_siigo) : ""}</small></div>`).join("") +
-    boton("btnCpYaIc", "Ya lo agregué, revisar") + `</details>`;
+    `<div class="bloque" style="border:2px solid #ff9a86;margin-bottom:10px"><p class="nota" style="margin:0 0 8px;opacity:1">
+    ⚖ <b>${ic.length} factura${ic.length > 1 ? "s" : ""} pendiente${ic.length > 1 ? "s" : ""} por ajuste de impuestos</b>: falta agregar el impoconsumo en Siigo.</p>` +
+    ic.map(c => `<small style="display:block;opacity:.9">• ${esc(c.doc)} · ${esc(c.proveedor)} · total final ${plata(c.total_final)}</small>`).join("") +
+    `<button class="ppal chico" id="btnCpIrAjustes" style="display:block;margin-top:10px;width:100%">Ver el paso a paso</button></div>`;
   const htmlStock = !l.length ? "" :
     `<details class="alerta" open style="border:2px solid #ffd23f;margin-bottom:10px;box-sizing:border-box;max-width:100%;overflow:hidden">
     <summary><span>⚠ ${l.length} compra${l.length > 1 ? "s" : ""} no ha${l.length > 1 ? "n" : ""} movido el stock</span>
@@ -326,7 +332,8 @@ function pintarCola(){
   box.innerHTML = h;
 }
 $("cpItems").addEventListener("click", e => {
-  if(e.target.closest("#btnCpYaGuarde, #btnCpYaIc")){ revisarPorGuardar(); return; }
+  if(e.target.closest("#btnCpYaGuarde")){ revisarPorGuardar(); return; }
+  if(e.target.closest("#btnCpIrAjustes")){ abrirAjustes(); return; }
   const b = e.target.closest(".item"); if(!b || !cola) return;
   sel = cola.facturas.find(f => f.id === b.dataset.id);
   if(sel) abrirDetalle();
@@ -622,11 +629,8 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.recibo ? `\nRecibo de pago: ${d.recibo} (pagada)` : "") +
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
-    (ic ? `\n\n➕ FALTA EL IMPOCONSUMO. Edita ${ic.doc} en Siigo, marca "Incluye otros Impuestos cargo" y en cada línea pon Impuesto cargo 2 "Impoconsumo por valor", ` +
-      `con "Impuesto como mayor valor de la compra" marcado:\n` +
-      (ic.lineas || []).map(x => `• ${x.nombre} (${num(x.cantidad)} und): ${x.nom || "impoconsumo"} ${num(x.valor)}`).join("\n") +
-      `\nTotal final ${plata(ic.total_final)}: cambia también el valor de la forma de pago a ${plata(ic.total_final)}.` +
-      `\nTe lo recuerdo en Por aprobar hasta que esté en Siigo.` : "") +
+    (ic ? `\n\n⚖ FALTA EL IMPOCONSUMO (${plata((ic.lineas || []).reduce((t, x) => t + x.valor, 0))}). Quedó en ` +
+      `Facturas → Pendientes por ajuste de impuestos, con el paso a paso para hacerlo en Siigo. Total final ${plata(ic.total_final)}.` : "") +
     (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar` +
       (ic ? " (la misma edición del impoconsumo)." : ".") : "") +
     ((d.stock || []).length ? `\nDespués de guardarla, el stock debe quedar así:\n` + d.stock.map(x =>
@@ -636,6 +640,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     `\n\nConciliación después de subir:\n` +
     d.conciliacion.map(c => (c.ok ? "✓ " : "✗ ") + c.texto).join("\n") +
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con lo esperado."));
+  if(ic){ cargarAjustes(true); abrirAjustes(); return; }
   abrir("cpCola");
 });
 $("btnCpIgnorar").addEventListener("click", async () => {
@@ -657,6 +662,118 @@ $("btnCpIgnorar").addEventListener("click", async () => {
   abrir("cpCola");
 });
 $("btnCpDetVolver").addEventListener("click", () => abrir("cpCola"));
+
+/* ══════════════ PENDIENTES POR AJUSTE DE IMPUESTOS ══════════════
+   Compras subidas con base + IVA a las que falta el impoconsumo / IBUA (Siigo no lo deja subir por la API).
+   El paso a paso trae TODAS las líneas, porque al activar "Incluye otros Impuestos cargo" Siigo borra los productos. */
+let ajustes = null, ajSel = null, cargandoAj = false;
+try{ ajustes = JSON.parse(localStorage.getItem("cp_ajustes") || "null"); }catch(e){ ajustes = null; }
+function guardarAjustes(){ try{ localStorage.setItem("cp_ajustes", JSON.stringify(ajustes)); }catch(e){} }
+const nfmt = v => Number(v || 0).toLocaleString("es-CO", {maximumFractionDigits: 4});
+function pintarBotonAjustes(){
+  const n = (ajustes || []).length;
+  $("btnCpAjustes").innerHTML = "⚖ Pendientes por ajuste de impuestos" + (n ? ` <span class="num-alerta" style="margin-left:6px">${n}</span>` : "");
+  $("btnCpAjustes").className = n ? "ppal" : "ghost";
+}
+async function cargarAjustes(silencio){
+  if(cargandoAj) return;
+  cargandoAj = true;
+  const msg = $("cpAjEstado"), t0 = Date.now();
+  if(!silencio){ msg.style.color = ""; msg.textContent = "Revisando en Siigo…"; }
+  const reloj = silencio ? null : setInterval(() => { msg.textContent = "Revisando en Siigo… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  try{
+    const d = await postAdmin({accion: "compras_impoconsumo"});
+    ajustes = d.pendientes || []; guardarAjustes();
+    msg.textContent = "";
+  }catch(e){ msg.style.color = "#ff9a86"; msg.textContent = (ajustes ? "Mostrando la última copia · " : "") + e.message; }
+  finally{ if(reloj) clearInterval(reloj); cargandoAj = false; pintarAjustes(); pintarBotonAjustes(); }
+}
+function abrirAjustes(){
+  abrir("cpAjustes");
+  pintarAjustes();
+  cargarAjustes(false);
+}
+function pintarAjustes(){
+  const l = ajustes || [];
+  $("cpAjItems").innerHTML = !l.length ? `<div class="vacio">${ajustes ? "No hay facturas pendientes por ajuste de impuestos. ✅" : "Cargando…"}</div>` :
+    `<p class="nota" style="text-align:center">Compras subidas sin el impoconsumo: Siigo no deja subirlo por la API. Toca una para ver el paso a paso.</p>` +
+    l.map((c, i) => `<button class="item" data-aj="${i}">
+      <span class="cod" style="background:#ff9a86;color:var(--verde)">⚖</span>
+      <span class="nom">${esc(c.proveedor)}<small>${esc(c.doc)} · fac. ${esc(c.factura)}${c.fecha_factura ? " · " + fechaTxt(c.fecha_factura) : ""}<br>
+        impoconsumo ${plata((c.todas_ic || c.lineas || []).reduce((t, x) => t + (Number(x.valor) || 0), 0))} · hoy en Siigo ${plata(c.total_siigo)}</small></span>
+      <span class="pre">${plata(c.total_final)}<small>›</small></span></button>`).join("");
+}
+$("cpAjItems").addEventListener("click", e => {
+  const b = e.target.closest("[data-aj]"); if(!b) return;
+  ajSel = (ajustes || [])[Number(b.dataset.aj)];
+  if(ajSel){ $("cpAjDetEstado").textContent = ""; pintarAjDet(); abrir("cpAjDet"); $("cpAjDetPanel").scrollTop = 0; }
+});
+function pintarAjDet(){
+  const c = ajSel; if(!c) return;
+  $("cpAjDetTitulo").textContent = c.doc + " · " + c.proveedor;
+  const guia = c.guia || [];
+  const conIc = guia.filter(x => x.ic > 0);
+  const paso = (n, html) => `<div class="cp-paso"><b class="n">${n}.</b>${html}</div>`;
+  let h = `<div class="bloque"><h3 style="margin-bottom:4px">${esc(c.doc)} <small>fac. ${esc(c.factura)}</small></h3>
+    <p class="nota" style="margin:0">${esc(c.proveedor)}${c.nit ? " · NIT " + esc(c.nit) : ""}${c.fecha_factura ? " · " + fechaTxt(c.fecha_factura) : ""}${
+      c.pdf ? ` · <a href="${esc(c.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
+    <div class="grilla" style="margin-top:10px">
+      <div class="dato"><span>Hoy en Siigo</span><b>${plata(c.total_siigo)}</b><div class="sub">sin impoconsumo</div></div>
+      <div class="dato"><span>Debe quedar en</span><b>${plata(c.total_final)}</b><div class="sub">total de la factura</div></div>
+    </div></div>`;
+  h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
+    paso(1, ` Abre la compra <b>${esc(c.doc)}</b> en Siigo y toca <b>Editar</b>.`) +
+    paso(2, ` <b>Borra todas las líneas</b> de productos.`) +
+    paso(3, ` Marca <b>"Incluye otros Impuestos cargo"</b>.`) +
+    paso(4, ` Vuelve a agregar las <b>${guia.length} línea${guia.length > 1 ? "s" : ""}</b> de abajo: producto, cantidad y <b>valor unitario</b>${
+      guia.some(x => x.descuento) ? " (y el descuento donde lo indique)" : ""}. En cada una, botón de impuestos: <b>Impuesto cargo 1: IVA</b>
+      y, en las marcadas con ⚖, <b>Impuesto cargo 2: Impoconsumo por valor</b> con el valor indicado y
+      <b>"Impuesto como mayor valor de la compra"</b> marcado.`) +
+    paso(5, ` En la forma de pago (${esc(c.pago || "la misma")}), cambia el valor a <b>${plata(c.total_final)}</b>.`) +
+    paso(6, ` Revisa que el <b>Total Neto</b> dé <b>${plata(c.total_final)}</b> y toca <b>Guardar</b>. Esta misma edición hace que la compra mueva el stock.`) +
+    paso(7, ` Vuelve aquí y toca <b>"Ya lo hice, revisar en Siigo"</b>.`) + `</div>`;
+  h += `<div class="bloque"><h3>Líneas para digitar <small>en este orden</small></h3>` + guia.map((x, i) => `<div class="cp-lin">
+      <b>${i + 1}. ${x.tipo === "Account" ? "Cuenta" : "Producto"} ${esc(x.codigo)}</b> · ${esc(x.nombre)}<br>
+      Cant <b>${nfmt(x.cantidad)}</b> · Valor unitario <b>${nfmt(x.precio)}</b>${x.descuento ? ` · Descuento <b>${nfmt(x.descuento)}</b>` : ""}<br>
+      Impuesto cargo 1: <b>${x.iva ? "IVA " + nfmt(x.iva) + "%" : "ninguno"}</b>` +
+      (x.ic > 0 ? `<br><span style="color:#ffd23f">⚖ Impuesto cargo 2: <b>Impoconsumo por valor ${nfmt(x.ic)}</b> · ✔ mayor valor de la compra</span>` : "") +
+    `</div>`).join("") + `</div>`;
+  const faltan = (c.todas_ic || []).filter(x => !x.ok);
+  if(c.revisado) h += `<div class="bloque"><h3>Última revisión</h3>` + ((c.todas_ic || []).map(x =>
+      `<div class="fila-dato"><span>${x.ok ? "✅" : "❌"} ${esc(x.nombre || x.codigo)}: impoconsumo ${nfmt(x.valor)}</span></div>`).join("")) +
+    `<div class="fila-dato"><span>${Math.abs((c.total_siigo || 0) - (c.total_final || 0)) <= 100 ? "✅" : "❌"} Total en Siigo ${plata(c.total_siigo)} (debe ser ${plata(c.total_final)})</span></div>` +
+    (faltan.length ? "" : `<p class="nota" style="margin:6px 0 0">Los impuestos ya están; falta que el total cuadre.</p>`) + `</div>`;
+  $("cpAjDetPanel").innerHTML = h;
+}
+$("btnCpAjRevisar").addEventListener("click", async () => {
+  const c = ajSel; if(!c) return;
+  const msg = $("cpAjDetEstado");
+  msg.style.color = ""; msg.textContent = "Revisando en Siigo…";
+  $("cpAjDetPanel").style.opacity = ".5";
+  try{
+    const d = await postAdmin({accion: "compras_impoconsumo"});
+    ajustes = d.pendientes || []; guardarAjustes(); pintarBotonAjustes(); pintarAjustes();
+    const sigue = ajustes.find(x => String(x.id) === String(c.id));
+    if(!sigue){
+      msg.textContent = "";
+      alert(`✅ ${c.doc} quedó con el impoconsumo y el total de la factura (${plata(c.total_final)}).\n\n` +
+        `Revisa en Siigo que "Impuesto como mayor valor de la compra" quedó marcado: eso no se puede ver desde la app.`);
+      abrirAjustes();
+      return;
+    }
+    ajSel = Object.assign(sigue, {revisado: true});
+    msg.style.color = "#ff9a86";
+    msg.textContent = "Todavía falta: mira la última revisión abajo.";
+    pintarAjDet();
+    $("cpAjDetPanel").scrollTop = $("cpAjDetPanel").scrollHeight;
+  }catch(e){ msg.style.color = "#ff9a86"; msg.textContent = e.message; }
+  finally{ $("cpAjDetPanel").style.opacity = ""; }
+});
+$("btnCpAjustes").addEventListener("click", abrirAjustes);
+$("btnCpAjActualizar").addEventListener("click", () => cargarAjustes(false));
+$("btnCpAjVolver").addEventListener("click", () => irMenu("cpMenuFact"));
+$("btnCpAjDetVolver").addEventListener("click", () => abrir("cpAjustes"));
+pintarBotonAjustes();
 
 /* ══════════════ DOCUMENTO SOPORTE ══════════════ */
 let ds = null;
@@ -1008,16 +1125,16 @@ window.pintarKpis = function(){
       `</details>` : "";
     /* Compras sin el impoconsumo agregado en Siigo, con los valores a poner */
     const ic = ((kpis || {}).alertas_compras || {}).impoconsumo;
-    const hic = ic && ic.n ? `<details class="alerta"><summary><span>Compras sin el impoconsumo en Siigo</span>
-      <span class="num-alerta">${ic.n}</span></summary><p class="nota" style="margin:0 0 6px">${PASOS_IC}</p>` +
-      (ic.lista || []).map(c => `<div class="fila-dato" style="display:block;white-space:normal"><b>${esc(c.doc)}</b>
-        <small style="display:block;opacity:.65">${esc(c.proveedor)} · fac. ${esc(c.factura)}</small>${lineasIc(c.lineas)}
-        <small style="display:block">Total final <b>${plata(c.total_final)}</b></small></div>`).join("") +
-      `</details>` : "";
+    const hic = ic && ic.n ? `<details class="alerta"><summary><span>Facturas pendientes por ajuste de impuestos</span>
+      <span class="num-alerta">${ic.n}</span></summary><p class="nota" style="margin:0 0 6px">Falta agregar el impoconsumo en Siigo.</p>` +
+      (ic.lista || []).map(c => `<div class="fila-dato"><span>${esc(c.doc)}<small style="display:block;opacity:.65">${esc(c.proveedor)} · fac. ${esc(c.factura)}</small></span>
+        <b>${plata(c.total_final)}</b></div>`).join("") +
+      `<button class="sec chico" data-ir-ajustes="1" style="margin-top:8px">Ver el paso a paso</button></details>` : "";
     if(cont) cont.insertAdjacentHTML("afterbegin", hic + hg + h);
   }catch(e){ console.warn("Alertas de pagos:", e); }
 };
 $("kpiPanel").addEventListener("click", e => {
+  if(e.target.closest("[data-ir-ajustes]")){ abrirAjustes(); return; }
   const b = e.target.closest("[data-ir-pagos]"); if(!b) return;
   abrirPagosFiltrado(b.dataset.irPagos);
 });
