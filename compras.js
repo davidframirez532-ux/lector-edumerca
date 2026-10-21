@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v35";
-const SERVIDOR_MINIMO = 26;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v36";
+const SERVIDOR_MINIMO = 30;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -597,12 +597,14 @@ $("cpDetPanel").addEventListener("click", async e => {
   const b = e.target.closest("[data-l]"); if(!b || !sel) return;
   const l = sel.lineas[Number(b.dataset.l)];
   if(l.destino === "OBSEQUIO") return alert("Esta línea viene con cantidad 0: no se sube.");
-  const ops = [{t: "📦 Asociar a un producto de Siigo", sub: l.codigo ? "Ahora: " + l.nombre + " × " + (l.factor || 1) : "Queda guardado para las próximas facturas", fn: async () => {
+  const ops = [{t: l.sin_factor ? "📦 Confirmar el factor" : "📦 Asociar a un producto de Siigo",
+    sub: l.codigo ? "Ahora: " + l.nombre + (l.sin_factor ? " · SIN FACTOR" : " × " + (l.factor || 1)) : "Queda guardado para las próximas facturas", fn: async () => {
     const actual = l.codigo ? [{codigo: l.codigo, nombre: l.nombre + " (el actual: solo cambiar el factor)"}] : [];
     const p = await elegirProducto("¿Qué producto es?", actual, l.desc);
     if(!p) return;
-    const fx = l.factor && l.factor < 1 ? "1/" + Math.round(1 / l.factor) : (l.factor_sugerido || l.factor || 1);
-    const r = await pedirForm(p.nombre, [{id: "f", label: "Factor. Caja de 15 que se vende suelta → 15 · Igual que en Siigo → 1 · " +
+    // Sin factor confirmado (asociación automática o pendiente): el campo no trae 1 escrito, hay que ponerlo
+    const fx = l.sin_factor ? (l.factor_sugerido || "") : l.factor && l.factor < 1 ? "1/" + Math.round(1 / l.factor) : (l.factor_sugerido || l.factor || 1);
+    const r = await pedirForm(p.nombre, [{id: "f", label: `En la factura: ${l.desc} · ${num(l.cant)} und. ` + "Factor. Caja de 15 que se vende suelta → 15 · Igual que en Siigo → 1 · " +
       "Viene suelto y en Siigo se vende por paquete (30 huevos = 1 cubeta) → 1/30", valor: fx, inputmode: "text",
       validar: v => leerFactor(v) > 0 || "Escribe un número (15) o una fracción (1/30)"}], "Asociar");
     if(!r) return;
