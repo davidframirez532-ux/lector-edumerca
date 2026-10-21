@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v36";
-const SERVIDOR_MINIMO = 30;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v38";
+const SERVIDOR_MINIMO = 31;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -17,9 +17,18 @@ const html = `
   <div class="menu">
     <button class="ghost" id="btnCpTodas">Ver todas las facturas</button>
     <button class="ppal" id="btnCpPorAprobar">Facturas por aprobar</button>
+    <button class="ghost" id="btnCpNotas">Notas crédito</button>
     <button class="ghost" id="btnCpDs">Documento soporte (foto)</button>
     <button class="ghost" id="btnCpAjustes">⚖ Pendientes por ajuste de impuestos</button>
   </div>
+</section>
+<section class="pantalla" id="cpNotas">
+  <div class="cabeza"><h2 style="font-size:1.4rem">Notas crédito</h2>
+    <button class="sec" id="btnCpNotasActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
+    <button class="sec" id="btnCpNotasVolver">Volver</button></div>
+  <p id="cpNotasEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
+  <input class="buscador" id="cpNotasBuscar" type="search" placeholder="Buscar proveedor, número o NIT" autocomplete="off" enterkeyhint="search">
+  <div class="items" id="cpNotasItems"></div>
 </section>
 <section class="pantalla" id="cpAjustes">
   <div class="cabeza"><h2 style="font-size:1.35rem">Ajuste de impuestos</h2>
@@ -103,10 +112,10 @@ const html = `
     color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
 </style>`;
 document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
-["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
+["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar", "cpNotas"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
 /* 🏠 en las pantallas nuevas */
-["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg", "cpNotas"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -290,7 +299,7 @@ async function cargarCola(actualizar){
   }catch(e){
     msg.style.color = "#ff9a86";
     msg.textContent = (cola ? "Mostrando la última copia · " : "") + e.message;
-  }finally{ clearInterval(reloj); cargandoCola = false; pintarCola(); }
+  }finally{ clearInterval(reloj); cargandoCola = false; pintarCola(); pintarNotas(); pintarBotonNotas(); }
 }
 let filtroCola = "";
 const FILTROS_COLA = [
@@ -338,7 +347,7 @@ function pintarCola(){
       <span class="pre">${plata(f.totales.xml)}<small>›</small></span></button>`;
   });
   h += `<p class="nota" style="text-align:center">${cola.ya_en_siigo || 0} ya en Siigo · ${cola.ignoradas || 0} ignoradas${
-    cola.notas_credito ? " · " + cola.notas_credito + " notas crédito (en KPIs → Alertas)" : ""}<br>Revisado ${esc(cola.generado || "")}</p>`;
+    (cola.notas || []).length ? " · " + cola.notas.length + " notas crédito por aprobar" : ""}<br>Revisado ${esc(cola.generado || "")}</p>`;
   box.innerHTML = h;
 }
 $("cpItems").addEventListener("click", e => {
@@ -401,9 +410,15 @@ function lineaTxt(l){
 }
 function pintarDetalle(){
   const f = sel; if(!f) return;
-  $("cpDetTitulo").textContent = f.proveedor;
+  const nota = !!f.es_nota;
+  $("cpDetTitulo").textContent = (nota ? "NC · " : "") + f.proveedor;
   const t = f.totales;
-  let h = `<div class="bloque"><h3 style="margin-bottom:4px">${esc(f.numero)}<small>${f.lista ? "✅ lista" : "⚠ con pendientes"}</small></h3>
+  let h = nota ? `<div class="bloque" style="border:2px solid #8fc9ff"><p class="nota" style="margin:0;opacity:1">
+    🧾 <b>Nota crédito del proveedor</b>${f.referencia ? ` a la factura <b>${esc(f.referencia)}</b>` : ""}${
+      f.compra_afectada ? ` (${esc(f.compra_afectada)} en Siigo)` : ""}.${f.motivo_nota ? `<br>Motivo: ${esc(f.motivo_nota)}` : ""}<br>
+    Siigo no deja crear notas crédito de compra por la API: regístrala a mano con la imagen de abajo y toca <b>"Ya la registré en Siigo"</b>.</p>
+    <button class="ppal chico" data-imagen="det" style="width:100%;margin-top:10px">🖼 Imagen: cómo debe quedar en Siigo</button></div>` : "";
+  h += `<div class="bloque"><h3 style="margin-bottom:4px">${esc(f.numero)}<small>${f.lista ? "✅ lista" : "⚠ con pendientes"}</small></h3>
     <p class="nota" style="margin:0">NIT ${esc(f.nit)} · ${fechaTxt(f.fecha)} · vence ${fechaTxt(f.vence)}${
       f.pdf ? ` · <a href="${esc(f.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
     <div class="grilla" style="margin-top:10px">
@@ -413,7 +428,7 @@ function pintarDetalle(){
         t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
-  const pagos = cola.pagos || [];
+  const pagos = nota ? [] : (cola.pagos || []);
   if(pagos.length){
     if(!f.pagoElegido) f.pagoElegido = f.pago;
     const pg = pagos.find(x => x.id === Number(f.pagoElegido)) || pagos[0];
@@ -428,7 +443,7 @@ function pintarDetalle(){
     ? `<button class="ppal chico" data-tercero="crear" style="width:100%;margin-top:8px">➕ Crear proveedor en Siigo con los datos de la factura</button>`
     : `<button class="ppal chico" data-tercero="habilitar" style="width:100%;margin-top:8px">🛠 Habilitarlo como proveedor activo en Siigo</button>`;
   h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}${botonTer}</div>`;
-  if((f.lineas || []).some(l => (l.otros || 0) >= 0.5)) h += `<div class="bloque" style="border:2px solid #ffd23f">
+  if(!nota && (f.lineas || []).some(l => (l.otros || 0) >= 0.5)) h += `<div class="bloque" style="border:2px solid #ffd23f">
     <p class="nota" style="margin:0 0 8px;opacity:1">⚖ Tiene impuestos adicionales al IVA (impoconsumo / IBUA).</p>
     <button class="ppal chico" data-imagen="det" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo</button></div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
@@ -437,23 +452,26 @@ function pintarDetalle(){
       <span class="cod">${esc(l.n)}</span>
       <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · " + esc(l.otros_nom || "otros imp.") + " " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
       <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") + `</div>`;
-  h += `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
+  h += nota ? `<p class="nota" style="text-align:center">Asocia los productos como en las facturas: la imagen usa los productos de Siigo y el factor.</p>`
+    : `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
   const ap = $("btnCpAprobar");
   ap.disabled = !f.lista; ap.style.opacity = f.lista ? "1" : ".45";
-  ap.textContent = f.lista ? `Aprobar y subir ${plata(t.total)}` : "Resuelve los pendientes";
+  ap.textContent = !f.lista ? "Resuelve los pendientes" : nota ? "Ya la registré en Siigo" : `Aprobar y subir ${plata(t.total)}`;
 }
 function reemplazar(nueva){
-  const i = cola.facturas.findIndex(x => x.id === nueva.id);
-  if(i >= 0) cola.facturas[i] = nueva;
+  const lista = nueva.es_nota ? (cola.notas = cola.notas || []) : cola.facturas;
+  const i = lista.findIndex(x => x.id === nueva.id);
+  if(i >= 0) lista[i] = nueva;
   sel = nueva;
   try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){}
-  pintarDetalle(); pintarCola();
+  pintarDetalle(); pintarCola(); pintarNotas();
 }
 function quitarDeCola(id){
   cola.facturas = cola.facturas.filter(x => x.id !== id);
+  cola.notas = (cola.notas || []).filter(x => x.id !== id);
   try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){}
-  pintarCola();
+  pintarCola(); pintarNotas(); pintarBotonNotas();
 }
 async function conEspera(texto, fn){
   const msg = $("cpDetEstado"), t0 = Date.now();
@@ -622,6 +640,17 @@ $("cpDetPanel").addEventListener("click", async e => {
 });
 $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
+  if(f.es_nota){
+    const r = await pedirForm(`¿Ya registraste en Siigo la nota ${f.numero}?`, [{id: "doc", label: "Número del documento en Siigo (opcional, ej. el de la devolución)",
+      valor: "", inputmode: "text"}], "Sí, ya la registré");
+    if(!r) return;
+    const d = await conEspera("Guardando…", () => postAdmin({accion: "nota_registrada", id: f.id, doc: r.doc}));
+    if(!d) return;
+    quitarDeCola(f.id);
+    alert("✅ " + d.mensaje);
+    abrirNotas();
+    return;
+  }
   const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
   const t = f.totales;
   const avisos = (f.conciliacion || []).filter(c => c.aviso);
@@ -681,9 +710,48 @@ $("btnCpIgnorar").addEventListener("click", async () => {
   if(!d) return;
   quitarDeCola(f.id);
   historial = null;
-  abrir("cpCola");
+  if(f.es_nota) abrirNotas(); else abrir("cpCola");
 });
-$("btnCpDetVolver").addEventListener("click", () => abrir("cpCola"));
+$("btnCpDetVolver").addEventListener("click", () => { if(sel && sel.es_nota) abrirNotas(); else abrir("cpCola"); });
+
+/* ══════════════ NOTAS CRÉDITO POR APROBAR ══════════════
+   Vienen en la misma cola (cola.notas). Se asocian como las facturas; se registran a mano en Siigo
+   (la API no tiene notas crédito de compra) y se marcan "Ya la registré". */
+function pintarBotonNotas(){
+  const n = ((cola && cola.notas) || []).length;
+  $("btnCpNotas").innerHTML = "Notas crédito" + (n ? ` <span class="num-alerta" style="margin-left:6px">${n}</span>` : "");
+}
+function abrirNotas(){
+  abrir("cpNotas");
+  pintarNotas();
+  if(!cola) cargarCola(false);
+}
+function pintarNotas(){
+  const box = $("cpNotasItems"); if(!box) return;
+  if(!cola){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  const q = normal($("cpNotasBuscar").value.trim());
+  const l = (cola.notas || []).filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit + " " + (f.referencia || "")).includes(q));
+  box.innerHTML = !(cola.notas || []).length ? `<div class="vacio">No hay notas crédito por aprobar. ✅<br><small>Si llegó una hace poco, toca ↻.</small></div>` :
+    !l.length ? `<div class="vacio">Ninguna nota con esa búsqueda.</div>` :
+    l.map(f => {
+      const malo = (f.conciliacion || []).filter(c => !c.ok && !c.aviso)[0] || (f.conciliacion || []).filter(c => c.aviso)[0];
+      return `<button class="item" data-nota="${esc(f.id)}">
+      <span class="cod" style="${f.lista ? "background:#8fc9ff;color:var(--verde)" : "background:#ffd23f;color:var(--verde)"}">${f.lista ? "NC" : "!"}</span>
+      <span class="nom">${esc(f.proveedor)}<small>${esc(f.numero)} · ${fechaTxt(f.fecha)}${f.referencia ? " · fac. " + esc(f.referencia) : ""} · ${f.lineas.length} líneas${
+        malo ? `<br><span style="color:#ffd23f">${esc(malo.texto)}</span>` : ""}</small></span>
+      <span class="pre">${plata((f.totales || {}).xml)}<small>›</small></span></button>`;
+    }).join("");
+}
+$("cpNotasItems").addEventListener("click", e => {
+  const b = e.target.closest("[data-nota]"); if(!b || !cola) return;
+  sel = (cola.notas || []).find(f => f.id === b.dataset.nota);
+  if(sel) abrirDetalle();
+});
+$("cpNotasBuscar").addEventListener("input", pintarNotas);
+$("btnCpNotas").addEventListener("click", abrirNotas);
+$("btnCpNotasActualizar").addEventListener("click", () => { $("cpNotasEstado").textContent = "Revisando el correo y Siigo…"; cargarCola(true).then(() => { $("cpNotasEstado").textContent = ""; }); });
+$("btnCpNotasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
+pintarBotonNotas();
 
 /* ══════════════ PENDIENTES POR AJUSTE DE IMPUESTOS ══════════════
    Compras subidas con base + IVA a las que falta el impoconsumo / IBUA (Siigo no lo deja subir por la API).
@@ -820,6 +888,11 @@ function partirFactura(num, pre, cons){
   return m ? {pre: m[1].toUpperCase(), cons: m[2]} : {pre: "", cons: String(num || "")};
 }
 function datosImgFactura(f){
+  if(f.es_nota) return {titulo: "NOTA CRÉDITO DE PROVEEDOR", subtitulo: "EDUMERCA 122 · cómo registrarla en Siigo (devolución en compras)",
+    proveedor: f.proveedor, nit: f.nit, factura: partirFactura(f.numero, f.prefijo, f.numero_prov), etiquetaFactura: "No. nota crédito",
+    afecta: f.referencia ? f.referencia + (f.compra_afectada ? " (" + f.compra_afectada + " en Siigo)" : " (no está en Siigo)") : "",
+    motivo: f.motivo_nota || "", fecha: f.fecha, vence: "", pago: "", doc: "", lineas: f.guia, observaciones: f.observaciones || "",
+    tot: totalesGuia(f.guia), nombre: `NC__${f.fecha}__${f.numero}__${f.nit}`, id_siigo: "", tipo: "NC"};
   const pg = ((cola && cola.pagos) || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {};
   return {proveedor: f.proveedor, nit: f.nit, factura: partirFactura(f.numero, f.prefijo, f.numero_prov), fecha: f.fecha,
     vence: pg.credito ? f.vence : "", pago: pg.nombre || "", doc: "", lineas: f.guia, observaciones: f.observaciones || "",
@@ -859,8 +932,8 @@ function pintarImagen(ctx, d, W){
   };
   // Encabezado
   ctx.fillStyle = AZ; ctx.fillRect(0, 0, W, 130);
-  txt("CÓMO DEBE QUEDAR EN SIIGO", M, 58, "bold 40px sans-serif", "#fff");
-  txt("EDUMERCA 122 · Factura de compra (FC)" + (d.doc ? " · " + d.doc : ""), M, 104, "28px sans-serif", "#dfe6f3");
+  txt(d.titulo || "CÓMO DEBE QUEDAR EN SIIGO", M, 58, "bold 40px sans-serif", "#fff");
+  txt(d.subtitulo || ("EDUMERCA 122 · Factura de compra (FC)" + (d.doc ? " · " + d.doc : "")), M, 104, "28px sans-serif", "#dfe6f3");
   y = 175;
   const fila = (et, val, negrita) => {
     txt(et, M, y, "26px sans-serif", GR);
@@ -870,14 +943,18 @@ function pintarImagen(ctx, d, W){
   };
   fila("Proveedor", d.proveedor || "", true);
   fila("NIT", d.nit || "");
-  fila("No. factura proveedor", (d.factura.pre ? d.factura.pre + "  ·  " : "") + d.factura.cons, true);
+  fila(d.etiquetaFactura || "No. factura proveedor", (d.factura.pre ? d.factura.pre + "  ·  " : "") + d.factura.cons, true);
+  if(d.afecta !== undefined) fila("Factura que afecta", d.afecta || "(el XML no lo dice)", true);
+  if(d.motivo) fila("Motivo", d.motivo);
   fila("Fecha de elaboración", d.fecha ? fechaTxt(d.fecha) : "");
-  fila("Forma de pago", (d.pago || "") + (d.vence ? " · vence " + fechaTxt(d.vence) : ""));
-  let cx = casilla(M, y, true, AZ);
-  txt("Incluye otros Impuestos cargo", cx, y, "bold 28px sans-serif", AZ);
-  cx = casilla(M + 520, y, false, GR);
-  txt("IVA / Impoconsumo incluido", cx, y, "28px sans-serif", GR);
-  y += 40;
+  if(d.pago) fila("Forma de pago", (d.pago || "") + (d.vence ? " · vence " + fechaTxt(d.vence) : ""));
+  if((d.lineas || []).some(x => Number(x.ic) > 0)){
+    let cx = casilla(M, y, true, AZ);
+    txt("Incluye otros Impuestos cargo", cx, y, "bold 28px sans-serif", AZ);
+    cx = casilla(M + 520, y, false, GR);
+    txt("IVA / Impoconsumo incluido", cx, y, "28px sans-serif", GR);
+    y += 40;
+  }
   // Líneas
   ctx.fillStyle = AZ; ctx.fillRect(M, y, W - 2 * M, 4); y += 50;
   txt("PRODUCTOS (" + (d.lineas || []).length + ")", M, y, "bold 30px sans-serif", AZ); y += 20;
@@ -916,10 +993,11 @@ function pintarImagen(ctx, d, W){
   if(t.ic) tl("Impoconsumo", t.ic);
   y += 6; ctx.fillStyle = AZ; ctx.fillRect(W - M - 520, y - 34, 520, 3); y += 12;
   tl("TOTAL NETO", t.total, true);
-  txt("Forma de pago " + (d.pago || "") + ": valor " + pz(t.total), W - M, y, "bold 26px sans-serif", "#7a4b00", "right"); y += 50;
+  if(d.pago) txt("Forma de pago " + d.pago + ": valor " + pz(t.total), W - M, y, "bold 26px sans-serif", "#7a4b00", "right");
+  y += 50;
   // Observaciones
   if(d.observaciones){
-    txt("OBSERVACIONES (copiar en la factura)", M, y, "bold 28px sans-serif", AZ); y += 16;
+    txt("OBSERVACIONES (copiar en " + (d.tipo === "NC" ? "la nota" : "la factura") + ")", M, y, "bold 28px sans-serif", AZ); y += 16;
     ctx.font = "24px sans-serif";
     const ls = envolver(ctx, d.observaciones, W - 2 * M - 40);
     ctx.fillStyle = "#f3f5f9"; ctx.fillRect(M, y, W - 2 * M, ls.length * 32 + 30);
@@ -951,9 +1029,9 @@ async function abrirImagen(d){
   const msg = $("cpImgEstado");
   msg.style.color = ""; msg.textContent = "Guardando en Drive…";
   try{
-    const r = await postAdmin({accion: "compra_imagen", data: url.split(",")[1], nombre: d.nombre, id_siigo: d.id_siigo || ""});
+    const r = await postAdmin({accion: "compra_imagen", data: url.split(",")[1], nombre: d.nombre, id_siigo: d.id_siigo || "", tipo: d.tipo || ""});
     imgActual.drive = r.url;
-    msg.textContent = "✓ Guardada en Drive: EDUMERCA/Compras/Ajuste impuestos";
+    msg.textContent = "✓ Guardada en Drive: EDUMERCA/Compras/" + (d.tipo === "NC" ? "Notas credito" : "Ajuste impuestos");
     $("btnCpImgDrive").disabled = false; $("btnCpImgDrive").style.opacity = "1";
     if(d.id_siigo && ajSel && String(ajSel.id) === String(d.id_siigo)) ajSel.imagen = r.url;
   }catch(e){ msg.style.color = "#ff9a86"; msg.textContent = "No se guardó en Drive: " + e.message; }
@@ -961,7 +1039,7 @@ async function abrirImagen(d){
 $("btnCpImgCompartir").addEventListener("click", async () => {
   if(!imgActual) return;
   const d = imgActual.d;
-  const texto = `Factura ${d.factura.pre}${d.factura.cons} · ${d.proveedor} · total ${pz(d.tot.total)}: así debe quedar en Siigo.`;
+  const texto = `${d.tipo === "NC" ? "Nota crédito" : "Factura"} ${d.factura.pre}${d.factura.cons} · ${d.proveedor} · total ${pz(d.tot.total)}: así debe quedar en Siigo.`;
   const file = new File([imgActual.blob], (d.nombre || "factura").replace(/[\\/:*?"<>|]/g, "-") + ".png", {type: "image/png"});
   try{
     if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file], title: "Factura para Siigo", text: texto}); return; }
@@ -972,7 +1050,7 @@ $("btnCpImgCompartir").addEventListener("click", async () => {
 });
 $("btnCpImgDrive").addEventListener("click", () => { if(imgActual && imgActual.drive) window.open(imgActual.drive, "_blank"); });
 $("btnCpImgVolver").addEventListener("click", () => {
-  const atras = ajSel && imgActual && imgActual.d.id_siigo && String(imgActual.d.id_siigo) === String(ajSel.id) ? "cpAjDet" : "cpDet";
+  const atras = imgActual && imgActual.d.tipo !== "NC" && ajSel && imgActual.d.id_siigo && String(imgActual.d.id_siigo) === String(ajSel.id) ? "cpAjDet" : "cpDet";
   if(atras === "cpAjDet") pintarAjDet();
   abrir(atras);
 });
