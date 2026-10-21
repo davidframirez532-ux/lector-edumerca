@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v43";
+const COMPRAS_VERSION = "compras v44";
 const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -184,7 +184,12 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 (function(){
   const st = document.createElement("style");
   st.textContent = `.hoja-caja{max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
-    .hoja.con-teclado{align-items:flex-end !important}`;
+    .hoja.con-teclado{align-items:flex-end !important}
+    /* Hoja de opciones (avisos, elegir…): el título y Cancelar quedan fijos y la lista se desplaza */
+    #hoja .hoja-caja{max-height:88vh;overflow:hidden;display:flex;flex-direction:column}
+    #hojaOpciones{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+      touch-action:pan-y;padding-bottom:4px}
+    #hojaCancelar{flex:none}`;
   document.head.appendChild(st);
   const VENTANAS = ["formVentana", "pinVentana", "hoja"];
   const vv = window.visualViewport;
@@ -343,7 +348,7 @@ async function bgProcesar(){
 function abrirAvisos(){
   const ops = [];
   if(bgCola.length) ops.push({t: `⏳ ${bgCola.length} en proceso`, sub: bgCola.map(o => o.texto).slice(0, 3).join(" · ") + (bgCola.length > 3 ? " …" : ""), fn: () => {}});
-  notis.slice(0, 15).forEach(x => ops.push({t: (x.ok ? "✅ " : "❌ ") + x.texto, sub: (x.doc || "") + " · " + fechaHora(x.fecha) + (x.detalle ? " · toca para ver el detalle" : ""),
+  notis.slice(0, 40).forEach(x => ops.push({t: (x.ok ? "✅ " : "❌ ") + x.texto, sub: (x.doc || "") + " · " + fechaHora(x.fecha) + (x.detalle ? " · toca para ver el detalle" : ""),
     fn: () => {
       if(x.detalle) alert(x.detalle);
       const f = buscarFact(x.factId);
