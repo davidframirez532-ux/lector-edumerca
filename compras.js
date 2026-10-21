@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v33";
-const SERVIDOR_MINIMO = 24;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v34";
+const SERVIDOR_MINIMO = 25;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -159,7 +159,8 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 })();
 /* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
 $("verApp").textContent += " · " + COMPRAS_VERSION;
-const chk = c => `<div class="fila-dato"><span>${c.ok ? "✅" : "❌"} ${esc(c.texto)}</span></div>`;
+/* ✅ cuadra · ⚠ aviso (diferencia de total o IVA mayor a la tolerancia: deja subir) · ❌ bloquea */
+const chk = c => `<div class="fila-dato"><span${c.aviso ? ' style="color:#ffd23f"' : ""}>${c.ok ? "✅" : c.aviso ? "⚠️" : "❌"} ${esc(c.texto)}</span></div>`;
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -320,7 +321,7 @@ function pintarCola(){
   if(!todasF.length) h += `<div class="vacio">No hay facturas por aprobar.<br>Todas las del correo ya están en Siigo o ignoradas.</div>`;
   else if(!fs.length) h += `<div class="vacio">Ninguna factura con ese filtro.</div>`;
   h += htmlAgrupado(fs, fx.cola, valorF, f => {
-    const malo = (f.conciliacion || []).filter(c => !c.ok)[0];
+    const malo = (f.conciliacion || []).filter(c => !c.ok && !c.aviso)[0] || (f.conciliacion || []).filter(c => c.aviso)[0];
     return `<button class="item" data-id="${esc(f.id)}">
       <span class="cod" style="${f.lista ? "background:#4fd6a8;color:var(--verde)" : "background:#ffd23f;color:var(--verde)"}">${f.lista ? "✓" : "!"}</span>
       <span class="nom">${esc(f.proveedor)}
@@ -605,7 +606,10 @@ $("btnCpAprobar").addEventListener("click", async () => {
   const f = sel; if(!f || !f.lista) return;
   const pg = (cola.pagos || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {nombre: "", credito: true};
   const t = f.totales;
+  const avisos = (f.conciliacion || []).filter(c => c.aviso);
   if(!confirm(`¿Subir a Siigo la factura ${f.numero} de ${f.proveedor}?\n\nTotal ${plata(t.total)}` +
+    (avisos.length ? `\n\n⚠ Tiene diferencias con el XML:\n` + avisos.map(c => "• " + c.texto.replace(/^Aviso: /, "")).join("\n") +
+      `\nSe sube igual; revisa en Siigo después.\n` : "") +
     (t.impoconsumo_pendiente ? `\n+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú en Siigo = ${plata(t.total_final)}` : "") +
     `\nForma de pago: ${pg.nombre}\n` +
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
