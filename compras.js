@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v44";
-const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v46";
+const SERVIDOR_MINIMO = 34;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -633,8 +633,10 @@ function pintarDetalle(){
     <button class="ppal chico" data-imagen="det" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo</button></div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
   const sinAsociar = (f.lineas || []).filter(l => l.destino !== "OBSEQUIO" && (l.precio === undefined || l.sin_factor)).length;
-  h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + (f.pdf ? `<button class="sec chico" data-leer-pdf="1"
-      style="width:100%;margin-bottom:8px;white-space:normal">🤖 Leer los EAN del PDF con Claude${sinAsociar ? ` (${sinAsociar} sin asociar o sin factor)` : ""}</button>` : "") +
+  // "+" a la derecha del título: más acciones sobre las líneas (por ahora, leer los EAN del PDF con Claude)
+  h += `<div class="bloque"><h3>Líneas <span style="display:flex;align-items:center;gap:10px"><small>toca para cambiar</small>
+      <button class="sec chico" data-lineas-mas="1" data-sin="${sinAsociar}" aria-label="Más opciones de líneas"
+        style="font-size:1.35rem;line-height:1;padding:4px 13px;font-weight:800">+</button></span></h3>` +
     f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
       <span class="cod">${esc(l.n)}</span>
@@ -788,6 +790,17 @@ async function armarMezcla(l){
     doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
 $("cpDetPanel").addEventListener("click", async e => {
+  const mas = e.target.closest("[data-lineas-mas]");
+  if(mas && sel){
+    const n = Number(mas.dataset.sin) || 0;
+    elegir("Líneas · " + sel.proveedor, [sel.pdf
+      ? {t: "🤖 Leer los EAN del PDF con Claude", sub: (n ? n + " línea(s) sin asociar o sin factor · " : "") +
+          "Asocia por código de barras; el factor lo confirmas tú. Corre en segundo plano.",
+         fn: () => bgEncolar({tipo: "pdf", factId: sel.id, cuerpo: {accion: "compra_leer_pdf", id: sel.id},
+           texto: "Lectura de EAN del PDF", doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero})}
+      : {t: "🤖 Leer los EAN del PDF con Claude", sub: "Esta factura no tiene PDF en el correo", fn: () => {}}]);
+    return;
+  }
   if(e.target.closest("[data-leer-pdf]") && sel){
     bgEncolar({tipo: "pdf", factId: sel.id, cuerpo: {accion: "compra_leer_pdf", id: sel.id},
       texto: "Lectura de EAN del PDF", doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
@@ -861,7 +874,25 @@ $("btnCpAprobar").addEventListener("click", async () => {
     `\nForma de pago: ${pg.nombre}\n` +
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
     `\n\nNo se envía a la DIAN.`)) return;
-  const d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
+  let d = await conEspera("Revisando en Siigo y subiendo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago}));
+  // Ya estaba en Siigo: no se subió nada. Se pregunta qué hacer (la que existe NUNCA se borra)
+  if(d && d.duplicada){
+    reemplazar(d.factura);
+    const du = d.duplicada, c = du.compras || [];
+    const lista = c.map(x => `• ${x.doc} · fac. ${x.numero || "?"} · ${fechaTxt(x.fecha)} · ${plata(x.total)}`).join("\n");
+    const que = await preguntar(du.posible
+      ? `⚠ Parece que ya está en Siigo (mismo proveedor, mismo total y fecha cercana, aunque con otro número)`
+      : `⚠ Esta factura YA ESTÁ en Siigo`, [
+      ["✋ No subirla", (du.posible ? "Revisa en Siigo: " : "Ya existe: ") + c.map(x => x.doc).join(", ") + ". No se cambia nada.", "no"],
+      ["⚠ Subir otra igual", "Quedarían DOS compras de esta factura. La que existe NO se borra.", "si"]]);
+    if(que !== "si"){
+      if(!du.posible){ quitarDeCola(f.id); abrir(f.es_nota ? "cpNotas" : "cpCola"); }
+      alert((du.posible ? "No se subió. Revisa en Siigo si es la misma factura:\n\n" : "No se subió: ya está en Siigo.\n\n") + lista);
+      return;
+    }
+    if(!confirm(`¿Seguro? Vas a crear OTRA compra de la factura ${f.numero} en Siigo.\n\nYa existe:\n${lista}\n\nNinguna se borra: quedarán las dos y tendrás que borrar una a mano.`)) return;
+    d = await conEspera("Subiendo a Siigo…", () => postAdmin({accion: "compra_aprobar", id: f.id, pago: f.pagoElegido || f.pago, forzar: true}));
+  }
   if(!d){
     // Siigo no deja usar el tercero como proveedor: ofrecer habilitarlo ahí mismo
     if(/habilitado como proveedor|customer_settings/i.test($("cpDetEstado").textContent) &&
