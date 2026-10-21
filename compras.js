@@ -3,8 +3,11 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v41";
+const COMPRAS_VERSION = "compras v42";
 const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
+/* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
+   "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
+const COLOR_CAMPANA = "#8fc9ff";
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -193,7 +196,8 @@ const bgPendientesDe = id => bgCola.filter(o => o.factId === id).length;
   const st = document.createElement("style");
   st.textContent = `.estado{right:66px !important}
     .campana{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:12px;z-index:6;background:transparent;border:0;
-      color:var(--papel);font-size:1.45rem;line-height:1;padding:6px 8px;cursor:pointer}
+      color:${COLOR_CAMPANA};line-height:0;padding:6px 8px;cursor:pointer}
+    .campana svg{width:26px;height:26px;display:block}
     .campana .cn{position:absolute;top:0;right:0;min-width:18px;height:18px;border-radius:9px;background:var(--rojo);color:#fff;
       font:600 .7rem/18px "Barlow",sans-serif;text-align:center;padding:0 4px}
     .campana .cn.azul{background:var(--azul)}
@@ -202,7 +206,7 @@ const bgPendientesDe = id => bgCola.filter(o => o.factId === id).length;
   document.head.appendChild(st);
   const b = document.createElement("button");
   b.className = "campana"; b.id = "campana"; b.setAttribute("aria-label", "Avisos");
-  b.innerHTML = `🔔<span class="cn" hidden></span>`;
+  b.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v.7A6.5 6.5 0 0 0 5.5 10.5v4.2L3.8 17a1 1 0 0 0 .8 1.6h14.8a1 1 0 0 0 .8-1.6l-1.7-2.3v-4.2a6.5 6.5 0 0 0-5-6.3v-.7A1.5 1.5 0 0 0 12 2zm-2.6 18a2.7 2.7 0 0 0 5.2 0z"/></svg><span class="cn" hidden></span>`;
   document.body.appendChild(b);
   b.addEventListener("click", abrirAvisos);
 })();
