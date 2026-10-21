@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v40";
+const COMPRAS_VERSION = "compras v41";
 const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -179,6 +179,145 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 /* ✅ cuadra · ⚠ aviso (diferencia de total o IVA mayor a la tolerancia: deja subir) · ❌ bloquea */
 const chk = c => `<div class="fila-dato"><span${c.aviso ? ' style="color:#ffd23f"' : ""}>${c.ok ? "✅" : c.aviso ? "⚠️" : "❌"} ${esc(c.texto)}</span></div>`;
+
+/* ══════════════ SEGUNDO PLANO + CAMPANA 🔔 ══════════════
+   Asociar, repartir y leer el PDF se guardan en una fila que corre en segundo plano (uno tras otro, porque el servidor
+   procesa de a uno). La línea cambia al instante en pantalla ("⏳ guardando…") y la 🔔 avisa cuando termina o si falla.
+   La fila se guarda en el celular: si cierras la app, se reanuda al abrirla. */
+const BG_KEY = "cp_bg_cola", NOTI_KEY = "cp_notis";
+let bgCola = leerJSON(BG_KEY, []), notis = leerJSON(NOTI_KEY, []), bgCorriendo = false, tBgReintento = null;
+const guardarBg = () => { try{ localStorage.setItem(BG_KEY, JSON.stringify(bgCola)); }catch(e){} };
+const guardarNotis = () => { try{ localStorage.setItem(NOTI_KEY, JSON.stringify(notis.slice(0, 40))); }catch(e){} };
+const bgPendientesDe = id => bgCola.filter(o => o.factId === id).length;
+(function(){
+  const st = document.createElement("style");
+  st.textContent = `.estado{right:66px !important}
+    .campana{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:12px;z-index:6;background:transparent;border:0;
+      color:var(--papel);font-size:1.45rem;line-height:1;padding:6px 8px;cursor:pointer}
+    .campana .cn{position:absolute;top:0;right:0;min-width:18px;height:18px;border-radius:9px;background:var(--rojo);color:#fff;
+      font:600 .7rem/18px "Barlow",sans-serif;text-align:center;padding:0 4px}
+    .campana .cn.azul{background:var(--azul)}
+    .campana.trabajando{animation:campanita 1.2s ease-in-out infinite}
+    @keyframes campanita{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(6deg)}}`;
+  document.head.appendChild(st);
+  const b = document.createElement("button");
+  b.className = "campana"; b.id = "campana"; b.setAttribute("aria-label", "Avisos");
+  b.innerHTML = `🔔<span class="cn" hidden></span>`;
+  document.body.appendChild(b);
+  b.addEventListener("click", abrirAvisos);
+})();
+function pintarCampana(){
+  const b = $("campana"); if(!b) return;
+  const n = b.querySelector(".cn");
+  const sinLeer = notis.filter(x => !x.leida).length, enCurso = bgCola.length;
+  b.classList.toggle("trabajando", enCurso > 0);
+  if(sinLeer){ n.hidden = false; n.textContent = sinLeer; n.classList.remove("azul"); }
+  else if(enCurso){ n.hidden = false; n.textContent = enCurso; n.classList.add("azul"); }
+  else n.hidden = true;
+  b.style.display = esAdmin() ? "" : "none";            // solo en modo administración
+}
+function buscarFact(id){ return cola ? (cola.facturas || []).concat(cola.notas || []).find(f => f.id === id) : null; }
+function aplicarPatch(f, op){
+  if(!f || !op.patch) return;
+  const l = (f.lineas || []).find(x => x.clave === op.clave); if(!l) return;
+  if(!op.original) op.original = JSON.parse(JSON.stringify(l));
+  Object.assign(l, op.patch, {guardando: true});
+  delete l.motivo;
+  if(l.precio === undefined) l.precio = 0;
+}
+function bgEncolar(op){
+  op.uid = Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+  op.fecha = new Date().toISOString();
+  const f = buscarFact(op.factId);
+  aplicarPatch(f, op);
+  if(sel && sel.id === op.factId && sel !== f) aplicarPatch(sel, op);
+  bgCola.push(op); guardarBg();
+  try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){}
+  $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "⏳ Guardando en segundo plano · te aviso en la 🔔";
+  if($("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; }
+  pintarCola(); pintarNotas(); pintarCampana();
+  bgProcesar();
+}
+/* La respuesta del servidor trae la factura completa; se le vuelven a poner los cambios que siguen en la fila */
+function aplicarFacturaServidor(nueva){
+  if(!cola || !nueva) return;
+  bgCola.filter(o => o.factId === nueva.id).forEach(o => { o.original = null; aplicarPatch(nueva, o); });
+  const lista = nueva.es_nota ? (cola.notas = cola.notas || []) : cola.facturas;
+  const i = lista.findIndex(x => x.id === nueva.id);
+  if(i >= 0) lista[i] = nueva;
+  if(sel && sel.id === nueva.id){ nueva.pagoElegido = sel.pagoElegido; sel = nueva; }
+  try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){}
+  if($("cpDet").classList.contains("activa") && sel === nueva){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; }
+  pintarCola(); pintarNotas();
+}
+function resumenPdf(d){
+  const r = d.resultado || {};
+  const sec = (titulo, l) => l && l.length ? `\n\n${titulo} (${l.length}):\n` + l.map(x => "• " + x).join("\n") : "";
+  return ((r.asociadas || []).length ? `✅ ${r.asociadas.length} línea(s) asociadas por el EAN del PDF (temporales).\n` +
+      `Falta confirmar el FACTOR en cada una: tócala → "Confirmar el factor".` : "No se asoció ninguna línea nueva.") +
+    sec("Asociadas", r.asociadas) +
+    sec("EAN que NO está en Siigo (producto nuevo: créalo con ese código de barras)", r.no_en_siigo) +
+    sec("Claude no está seguro de cuál es (asócialas a mano)", r.dudosas) +
+    sec("Sin EAN en el PDF", r.sin_ean) +
+    sec("Ya estaban asociadas (no se cambiaron)", r.ya_tenian) +
+    (d.notas ? `\n\n🤖 ${d.notas}` : "");
+}
+function notificar(op, d, err){
+  let texto, detalle = "";
+  if(err) texto = "No se guardó · " + op.texto + " · " + err.message;
+  else if(op.tipo === "pdf"){
+    const n = ((d.resultado || {}).asociadas || []).length;
+    texto = `EAN del PDF: ${n} línea${n === 1 ? "" : "s"} asociada${n === 1 ? "" : "s"}` + (n ? " (falta confirmar el factor)" : "");
+    detalle = resumenPdf(d);
+  }else texto = (op.tipo === "mezcla" ? "Reparto guardado · " : "Asociada · ") + op.texto;
+  notis.unshift({uid: op.uid, ok: !err, texto, detalle, doc: op.doc, factId: op.factId, fecha: new Date().toISOString(), leida: false});
+  guardarNotis(); pintarCampana();
+  if(navigator.vibrate) navigator.vibrate(err ? [80, 60, 80] : 40);
+}
+const esDeRed = e => /Failed to fetch|NetworkError|Load failed|Sin conexión|no respondió|otra operación/i.test(String(e && e.message));
+async function bgProcesar(){
+  if(bgCorriendo || !bgCola.length) return;
+  bgCorriendo = true; clearTimeout(tBgReintento); pintarCampana();
+  try{
+    while(bgCola.length){
+      const op = bgCola[0];
+      let d = null, err = null;
+      try{ d = await postAdmin(op.cuerpo); }catch(e){ err = e; }
+      if(err && esDeRed(err)){                         // sin internet o servidor ocupado: se reintenta en 20 s
+        tBgReintento = setTimeout(bgProcesar, 20000);
+        break;
+      }
+      bgCola.shift(); guardarBg();
+      if(d && d.factura) aplicarFacturaServidor(d.factura);
+      else if(err){                                    // falló: la línea vuelve a como estaba
+        const f = buscarFact(op.factId);
+        const l = f && (f.lineas || []).find(x => x.clave === op.clave);
+        if(l && op.original){ Object.keys(l).forEach(k => delete l[k]); Object.assign(l, op.original, {motivo: "No se guardó: " + err.message}); }
+        if(sel && f && sel.id === f.id && $("cpDet").classList.contains("activa")) pintarDetalle();
+        pintarCola(); pintarNotas();
+      }
+      notificar(op, d, err);
+      if(err && /Cancelado/.test(err.message)){ bgCola = []; guardarBg(); }
+    }
+  }finally{ bgCorriendo = false; pintarCampana(); if(sel && $("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; } }
+}
+function abrirAvisos(){
+  const ops = [];
+  if(bgCola.length) ops.push({t: `⏳ ${bgCola.length} en proceso`, sub: bgCola.map(o => o.texto).slice(0, 3).join(" · ") + (bgCola.length > 3 ? " …" : ""), fn: () => {}});
+  notis.slice(0, 15).forEach(x => ops.push({t: (x.ok ? "✅ " : "❌ ") + x.texto, sub: (x.doc || "") + " · " + fechaHora(x.fecha) + (x.detalle ? " · toca para ver el detalle" : ""),
+    fn: () => {
+      if(x.detalle) alert(x.detalle);
+      const f = buscarFact(x.factId);
+      if(f){ sel = f; abrirDetalle(); }
+    }}));
+  if(notis.length) ops.push({t: "🗑 Borrar avisos", sub: "", fn: () => { notis = []; guardarNotis(); pintarCampana(); }});
+  if(!ops.length) ops.push({t: "Sin avisos", sub: "Aquí te aviso cuando termine algo que corre en segundo plano", fn: () => {}});
+  notis.forEach(x => { x.leida = true; }); guardarNotis(); pintarCampana();
+  elegir("Avisos", ops);
+}
+setTimeout(() => { pintarCampana(); bgProcesar(); }, 1500);             // si quedó algo de antes, se reanuda
+window.addEventListener("online", bgProcesar);
+setInterval(pintarCampana, 5000);                                      // la campana se esconde/aparece con el modo administración
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -395,6 +534,8 @@ function notasIva(l){
     (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "");
 }
 function lineaTxt(l){
+  if(l.guardando) return `<span style="color:#8fc9ff">⏳ Guardando en segundo plano:</span> ` +
+    (l.destino === "MEZCLA" ? `🔀 ${esc(l.nombre)}` : `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? " × " + (l.factor < 1 ? "1/" + Math.round(1 / l.factor) : num(l.factor)) : ""}`);
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
   if(l.por_fuera) return `🎁 Bonificación de un producto no facturado: no se sube (queda en las observaciones)` + notasIva(l);
   if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` + notasIva(l);
@@ -459,8 +600,10 @@ function pintarDetalle(){
     : `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
   const ap = $("btnCpAprobar");
-  ap.disabled = !f.lista; ap.style.opacity = f.lista ? "1" : ".45";
-  ap.textContent = !f.lista ? "Resuelve los pendientes" : nota ? "Ya la registré en Siigo" : `Aprobar y subir ${plata(t.total)}`;
+  const guardando = bgPendientesDe(f.id);
+  ap.disabled = !f.lista || guardando > 0; ap.style.opacity = f.lista && !guardando ? "1" : ".45";
+  ap.textContent = guardando ? `⏳ Guardando ${guardando} cambio${guardando > 1 ? "s" : ""}… te aviso en la 🔔`
+    : !f.lista ? "Resuelve los pendientes" : nota ? "Ya la registré en Siigo" : `Aprobar y subir ${plata(t.total)}`;
 }
 function reemplazar(nueva){
   const lista = nueva.es_nota ? (cola.notas = cola.notas || []) : cola.facturas;
@@ -594,26 +737,16 @@ async function armarMezcla(l){
     if(sig === "guardar") break;
   }
   const envio = partes.map(x => ({codigo: x.codigo, cantidad: x.total / cantFac}));
-  const d = await conEspera("Guardando reparto…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA",
-    partes: envio, proveedor: sel.proveedor, descripcion: l.desc}));
-  if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Reparto guardado (temporal: se borra a medianoche)"; }
+  bgEncolar({tipo: "mezcla", factId: sel.id, clave: l.clave,
+    cuerpo: {accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA", partes: envio, proveedor: sel.proveedor, descripcion: l.desc},
+    patch: {destino: "MEZCLA", nombre: partes.map(x => x.nombre).join(" + "), partes: partes.map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.total}))},
+    texto: `Reparto de ${l.desc}: ` + partes.map(x => num(x.total) + " × " + x.nombre).join(" + "),
+    doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
 $("cpDetPanel").addEventListener("click", async e => {
   if(e.target.closest("[data-leer-pdf]") && sel){
-    const f = sel;
-    const d = await conEspera("Claude está leyendo el PDF…", () => postAdmin({accion: "compra_leer_pdf", id: f.id}));
-    if(!d) return;
-    reemplazar(d.factura);
-    const r = d.resultado || {};
-    const sec = (titulo, l) => l && l.length ? `\n\n${titulo} (${l.length}):\n` + l.map(x => "• " + x).join("\n") : "";
-    alert(((r.asociadas || []).length ? `✅ ${r.asociadas.length} línea(s) asociadas por el EAN del PDF (temporales).\n` +
-        `Falta confirmar el FACTOR en cada una: tócala → "Confirmar el factor".` : "No se asoció ninguna línea nueva.") +
-      sec("Asociadas", r.asociadas) +
-      sec("EAN que NO está en Siigo (producto nuevo: créalo con ese código de barras)", r.no_en_siigo) +
-      sec("Claude no está seguro de cuál es (asócialas a mano)", r.dudosas) +
-      sec("Sin EAN en el PDF", r.sin_ean) +
-      sec("Ya estaban asociadas (no se cambiaron)", r.ya_tenian) +
-      (d.notas ? `\n\n🤖 ${d.notas}` : ""));
+    bgEncolar({tipo: "pdf", factId: sel.id, cuerpo: {accion: "compra_leer_pdf", id: sel.id},
+      texto: "Lectura de EAN del PDF", doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
     return;
   }
   if(e.target.closest("[data-imagen]") && sel){
@@ -646,9 +779,12 @@ $("cpDetPanel").addEventListener("click", async e => {
       "Viene suelto y en Siigo se vende por paquete (30 huevos = 1 cubeta) → 1/30", valor: fx, inputmode: "text",
       validar: v => leerFactor(v) > 0 || "Escribe un número (15) o una fracción (1/30)"}], "Asociar");
     if(!r) return;
-    const d = await conEspera("Guardando asociación…", () => postAdmin({accion: "compra_asociar", id: sel.id, linea: l.clave,
-      codigo: p.codigo, factor: leerFactor(r.f), proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras}));
-    if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Asociada (temporal: se borra a medianoche; al subir la factura queda guardada desde Siigo)"; }
+    const factor = leerFactor(r.f);
+    bgEncolar({tipo: "asociar", factId: sel.id, clave: l.clave,
+      cuerpo: {accion: "compra_asociar", id: sel.id, linea: l.clave, codigo: p.codigo, factor,
+               proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras},
+      patch: {codigo: p.codigo, nombre: p.nombre, factor, sin_factor: false, destino: "INVENTARIO"},
+      texto: `${l.desc} → ${p.nombre} × ${r.f}`, doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
   }}];
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
