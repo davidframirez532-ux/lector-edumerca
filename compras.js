@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v39";
-const SERVIDOR_MINIMO = 31;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v40";
+const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -447,7 +447,10 @@ function pintarDetalle(){
     <p class="nota" style="margin:0 0 8px;opacity:1">⚖ Tiene impuestos adicionales al IVA (impoconsumo / IBUA).</p>
     <button class="ppal chico" data-imagen="det" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo</button></div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
-  h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
+  const sinAsociar = (f.lineas || []).filter(l => l.destino !== "OBSEQUIO" && (l.precio === undefined || l.sin_factor)).length;
+  h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + (f.pdf ? `<button class="sec chico" data-leer-pdf="1"
+      style="width:100%;margin-bottom:8px;white-space:normal">🤖 Leer los EAN del PDF con Claude${sinAsociar ? ` (${sinAsociar} sin asociar o sin factor)` : ""}</button>` : "") +
+    f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
       <span class="cod">${esc(l.n)}</span>
       <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · " + esc(l.otros_nom || "otros imp.") + " " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
@@ -596,6 +599,23 @@ async function armarMezcla(l){
   if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Reparto guardado (temporal: se borra a medianoche)"; }
 }
 $("cpDetPanel").addEventListener("click", async e => {
+  if(e.target.closest("[data-leer-pdf]") && sel){
+    const f = sel;
+    const d = await conEspera("Claude está leyendo el PDF…", () => postAdmin({accion: "compra_leer_pdf", id: f.id}));
+    if(!d) return;
+    reemplazar(d.factura);
+    const r = d.resultado || {};
+    const sec = (titulo, l) => l && l.length ? `\n\n${titulo} (${l.length}):\n` + l.map(x => "• " + x).join("\n") : "";
+    alert(((r.asociadas || []).length ? `✅ ${r.asociadas.length} línea(s) asociadas por el EAN del PDF (temporales).\n` +
+        `Falta confirmar el FACTOR en cada una: tócala → "Confirmar el factor".` : "No se asoció ninguna línea nueva.") +
+      sec("Asociadas", r.asociadas) +
+      sec("EAN que NO está en Siigo (producto nuevo: créalo con ese código de barras)", r.no_en_siigo) +
+      sec("Claude no está seguro de cuál es (asócialas a mano)", r.dudosas) +
+      sec("Sin EAN en el PDF", r.sin_ean) +
+      sec("Ya estaban asociadas (no se cambiaron)", r.ya_tenian) +
+      (d.notas ? `\n\n🤖 ${d.notas}` : ""));
+    return;
+  }
   if(e.target.closest("[data-imagen]") && sel){
     if(!sel.guia || !sel.guia.length) return alert("Actualiza la cola (↻ en Por aprobar) para generar la imagen de esta factura.");
     return abrirImagen(datosImgFactura(sel));
