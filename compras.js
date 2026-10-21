@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v34";
-const SERVIDOR_MINIMO = 25;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v35";
+const SERVIDOR_MINIMO = 26;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
 const html = `
@@ -82,6 +82,15 @@ const html = `
     <button class="ppal" id="btnDsCrear" style="flex:2">Crear en Siigo</button>
   </div>
 </section>
+<section class="pantalla" id="cpImg">
+  <div class="cabeza"><h2 style="font-size:1.35rem">Cómo debe quedar en Siigo</h2><button class="sec" id="btnCpImgVolver">Volver</button></div>
+  <p id="cpImgEstado" style="margin:0;font-size:.85rem;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="cpImgPanel" style="padding:0"><img id="cpImgVista" alt="Factura como debe quedar en Siigo" style="width:100%;display:block;border-radius:8px"></div>
+  <div class="acciones">
+    <button class="sec" id="btnCpImgDrive">Abrir en Drive</button>
+    <button class="ppal" id="btnCpImgCompartir" style="flex:2">Compartir (WhatsApp)</button>
+  </div>
+</section>
 <input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>
 <style>
   .cp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
@@ -97,7 +106,7 @@ document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
 ["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
 /* 🏠 en las pantallas nuevas */
-["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -419,6 +428,9 @@ function pintarDetalle(){
     ? `<button class="ppal chico" data-tercero="crear" style="width:100%;margin-top:8px">➕ Crear proveedor en Siigo con los datos de la factura</button>`
     : `<button class="ppal chico" data-tercero="habilitar" style="width:100%;margin-top:8px">🛠 Habilitarlo como proveedor activo en Siigo</button>`;
   h += `<div class="bloque"><h3>Conciliación <small>antes de subir</small></h3>${(f.conciliacion || []).map(chk).join("")}${botonTer}</div>`;
+  if((f.lineas || []).some(l => (l.otros || 0) >= 0.5)) h += `<div class="bloque" style="border:2px solid #ffd23f">
+    <p class="nota" style="margin:0 0 8px;opacity:1">⚖ Tiene impuestos adicionales al IVA (impoconsumo / IBUA).</p>
+    <button class="ppal chico" data-imagen="det" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo</button></div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
   h += `<div class="bloque"><h3>Líneas <small>toca para cambiar</small></h3>` + f.lineas.map((l, i) =>
     `<button class="item" data-l="${i}" style="width:100%">
@@ -566,6 +578,10 @@ async function armarMezcla(l){
   if(d){ reemplazar(d.factura); $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ Reparto guardado (temporal: se borra a medianoche)"; }
 }
 $("cpDetPanel").addEventListener("click", async e => {
+  if(e.target.closest("[data-imagen]") && sel){
+    if(!sel.guia || !sel.guia.length) return alert("Actualiza la cola (↻ en Por aprobar) para generar la imagen de esta factura.");
+    return abrirImagen(datosImgFactura(sel));
+  }
   const bt = e.target.closest("[data-tercero]");
   if(bt && sel){
     const crear = bt.dataset.tercero === "crear";
@@ -725,6 +741,8 @@ function pintarAjDet(){
       <div class="dato"><span>Hoy en Siigo</span><b>${plata(c.total_siigo)}</b><div class="sub">sin impoconsumo</div></div>
       <div class="dato"><span>Debe quedar en</span><b>${plata(c.total_final)}</b><div class="sub">total de la factura</div></div>
     </div></div>`;
+  h += `<div class="bloque"><button class="ppal chico" data-imagen="aj" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo (WhatsApp)</button>${
+    c.imagen ? `<a href="${esc(c.imagen)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;color:var(--amarillo)">Ver la imagen guardada en Drive</a>` : ""}</div>`;
   h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
     paso(1, ` Abre la compra <b>${esc(c.doc)}</b> en Siigo y toca <b>Editar</b>.`) +
     paso(2, ` <b>Borra todas las líneas</b> de productos.`) +
@@ -749,6 +767,9 @@ function pintarAjDet(){
     (faltan.length ? "" : `<p class="nota" style="margin:6px 0 0">Los impuestos ya están; falta que el total cuadre.</p>`) + `</div>`;
   $("cpAjDetPanel").innerHTML = h;
 }
+$("cpAjDetPanel").addEventListener("click", e => {
+  if(e.target.closest("[data-imagen]") && ajSel) abrirImagen(datosImgAjuste(ajSel));
+});
 $("btnCpAjRevisar").addEventListener("click", async () => {
   const c = ajSel; if(!c) return;
   const msg = $("cpAjDetEstado");
@@ -778,6 +799,181 @@ $("btnCpAjActualizar").addEventListener("click", () => cargarAjustes(false));
 $("btnCpAjVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 $("btnCpAjDetVolver").addEventListener("click", () => abrir("cpAjustes"));
 pintarBotonAjustes();
+
+/* ══════════════ IMAGEN "CÓMO DEBE QUEDAR EN SIIGO" ══════════════
+   Para facturas con impuestos adicionales al IVA: proveedor, NIT, factura, fecha, forma de pago, cada producto con
+   cantidad, valor unitario, descuento, IVA e impoconsumo (mayor valor), totales y observaciones. Se dibuja aquí,
+   se guarda en Drive (EDUMERCA/Compras/Ajuste impuestos) y se comparte con el menú del celular (WhatsApp). */
+const totalesGuia = g => {
+  let bruto = 0, desc = 0, iva = 0, ic = 0;
+  (g || []).forEach(x => {
+    const b = Number(x.cantidad) * Number(x.precio), d = Number(x.descuento) || 0;
+    bruto += b; desc += d; iva += Math.round((b - d) * (Number(x.iva) || 0)) / 100; ic += Number(x.ic) || 0;
+  });
+  return {bruto, desc, base: bruto - desc, iva, ic, total: bruto - desc + iva + ic};
+};
+function partirFactura(num, pre, cons){
+  if(pre || cons) return {pre: pre || "", cons: cons || ""};
+  const m = /^(.*?)(\d+)$/.exec(String(num || "").replace(/[^0-9A-Za-z]/g, ""));
+  return m ? {pre: m[1].toUpperCase(), cons: m[2]} : {pre: "", cons: String(num || "")};
+}
+function datosImgFactura(f){
+  const pg = ((cola && cola.pagos) || []).find(x => x.id === Number(f.pagoElegido || f.pago)) || {};
+  return {proveedor: f.proveedor, nit: f.nit, factura: partirFactura(f.numero, f.prefijo, f.numero_prov), fecha: f.fecha,
+    vence: pg.credito ? f.vence : "", pago: pg.nombre || "", doc: "", lineas: f.guia, observaciones: f.observaciones || "",
+    tot: totalesGuia(f.guia), nombre: `${f.fecha}__${f.numero}__${f.nit}`, id_siigo: ""};
+}
+function datosImgAjuste(c){
+  return {proveedor: c.proveedor, nit: c.nit, factura: partirFactura(c.factura), fecha: c.fecha_factura,
+    vence: c.vence && c.vence !== c.fecha_factura ? c.vence : "", pago: c.pago || "", doc: c.doc, lineas: c.guia,
+    observaciones: c.observaciones || "", tot: totalesGuia(c.guia), nombre: `${c.fecha_factura || ""}__${c.factura}__${c.nit || ""}__${c.doc}`,
+    id_siigo: c.id};
+}
+const n0 = v => Number(v || 0).toLocaleString("es-CO", {maximumFractionDigits: 2});
+const pz = v => "$" + Math.round(Number(v || 0)).toLocaleString("es-CO");
+function envolver(ctx, texto, ancho){
+  const out = [];
+  String(texto || "").split("\n").forEach(par => {
+    let lin = "";
+    par.split(/\s+/).forEach(w => {
+      const t = lin ? lin + " " + w : w;
+      if(ctx.measureText(t).width > ancho && lin){ out.push(lin); lin = w; } else lin = t;
+    });
+    out.push(lin);
+  });
+  return out;
+}
+/* Dibuja la imagen; con ctx de medida solo calcula el alto */
+function pintarImagen(ctx, d, W){
+  const M = 40, AZ = "#1f3864", TX = "#1b1b1b", GR = "#666", AM = "#fff2cc";
+  let y = 0;
+  const txt = (t, x, yy, font, color, alin) => { ctx.font = font; ctx.fillStyle = color || TX; ctx.textAlign = alin || "left"; ctx.fillText(t, x, yy); };
+  /* casilla dibujada (los símbolos ☑ no salen en todas las fuentes); devuelve dónde sigue el texto */
+  const casilla = (x, yy, marcada, color) => {
+    const t = 26, top = yy - t + 4;
+    ctx.lineWidth = 3; ctx.strokeStyle = color; ctx.strokeRect(x, top, t, t);
+    if(marcada){ ctx.beginPath(); ctx.moveTo(x + 5, top + 13); ctx.lineTo(x + 11, top + 20); ctx.lineTo(x + 22, top + 5); ctx.stroke(); }
+    return x + t + 12;
+  };
+  // Encabezado
+  ctx.fillStyle = AZ; ctx.fillRect(0, 0, W, 130);
+  txt("CÓMO DEBE QUEDAR EN SIIGO", M, 58, "bold 40px sans-serif", "#fff");
+  txt("EDUMERCA 122 · Factura de compra (FC)" + (d.doc ? " · " + d.doc : ""), M, 104, "28px sans-serif", "#dfe6f3");
+  y = 175;
+  const fila = (et, val, negrita) => {
+    txt(et, M, y, "26px sans-serif", GR);
+    ctx.font = (negrita ? "bold " : "") + "30px sans-serif";
+    envolver(ctx, val, W - M - 330).forEach((l, i) => { txt(l, 330, y + i * 38, (negrita ? "bold " : "") + "30px sans-serif"); if(i) y += 38; });
+    y += 50;
+  };
+  fila("Proveedor", d.proveedor || "", true);
+  fila("NIT", d.nit || "");
+  fila("No. factura proveedor", (d.factura.pre ? d.factura.pre + "  ·  " : "") + d.factura.cons, true);
+  fila("Fecha de elaboración", d.fecha ? fechaTxt(d.fecha) : "");
+  fila("Forma de pago", (d.pago || "") + (d.vence ? " · vence " + fechaTxt(d.vence) : ""));
+  let cx = casilla(M, y, true, AZ);
+  txt("Incluye otros Impuestos cargo", cx, y, "bold 28px sans-serif", AZ);
+  cx = casilla(M + 520, y, false, GR);
+  txt("IVA / Impoconsumo incluido", cx, y, "28px sans-serif", GR);
+  y += 40;
+  // Líneas
+  ctx.fillStyle = AZ; ctx.fillRect(M, y, W - 2 * M, 4); y += 50;
+  txt("PRODUCTOS (" + (d.lineas || []).length + ")", M, y, "bold 30px sans-serif", AZ); y += 20;
+  (d.lineas || []).forEach((x, i) => {
+    const conIc = Number(x.ic) > 0;
+    const b = Number(x.cantidad) * Number(x.precio) - (Number(x.descuento) || 0);
+    const totLin = b + Math.round(b * (Number(x.iva) || 0)) / 100 + (Number(x.ic) || 0);
+    ctx.font = "bold 28px sans-serif";
+    const nom = envolver(ctx, (i + 1) + ". " + (x.tipo === "Account" ? "Cuenta " : "") + x.codigo + " · " + (x.nombre || ""), W - 2 * M - 40);
+    const alto = 24 + nom.length * 36 + 40 + 24 + (conIc ? 80 : 0) + 22;
+    y += 16;
+    ctx.fillStyle = conIc ? AM : "#f3f5f9"; ctx.fillRect(M, y, W - 2 * M, alto);
+    let yy = y + 42;
+    nom.forEach(l => { txt(l, M + 20, yy, "bold 28px sans-serif"); yy += 36; });
+    txt("Cant " + n0(x.cantidad) + "    Valor unit. " + n0(x.precio) + (x.descuento ? "    Desc. " + n0(x.descuento) : ""), M + 20, yy, "28px sans-serif");
+    txt(pz(totLin), W - M - 20, yy, "bold 28px sans-serif", TX, "right");
+    yy += 40;
+    txt("Impuesto cargo 1: " + (x.iva ? "IVA " + n0(x.iva) + "%" : "ninguno"), M + 20, yy, "26px sans-serif", GR);
+    if(conIc){
+      yy += 40;
+      txt("Impuesto cargo 2: Impoconsumo por valor " + n0(x.ic), M + 20, yy, "bold 28px sans-serif", "#7a4b00");
+      yy += 40;
+      txt("Impuesto como mayor valor de la compra", casilla(M + 20, yy, true, "#7a4b00"), yy, "bold 26px sans-serif", "#7a4b00");
+    }
+    y += alto;
+  });
+  // Totales
+  y += 40;
+  const t = d.tot;
+  const tl = (et, v, fuerte) => { txt(et, W - M - 330, y, (fuerte ? "bold 32px" : "28px") + " sans-serif", fuerte ? AZ : GR, "right");
+    txt(pz(v), W - M, y, (fuerte ? "bold 34px" : "28px") + " sans-serif", fuerte ? AZ : TX, "right"); y += fuerte ? 52 : 40; };
+  tl("Total bruto", t.bruto);
+  if(t.desc) tl("Descuentos", -t.desc);
+  tl("Subtotal", t.base);
+  tl("IVA", t.iva);
+  if(t.ic) tl("Impoconsumo", t.ic);
+  y += 6; ctx.fillStyle = AZ; ctx.fillRect(W - M - 520, y - 34, 520, 3); y += 12;
+  tl("TOTAL NETO", t.total, true);
+  txt("Forma de pago " + (d.pago || "") + ": valor " + pz(t.total), W - M, y, "bold 26px sans-serif", "#7a4b00", "right"); y += 50;
+  // Observaciones
+  if(d.observaciones){
+    txt("OBSERVACIONES (copiar en la factura)", M, y, "bold 28px sans-serif", AZ); y += 16;
+    ctx.font = "24px sans-serif";
+    const ls = envolver(ctx, d.observaciones, W - 2 * M - 40);
+    ctx.fillStyle = "#f3f5f9"; ctx.fillRect(M, y, W - 2 * M, ls.length * 32 + 30);
+    y += 40;
+    ls.forEach(l => { txt(l, M + 20, y, "24px sans-serif"); y += 32; });
+    y += 10;
+  }
+  y += 30;
+  txt("Generada " + new Date().toLocaleString("es-CO") + " · Edumerca app", M, y, "22px sans-serif", GR);
+  return y + 30;
+}
+let imgActual = null;
+async function abrirImagen(d){
+  const W = 1080;
+  const medir = document.createElement("canvas").getContext("2d");
+  const alto = Math.ceil(pintarImagen(medir, d, W));
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = alto;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, alto);
+  pintarImagen(ctx, d, W);
+  const url = cv.toDataURL("image/png");
+  imgActual = {d, url, drive: "", blob: await new Promise(r => cv.toBlob(r, "image/png"))};
+  $("cpImgVista").src = url;
+  $("btnCpImgDrive").disabled = true; $("btnCpImgDrive").style.opacity = ".45";
+  abrir("cpImg");
+  $("cpImgPanel").scrollTop = 0;
+  // Se guarda en Drive en segundo plano
+  const msg = $("cpImgEstado");
+  msg.style.color = ""; msg.textContent = "Guardando en Drive…";
+  try{
+    const r = await postAdmin({accion: "compra_imagen", data: url.split(",")[1], nombre: d.nombre, id_siigo: d.id_siigo || ""});
+    imgActual.drive = r.url;
+    msg.textContent = "✓ Guardada en Drive: EDUMERCA/Compras/Ajuste impuestos";
+    $("btnCpImgDrive").disabled = false; $("btnCpImgDrive").style.opacity = "1";
+    if(d.id_siigo && ajSel && String(ajSel.id) === String(d.id_siigo)) ajSel.imagen = r.url;
+  }catch(e){ msg.style.color = "#ff9a86"; msg.textContent = "No se guardó en Drive: " + e.message; }
+}
+$("btnCpImgCompartir").addEventListener("click", async () => {
+  if(!imgActual) return;
+  const d = imgActual.d;
+  const texto = `Factura ${d.factura.pre}${d.factura.cons} · ${d.proveedor} · total ${pz(d.tot.total)}: así debe quedar en Siigo.`;
+  const file = new File([imgActual.blob], (d.nombre || "factura").replace(/[\\/:*?"<>|]/g, "-") + ".png", {type: "image/png"});
+  try{
+    if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file], title: "Factura para Siigo", text: texto}); return; }
+  }catch(e){ if(e && e.name === "AbortError") return; }
+  // Sin compartir archivos: enlace de Drive por WhatsApp, o descargar la imagen
+  if(imgActual.drive){ window.open("https://wa.me/?text=" + encodeURIComponent(texto + " " + imgActual.drive), "_blank"); return; }
+  const a = document.createElement("a"); a.href = imgActual.url; a.download = file.name; a.click();
+});
+$("btnCpImgDrive").addEventListener("click", () => { if(imgActual && imgActual.drive) window.open(imgActual.drive, "_blank"); });
+$("btnCpImgVolver").addEventListener("click", () => {
+  const atras = ajSel && imgActual && imgActual.d.id_siigo && String(imgActual.d.id_siigo) === String(ajSel.id) ? "cpAjDet" : "cpDet";
+  if(atras === "cpAjDet") pintarAjDet();
+  abrir(atras);
+});
 
 /* ══════════════ DOCUMENTO SOPORTE ══════════════ */
 let ds = null;
