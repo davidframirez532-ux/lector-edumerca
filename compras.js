@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v42";
+const COMPRAS_VERSION = "compras v43";
 const SERVIDOR_MINIMO = 33;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -172,12 +172,47 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 /* Sin zoom en la app: ni con dos dedos ni con doble toque */
 (function(){
   const vp = document.querySelector('meta[name="viewport"]');
-  if(vp) vp.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+  // interactive-widget: al abrir el teclado, la página se achica (Chrome Android) en vez de quedar debajo del teclado
+  if(vp) vp.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content");
   const st = document.createElement("style");
   st.textContent = "*{touch-action:pan-x pan-y}html,body{-webkit-text-size-adjust:100%}";
   document.head.appendChild(st);
   ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {passive:false}));
 })();
+/* Ventanas donde se escribe (formularios, PIN): siempre visibles junto con el teclado.
+   Se ajustan al espacio que deja el teclado (visualViewport) y el campo activo se centra en ese espacio. */
+(function(){
+  const st = document.createElement("style");
+  st.textContent = `.hoja-caja{max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    .hoja.con-teclado{align-items:flex-end !important}`;
+  document.head.appendChild(st);
+  const VENTANAS = ["formVentana", "pinVentana", "hoja"];
+  const vv = window.visualViewport;
+  function ajustar(){
+    const alto = vv ? vv.height : window.innerHeight, arriba = vv ? vv.offsetTop : 0;
+    const teclado = window.innerHeight - alto > 120;           // el teclado ocupa al menos 120 px
+    VENTANAS.forEach(id => {
+      const v = document.getElementById(id); if(!v) return;
+      if(v.hidden || !teclado){ v.style.top = ""; v.style.height = ""; v.style.bottom = ""; v.classList.remove("con-teclado"); return; }
+      v.style.top = arriba + "px"; v.style.height = alto + "px"; v.style.bottom = "auto";
+      v.classList.add("con-teclado");
+    });
+    const ae = document.activeElement;
+    if(teclado && ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)){
+      try{ ae.scrollIntoView({block: "center", behavior: "smooth"}); }catch(e){ ae.scrollIntoView(); }
+    }
+  }
+  if(vv){ vv.addEventListener("resize", ajustar); vv.addEventListener("scroll", ajustar); }
+  window.addEventListener("resize", ajustar);
+  // al tocar un campo, se espera a que suba el teclado y se acomoda
+  document.addEventListener("focusin", e => {
+    if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) setTimeout(ajustar, 350);
+  });
+  // al abrir o cerrar una ventana, se acomoda
+  const obs = new MutationObserver(() => setTimeout(ajustar, 50));
+  VENTANAS.forEach(id => { const v = document.getElementById(id); if(v) obs.observe(v, {attributes: true, attributeFilter: ["hidden"]}); });
+})();
+
 /* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
 $("verApp").textContent += " · " + COMPRAS_VERSION;
 /* ✅ cuadra · ⚠ aviso (diferencia de total o IVA mayor a la tolerancia: deja subir) · ❌ bloquea */
