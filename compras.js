@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v38";
+const COMPRAS_VERSION = "compras v39";
 const SERVIDOR_MINIMO = 31;   /* versión de 15_compras.gs que necesita esta app */
 
 /* ---------- Pantallas ---------- */
@@ -724,11 +724,21 @@ function pintarBotonNotas(){
 function abrirNotas(){
   abrir("cpNotas");
   pintarNotas();
-  if(!cola) cargarCola(false);
+  cargarCola(false);                 // siempre pide la cola al servidor (la copia del celular puede ser vieja)
 }
 function pintarNotas(){
   const box = $("cpNotasItems"); if(!box) return;
   if(!cola){ box.innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  if((cola.version_servidor || 0) < SERVIDOR_MINIMO){
+    box.innerHTML = `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0;opacity:1">⚠ <b>El servidor no está actualizado</b>
+      (versión ${cola.version_servidor || "anterior"}, se necesita ${SERVIDOR_MINIMO}). En Apps Script: Implementar → Gestionar implementaciones → ✏️ →
+      Nueva versión. Luego toca ↻ aquí.</p></div>`;
+    return;
+  }
+  if(!cola.notas){
+    box.innerHTML = `<div class="vacio">La cola se armó antes de que existieran las notas crédito.<br>Toca <b>↻</b> para revisar el correo otra vez.</div>`;
+    return;
+  }
   const q = normal($("cpNotasBuscar").value.trim());
   const l = (cola.notas || []).filter(f => !q || normal(f.proveedor + " " + f.numero + " " + f.nit + " " + (f.referencia || "")).includes(q));
   box.innerHTML = !(cola.notas || []).length ? `<div class="vacio">No hay notas crédito por aprobar. ✅<br><small>Si llegó una hace poco, toca ↻.</small></div>` :
@@ -749,7 +759,14 @@ $("cpNotasItems").addEventListener("click", e => {
 });
 $("cpNotasBuscar").addEventListener("input", pintarNotas);
 $("btnCpNotas").addEventListener("click", abrirNotas);
-$("btnCpNotasActualizar").addEventListener("click", () => { $("cpNotasEstado").textContent = "Revisando el correo y Siigo…"; cargarCola(true).then(() => { $("cpNotasEstado").textContent = ""; }); });
+$("btnCpNotasActualizar").addEventListener("click", async () => {
+  const msg = $("cpNotasEstado"), t0 = Date.now();
+  msg.style.color = ""; msg.textContent = "Revisando el correo y Siigo…";
+  const reloj = setInterval(() => { msg.textContent = "Revisando el correo y Siigo… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  try{ await cargarCola(true); }finally{ clearInterval(reloj); }
+  msg.textContent = $("cpEstado").textContent || "";        // si la cola dio error, se ve aquí también
+  if(msg.textContent) msg.style.color = "#ff9a86";
+});
 $("btnCpNotasVolver").addEventListener("click", () => irMenu("cpMenuFact"));
 pintarBotonNotas();
 
