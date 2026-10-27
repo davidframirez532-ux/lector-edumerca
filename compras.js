@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v47";
-const SERVIDOR_MINIMO = 36;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v48";
+const SERVIDOR_MINIMO = 37;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -1871,7 +1871,63 @@ window.pintarKpis = function(){
       `<button class="sec chico" data-ir-ajustes="1" style="margin-top:8px">Ver el paso a paso</button></details>` : "";
     if(cont) cont.insertAdjacentHTML("afterbegin", hic + hg + h);
   }catch(e){ console.warn("Alertas de pagos:", e); }
+  try{ pintarIgnorarIva(); }catch(e){ console.warn("Ignorar IVA:", e); }
 };
+/* ══════════════ ALERTAS DE IVA: IGNORAR / REACTIVAR ══════════════
+   Cada alerta de la revisión de IVA lleva un botón "Ignorar" (ej. pagos a la contadora que no son productos).
+   Lo ignorado deja de alertar y queda en "Ignorados en la revisión de IVA", donde se puede reactivar. */
+function pintarIgnorarIva(){
+  const k = kpis || {}, panel = $("kpiPanel");
+  const alertas = k.alertas_iva || [], ign = k.alertas_iva_ignorados || [];
+  const boton = a => `<button class="sec chico" data-iva-ignorar="${esc(a.codigo)}" data-iva-nombre="${esc(a.nombre || "")}"
+    style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">Ignorar</button>`;
+  // 1. Botón dentro de la fila que ya pinta la app (en el bloque de alertas de IVA)
+  const filas = [...panel.querySelectorAll(".fila-dato, li")].filter(el => {
+    const caja = el.closest("details, .bloque");
+    const tit = caja && (caja.querySelector("summary, h3") || {}).textContent || "";
+    return /IVA|impuesto/i.test(tit) && !el.querySelector("[data-iva-ignorar]");
+  });
+  const sinFila = [];
+  alertas.forEach(a => {
+    const el = filas.find(x => (a.codigo && x.textContent.includes(String(a.codigo))) || (a.nombre && x.textContent.includes(a.nombre)));
+    if(el){ el.style.display = el.style.display || "flex"; el.style.alignItems = "center"; el.insertAdjacentHTML("beforeend", boton(a)); }
+    else sinFila.push(a);
+  });
+  // 2. Las que no se encontraron en pantalla y la lista de ignorados (para reactivar)
+  const fila = (a, acc) => `<div class="fila-dato" style="display:flex;align-items:center"><span style="flex:1">${esc(a.nombre || a.codigo)}<small style="display:block;opacity:.65">${
+    esc(a.codigo)}${a.estado ? " · " + esc(a.estado) : ""}${a.detalle ? " · " + esc(a.detalle) : ""}${a.motivo ? " · " + esc(a.motivo) : ""}${
+    a.fecha ? " · " + esc(a.fecha) : ""}</small></span>${acc}</div>`;
+  let h = "";
+  if(sinFila.length) h += `<details class="alerta"><summary><span>Revisión de IVA: productos para revisar</span>
+    <span class="num-alerta amarillo">${sinFila.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">Si no es un producto (ej. pago a la contadora), tócalo en "Ignorar" y deja de alertar.</p>${sinFila.map(a => fila(a, boton(a))).join("")}</details>`;
+  if(ign.length) h += `<details class="alerta"><summary><span>Ignorados en la revisión de IVA</span><span class="num-alerta cero">${ign.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">No generan alerta. "Reactivar" los vuelve a revisar.</p>${ign.map(a => fila(a,
+      `<button class="sec chico" data-iva-reactivar="${esc(a.codigo)}" data-iva-nombre="${esc(a.nombre || "")}" style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">Reactivar</button>`)).join("")}</details>`;
+  if(!h) return;
+  const bloque = [...panel.querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
+  const cont = bloque && bloque.querySelector("div");
+  if(cont) cont.insertAdjacentHTML("beforeend", h);
+  else panel.insertAdjacentHTML("beforeend", `<div class="bloque"><h3>Revisión de IVA</h3>${h}</div>`);
+}
+$("kpiPanel").addEventListener("click", async e => {
+  const b = e.target.closest("[data-iva-ignorar], [data-iva-reactivar]"); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const reactivar = !!b.dataset.ivaReactivar, codigo = b.dataset.ivaIgnorar || b.dataset.ivaReactivar, nombre = b.dataset.ivaNombre;
+  let motivo = "";
+  if(!reactivar){
+    const r = await pedirForm("Ignorar en la revisión de IVA", [{id: "m", label: `${nombre || codigo} (${codigo}) deja de alertar. Motivo (opcional, ej. pago a la contadora)`,
+      valor: "", inputmode: "text"}], "Ignorar");
+    if(!r) return;
+    motivo = r.m || "";
+  }else if(!confirm(`¿Reactivar ${nombre || codigo}? Vuelve a alertar si el IVA no coincide.`)) return;
+  b.disabled = true; b.textContent = "…";
+  try{
+    const d = await postAdmin({accion: "iva_ignorar", codigo, nombre, motivo, reactivar});
+    if(kpis){ kpis.alertas_iva = d.alertas_iva || []; kpis.alertas_iva_ignorados = d.alertas_iva_ignorados || []; }
+    window.pintarKpis();
+  }catch(err){ b.disabled = false; b.textContent = reactivar ? "Reactivar" : "Ignorar"; alert("No se guardó: " + err.message); }
+});
 $("kpiPanel").addEventListener("click", e => {
   if(e.target.closest("[data-ir-ajustes]")){ abrirAjustes(); return; }
   const b = e.target.closest("[data-ir-pagos]"); if(!b) return;
