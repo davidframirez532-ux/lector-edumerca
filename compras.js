@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v46";
-const SERVIDOR_MINIMO = 34;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v47";
+const SERVIDOR_MINIMO = 36;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -103,6 +103,12 @@ const html = `
     <button class="ppal" id="btnCpImgCompartir" style="flex:2">Compartir (WhatsApp)</button>
   </div>
 </section>
+<section class="pantalla" id="cpNuevo">
+  <div class="cabeza"><h2 style="font-size:1.35rem">Producto nuevo</h2><button class="sec" id="btnCpNuevoVolver">Volver</button></div>
+  <p id="cpNuevoEstado" style="margin:0;font-size:.9rem;text-align:center;min-height:1.2em;font-weight:600"></p>
+  <div class="panel" id="cpNuevoPanel"></div>
+  <div class="acciones"><button class="ppal" id="btnCpNuevoCrear" style="flex:1">Crear en Siigo</button></div>
+</section>
 <input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>
 <style>
   .cp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
@@ -111,14 +117,19 @@ const html = `
   .cp-paso{border-left:3px solid var(--amarillo);padding:4px 0 4px 10px;margin:10px 0}
   .cp-paso b.n{color:var(--amarillo);margin-right:4px}
   .cp-lin{border-bottom:1px solid rgba(251,250,245,.14);padding:8px 0;font-size:.92rem;line-height:1.45}
+  .np-campo{display:block;margin:12px 0 4px;font-size:.88rem;opacity:.9}
+  .np-fila{display:flex;gap:8px}
+  .np-fila .buscador{flex:1;min-width:0}
+  #cpNuevoPanel .buscador,#cpNuevoPanel select{width:100%;box-sizing:border-box}
+  .np-ayuda{margin:4px 0 0;font-size:.8rem;opacity:.8;line-height:1.35}
   .cp-mes{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 4px;font-weight:600;font-size:.95rem;
     color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
 </style>`;
 document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
-["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar", "cpNotas"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
+["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar", "cpNotas", "cpNuevo"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
 
 /* 🏠 en las pantallas nuevas */
-["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg", "cpNotas"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg", "cpNotas", "cpNuevo"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -318,6 +329,30 @@ function notificar(op, d, err){
   guardarNotis(); pintarCampana();
   if(navigator.vibrate) navigator.vibrate(err ? [80, 60, 80] : 40);
 }
+/* Una petición que nunca responde dejaba la fila (y la campana) girando para siempre: se corta a los 90 s */
+const BG_ESPERA_MS = 90000, BG_MAX_REINTENTOS = 6;
+function conLimite(p){
+  let t;
+  return Promise.race([p, new Promise((_, no) => { t = setTimeout(() => no(new Error("El servidor no respondió")), BG_ESPERA_MS); })])
+    .finally(() => clearTimeout(t));
+}
+/* Líneas marcadas "⏳ guardando" que ya no tienen nada en la fila (terminó, se cerró la app a mitad, ↻…): se desmarcan */
+function limpiarHuerfanos(){
+  let cambio = false;
+  const revisar = f => (f && f.lineas || []).forEach(l => {
+    if(l.guardando && !bgCola.some(o => o.factId === f.id && o.clave === l.clave)){ delete l.guardando; cambio = true; }
+  });
+  if(cola) (cola.facturas || []).concat(cola.notas || []).forEach(revisar);
+  revisar(sel);
+  if(cambio){ try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){} }
+  // el aviso de arriba del detalle se quita cuando ya no queda nada de esa factura en la fila
+  const m = $("cpDetEstado");
+  if(m && /^⏳ Guardando en segundo plano/.test(m.textContent) && !(sel && bgPendientesDe(sel.id))){
+    m.textContent = bgCola.length ? "" : "✓ Cambios guardados";
+    setTimeout(() => { if(m.textContent === "✓ Cambios guardados") m.textContent = ""; }, 4000);
+  }
+  return cambio;
+}
 const esDeRed = e => /Failed to fetch|NetworkError|Load failed|Sin conexión|no respondió|otra operación/i.test(String(e && e.message));
 async function bgProcesar(){
   if(bgCorriendo || !bgCola.length) return;
@@ -326,10 +361,11 @@ async function bgProcesar(){
     while(bgCola.length){
       const op = bgCola[0];
       let d = null, err = null;
-      try{ d = await postAdmin(op.cuerpo); }catch(e){ err = e; }
+      try{ d = await conLimite(postAdmin(op.cuerpo)); }catch(e){ err = e; }
       if(err && esDeRed(err)){                         // sin internet o servidor ocupado: se reintenta en 20 s
-        tBgReintento = setTimeout(bgProcesar, 20000);
-        break;
+        op.intentos = (op.intentos || 0) + 1; guardarBg();
+        if(op.intentos < BG_MAX_REINTENTOS){ tBgReintento = setTimeout(bgProcesar, 20000); break; }
+        err = new Error("no se pudo confirmar después de " + op.intentos + " intentos (" + err.message + "). Toca ↻ en Por aprobar para ver cómo quedó");
       }
       bgCola.shift(); guardarBg();
       if(d && d.factura) aplicarFacturaServidor(d.factura);
@@ -343,11 +379,19 @@ async function bgProcesar(){
       notificar(op, d, err);
       if(err && /Cancelado/.test(err.message)){ bgCola = []; guardarBg(); }
     }
-  }finally{ bgCorriendo = false; pintarCampana(); if(sel && $("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; } }
+  }finally{ bgCorriendo = false; limpiarHuerfanos(); pintarCampana(); if(sel && $("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; } }
 }
 function abrirAvisos(){
   const ops = [];
-  if(bgCola.length) ops.push({t: `⏳ ${bgCola.length} en proceso`, sub: bgCola.map(o => o.texto).slice(0, 3).join(" · ") + (bgCola.length > 3 ? " …" : ""), fn: () => {}});
+  if(bgCola.length){
+    ops.push({t: `⏳ ${bgCola.length} en proceso`, sub: bgCola.map(o => o.texto).slice(0, 3).join(" · ") + (bgCola.length > 3 ? " …" : "") +
+      (bgCorriendo ? "" : " · esperando conexión"), fn: () => {}});
+    ops.push({t: "🧹 Cancelar lo que está en proceso", sub: "Si se quedó pegado: luego toca ↻ en Por aprobar para ver cómo quedó", fn: () => {
+      if(!confirm("¿Cancelar " + bgCola.length + " cambio(s) en proceso? Los que ya llegaron al servidor quedan guardados.")) return;
+      bgCola = []; guardarBg(); clearTimeout(tBgReintento); limpiarHuerfanos(); pintarCampana(); pintarCola(); pintarNotas();
+      if(sel && $("cpDet").classList.contains("activa")) pintarDetalle();
+    }});
+  }
   notis.slice(0, 40).forEach(x => ops.push({t: (x.ok ? "✅ " : "❌ ") + x.texto, sub: (x.doc || "") + " · " + fechaHora(x.fecha) + (x.detalle ? " · toca para ver el detalle" : ""),
     fn: () => {
       if(x.detalle) alert(x.detalle);
@@ -359,7 +403,7 @@ function abrirAvisos(){
   notis.forEach(x => { x.leida = true; }); guardarNotis(); pintarCampana();
   elegir("Avisos", ops);
 }
-setTimeout(() => { pintarCampana(); bgProcesar(); }, 1500);             // si quedó algo de antes, se reanuda
+setTimeout(() => { limpiarHuerfanos(); pintarCampana(); bgProcesar(); }, 1500);             // si quedó algo de antes, se reanuda
 window.addEventListener("online", bgProcesar);
 setInterval(pintarCampana, 5000);                                      // la campana se esconde/aparece con el modo administración
 
@@ -753,9 +797,173 @@ window.volverDeCamara = function(){
   return volverCamaraApp();
 };
 function avisoNuevo(l){
-  const cod = l.barras || l.codProv || "(sin código)";
-  alert(`Producto nuevo: créalo primero en Siigo.\n\nNombre: ${String(l.desc).toUpperCase()}\nCódigo: ${cod.replace(/^0+(?=\d{8})/, "")}\nIVA: ${l.iva ? l.iva + "%" : "0% / excluido (verifícalo)"}\nCategoría: la que corresponda (no se puede cambiar después de la primera venta).\n\nDespués de crearlo, en Inventario toca "Actualizar inventario desde Siigo" y vuelve aquí a asociarlo.`);
+  const f = Number(l.factor) || leerFactor(l.factor_sugerido) || 1;
+  const pv = precioSugerido(l, f, ivaDeLinea(l));
+  alert(`Producto nuevo: créalo primero en Siigo.\n\nNombre: ${String(l.desc).toUpperCase()}\nCódigo: Escanéalo (el código de barras del producto, no el código del proveedor). ` +
+    `Ponlo también en "Código de barras".\nIVA: ${l.iva ? l.iva + "%" : "0% / excluido (verifícalo)"}\n` +
+    (pv ? `Precio sugerido: ${plata(pv.precio)} (costo ${plata(pv.costo)} sin IVA por unidad${f !== 1 ? ", con factor " + num(f) : ""}, margen 8%)\n` : "") +
+    `Categoría: la que corresponda (no se puede cambiar después de la primera venta).\n\nDespués de crearlo, en Inventario toca "Actualizar inventario desde Siigo" y vuelve aquí a asociarlo.`);
 }
+
+/* ══════════════ PRODUCTO NUEVO: crearlo en Siigo desde la factura ══════════════
+   Nombre e IVA salen de la factura (editables). El código es SIEMPRE el código de barras: se escanea (cámara o lector)
+   o se digita. Al crearlo queda asociado a la línea con el factor que pongas. */
+let nuevoCtx = null;
+const OPC_KEY = "cp_prod_opciones";
+const ivaDeLinea = l => !l.iva ? "0X" : Math.round(l.iva) === 5 ? "5" : "19";
+const pctIva = t => t === "19" ? 19 : t === "5" ? 5 : 0;
+/* Precio como lo pone la tienda: costo sin IVA ÷ 0,92 (8%) + IVA, redondeado hacia arriba a múltiplo de 100 */
+function precioSugerido(l, factor, ivaTipo){
+  const und = (Number(l.cant) || 0) * (factor || 1);
+  if(!(und > 0) || !(Number(l.base) > 0)) return null;
+  const costo = (Number(l.base) + (Number(l.otros) || 0)) / und;
+  return {costo, precio: Math.ceil(costo / 0.92 * (1 + pctIva(ivaTipo) / 100) / 100) * 100};
+}
+async function abrirNuevo(l){
+  if(!sel) return;
+  nuevoCtx = {l, factId: sel.id};
+  const op = leerJSON(OPC_KEY, null);
+  pintarNuevo(op);
+  $("cpNuevoEstado").style.color = ""; $("cpNuevoEstado").textContent = "";
+  abrir("cpNuevo");
+  $("cpNuevoPanel").scrollTop = 0;
+  setTimeout(() => { if(nuevoCtx) $("npCod").focus(); }, 150);
+  if(!op || Date.now() - (op.t || 0) > 864e5){
+    try{
+      const d = await postAdmin({accion: "producto_opciones"});
+      d.t = Date.now();
+      try{ localStorage.setItem(OPC_KEY, JSON.stringify(d)); }catch(e){}
+      if(nuevoCtx) pintarGrupos(d);
+    }catch(e){ if(nuevoCtx && !op){ $("cpNuevoEstado").style.color = "#ff9a86"; $("cpNuevoEstado").textContent = "No se cargaron las categorías: " + e.message; } }
+  }
+}
+function pintarGrupos(op){
+  const s = $("npGrupo"); if(!s) return;
+  const actual = s.value;
+  s.innerHTML = op && op.grupos ? `<option value="">Elige la categoría…</option>` +
+    op.grupos.map(g => `<option value="${esc(g.id)}"${String(g.id) === actual ? " selected" : ""}>${esc(g.nombre)}</option>`).join("")
+    : `<option value="">Cargando categorías…</option>`;
+}
+function pintarNuevo(op){
+  const l = nuevoCtx.l;
+  const ivaT = ivaDeLinea(l);
+  const fx0 = l.factor_sugerido || (l.factor && l.factor !== 1 ? l.factor : 1);
+  const barrasXml = /^\d{8,14}$/.test(String(l.barras || "")) ? String(l.barras) : "";
+  const ivas = [["19", "IVA 19%"], ["5", "IVA 5%"], ["0X", "Excluido (0%)"], ["0E", "Exento (0%)"]];
+  $("cpNuevoPanel").innerHTML = `<div class="bloque">
+    <p class="nota" style="margin:0">En la factura: <b>${esc(l.desc)}</b><br>${num(l.cant)} und · ${plata(l.base)} sin IVA${l.iva ? " · IVA " + num(l.iva) + "%" : " · sin IVA"}${
+      l.otros ? " · " + esc(l.otros_nom || "otros imp.") + " " + plata(l.otros) : ""}</p>
+    <label class="np-campo" for="npCod">Código de barras</label>
+    <div class="np-fila"><input class="buscador" id="npCod" inputmode="numeric" autocomplete="off" placeholder="Escanéalo o digítalo" enterkeyhint="next">
+      <button class="sec" id="npCam" aria-label="Escanear con la cámara" style="flex:none;font-size:1.4rem;padding:0 16px">📷</button></div>
+    ${barrasXml ? `<button class="chip" id="npUsarXml" style="margin-top:6px;text-transform:none">Usar el de la factura: ${esc(barrasXml)}</button>` : ""}
+    <p class="np-ayuda">Es el código del producto en Siigo. No uses el código del proveedor.</p>
+    <label class="np-campo" for="npNom">Nombre</label>
+    <input class="buscador" id="npNom" autocomplete="off" maxlength="100" value="${esc(String(l.desc || "").toUpperCase())}" style="text-transform:uppercase">
+    <label class="np-campo" for="npGrupo">Categoría</label>
+    <select class="sel-hora" id="npGrupo"></select>
+    <p class="np-ayuda">No se puede cambiar después de la primera venta.</p>
+    <label class="np-campo" for="npIva">IVA</label>
+    <select class="sel-hora" id="npIva">${ivas.map(([v, t]) => `<option value="${v}"${v === ivaT ? " selected" : ""}>${t}${v === ivaT ? " (el de la factura)" : ""}</option>`).join("")}</select>
+    <label class="np-campo" for="npFactor">Factor</label>
+    <input class="buscador" id="npFactor" inputmode="text" autocomplete="off" value="${esc(fx0 < 1 ? "1/" + Math.round(1 / fx0) : fx0)}">
+    <p class="np-ayuda">Cuántas unidades trae CADA unidad de la factura (no el total). Caja de 25 encendedores que vendes sueltos → 25 · Viene suelto → 1.</p>
+    <label class="np-campo" for="npPrecio">Precio de venta (con IVA)</label>
+    <input class="buscador" id="npPrecio" inputmode="numeric" autocomplete="off" placeholder="Múltiplo de 100">
+    <p class="np-ayuda" id="npSug"></p>
+  </div>`;
+  pintarGrupos(op);
+  actualizarSug();
+}
+function actualizarSug(){
+  if(!nuevoCtx || !$("npSug")) return;
+  const f = leerFactor($("npFactor").value);
+  const pv = f ? precioSugerido(nuevoCtx.l, f, $("npIva").value) : null;
+  $("npSug").innerHTML = !f ? `<span style="color:#ff9a86">Escribe el factor (15 o 1/30)</span>`
+    : pv ? `Sugerido: <b>${plata(pv.precio)}</b> (costo ${plata(pv.costo)} sin IVA por unidad, margen 8%) ` +
+           `<button class="chip" id="npUsarSug" style="text-transform:none;padding:4px 10px">Usar</button>` : "";
+}
+function ponerCodigoNuevo(c){
+  const v = String(c || "").replace(/\s/g, "");
+  ir("cpNuevo");
+  $("npCod").value = v;
+  const ya = buscar(v);
+  $("cpNuevoEstado").style.color = ya ? "#ffd23f" : "";
+  $("cpNuevoEstado").textContent = ya ? "⚠ Ese código ya existe: " + ya.n : "Código " + v + " listo";
+  if(navigator.vibrate) navigator.vibrate(40);
+}
+$("cpNuevoPanel").addEventListener("input", e => { if(e.target.id === "npFactor") actualizarSug(); });
+$("cpNuevoPanel").addEventListener("change", e => { if(e.target.id === "npIva") actualizarSug(); });
+$("cpNuevoPanel").addEventListener("keydown", e => {
+  if(e.key === "Enter" && e.target.id === "npCod"){ e.preventDefault(); ponerCodigoNuevo(e.target.value); $("npNom").focus(); }
+});
+$("cpNuevoPanel").addEventListener("click", e => {
+  if(e.target.closest("#npCam")) return abrirCamara("asociar");
+  if(e.target.closest("#npUsarXml") && nuevoCtx) return ponerCodigoNuevo(nuevoCtx.l.barras);
+  if(e.target.closest("#npUsarSug") && nuevoCtx){
+    const pv = precioSugerido(nuevoCtx.l, leerFactor($("npFactor").value), $("npIva").value);
+    if(pv) $("npPrecio").value = pv.precio;
+  }
+});
+$("btnCpNuevoVolver").addEventListener("click", () => { nuevoCtx = null; ir("cpDet"); });
+/* La cámara y el lector de código de barras llenan el código mientras la pantalla está abierta */
+const mostrarAntesNuevo = window.mostrar, volverAntesNuevo = window.volverDeCamara;
+window.mostrar = function(codigo, volverA){
+  if(nuevoCtx) return ponerCodigoNuevo(codigo);
+  return mostrarAntesNuevo(codigo, volverA);
+};
+window.volverDeCamara = function(){
+  if(nuevoCtx){ ir("cpNuevo"); return; }
+  return volverAntesNuevo();
+};
+$("btnCpNuevoCrear").addEventListener("click", async () => {
+  const c = nuevoCtx; if(!c || !sel) return;
+  const l = c.l, msg = $("cpNuevoEstado");
+  const malo = t => { msg.style.color = "#ff9a86"; msg.textContent = t; };
+  const cod = $("npCod").value.replace(/\s/g, "");
+  const nombre = $("npNom").value.trim().replace(/\s+/g, " ").toUpperCase();
+  const grupo = $("npGrupo").value, iva = $("npIva").value;
+  const factor = leerFactor($("npFactor").value);
+  const precio = Number(String($("npPrecio").value).replace(/\D/g, ""));
+  if(!/^\d{4,20}$/.test(cod)) return malo("Escanea o digita el código de barras (solo números)");
+  const ya = buscar(cod);
+  if(ya){
+    if(!confirm(`El código ${cod} ya existe: ${ya.n}.\n\n¿Asociar esta línea a ese producto con factor ${$("npFactor").value || 1}?`)) return;
+    const f2 = factor || 1;
+    nuevoCtx = null; ir("cpDet");
+    return bgEncolar({tipo: "asociar", factId: sel.id, clave: l.clave,
+      cuerpo: {accion: "compra_asociar", id: sel.id, linea: l.clave, codigo: ya.c || ya.b, factor: f2,
+               proveedor: sel.proveedor, descripcion: l.desc, codProv: l.codProv, barras: l.barras},
+      patch: {codigo: ya.c || ya.b, nombre: ya.n, factor: f2, sin_factor: false, destino: "INVENTARIO"},
+      texto: `${l.desc} → ${ya.n} × ${num(f2)}`, doc: sel.proveedor + " · " + sel.numero});
+  }
+  if(!/^\d{8}$|^\d{12,14}$/.test(cod) && !confirm(`El código ${cod} tiene ${cod.length} dígitos (los códigos de barras suelen tener 8, 12 o 13). ¿Seguir?`)) return;
+  if(!nombre) return malo("Falta el nombre");
+  if(!grupo) return malo("Elige la categoría");
+  if(!factor) return malo("Escribe el factor (15 o 1/30)");
+  if(!(precio > 0)) return malo("Pon el precio de venta");
+  if(precio % 100) return malo("El precio debe ser múltiplo de 100");
+  const nomGrupo = $("npGrupo").selectedOptions[0].textContent, nomIva = $("npIva").selectedOptions[0].textContent.replace(" (el de la factura)", "");
+  const pv = precioSugerido(l, factor, iva);
+  if(!confirm(`¿Crear en Siigo?\n\n${nombre}\nCódigo: ${cod}\nCategoría: ${nomGrupo} (no se puede cambiar después de la primera venta)\n${nomIva} · precio ${plata(precio)}\n` +
+    `Factor ${$("npFactor").value} → ${num((Number(l.cant) || 0) * factor)} und en Siigo` +
+    (pv ? `\nCosto ${plata(pv.costo * (1 + pctIva(iva) / 100))} con IVA por unidad (margen ${Math.round((precio / (pv.costo * (1 + pctIva(iva) / 100)) - 1) * 100)}% sobre el costo)` : ""))) return;
+  const btn = $("btnCpNuevoCrear"), t0 = Date.now();
+  btn.disabled = true; msg.style.color = "";
+  const reloj = setInterval(() => { msg.textContent = "Creando en Siigo… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  msg.textContent = "Creando en Siigo…";
+  try{
+    const d = await postAdmin({accion: "producto_crear", id: sel.id, linea: l.clave, codigo: cod, nombre, grupo, iva, precio,
+                               factor, proveedor: sel.proveedor, descripcion: l.desc});
+    try{ productos.push({c: d.producto.codigo, b: d.producto.codigo, n: d.producto.nombre, p: d.producto.precio, q: 0}); }catch(e){}
+    nuevoCtx = null;
+    ir("cpDet");
+    if(d.factura) reemplazar(d.factura);
+    $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ " + d.mensaje;
+  }catch(e){ malo(e.message); }
+  finally{ clearInterval(reloj); btn.disabled = false; }
+});
+
 /* Una línea del proveedor repartida en 2 o más productos con cantidades fijas.
    (Si los sabores vienen al azar, mejor regístrala como caja y usa Desarmes.) */
 const preguntar = (titulo, ops) => new Promise(ok => elegir(titulo, ops.map(([t, sub, v]) => ({t, sub, fn: () => ok(v)}))));
@@ -848,7 +1056,10 @@ $("cpDetPanel").addEventListener("click", async e => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
     if(d) reemplazar(d.factura);
   }});
-  ops.push({t: "🆕 Es un producto nuevo", sub: "Te digo con qué datos crearlo en Siigo", fn: () => avisoNuevo(l)});
+  ops.push({t: "🆕 Es un producto nuevo", sub: "Crearlo en Siigo desde aquí, o ver con qué datos crearlo", fn: () => setTimeout(() =>
+    elegir("Producto nuevo · " + l.desc, [
+      {t: "⚡ Crearlo en Siigo desde aquí", sub: "Con la descripción y el IVA de la factura. Puedes cambiar los datos; el código de barras lo escaneas", fn: () => abrirNuevo(l)},
+      {t: "📝 Dime cómo crearlo", sub: "Los datos para crearlo tú en Siigo", fn: () => avisoNuevo(l)}]), 60)});
   elegir(l.desc, ops);
 });
 $("btnCpAprobar").addEventListener("click", async () => {
