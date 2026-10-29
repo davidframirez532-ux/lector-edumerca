@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v50";
-const SERVIDOR_MINIMO = 37;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v53";
+const SERVIDOR_MINIMO = 41;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -620,7 +620,32 @@ function detalleTxt(l){
 function notasIva(l){
   return (l.impoconsumo ? `<br><span style="color:#4fd6a8">🧾 ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.impoconsumo)} sube como impuesto (mayor valor, al costo)</span>` : "") +
     (l.ic_pendiente ? `<br><span style="color:#ffd23f">➕ ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.ic_pendiente)}: lo agregas tú en Siigo (va al costo)</span>` : "") +
-    (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "");
+    (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "") + notaIcVenta(l);
+}
+/* ¿El producto tiene el impoconsumo en la venta (ficha de Siigo) con el valor por unidad de esta factura? */
+function notaIcVenta(l){
+  if(!l.ic_estado) return "";
+  if(l.ic_estado === "igual") return `<br><span style="color:#4fd6a8">✓ Impoconsumo en la venta: ${plata(l.ic_ficha)} por unidad, igual a la factura</span>`;
+  if(l.ic_estado === "sin_valor") return `<br><span style="color:#4fd6a8">✓ Tiene impoconsumo en la venta</span> <span style="opacity:.75">(la factura trae ${plata(l.ic_unidad)} por unidad: revisa que la ficha tenga ese valor)</span>`;
+  if(l.ic_estado === "distinto") return `<br><span style="color:#ffd23f">⚠ Impoconsumo en la venta ${plata(l.ic_ficha)} por unidad, la factura trae ${plata(l.ic_unidad)}: toca la línea para actualizarlo</span>`;
+  return `<br><span style="color:#ffd23f">🧾 El producto no tiene el impoconsumo en la venta (se cobra IVA sobre todo el precio): toca la línea para agregarlo · ${plata(l.ic_unidad)} por unidad</span>`;
+}
+async function ponerIcVenta(l){
+  const cambio = l.ic_estado === "distinto" || l.ic_estado === "sin_valor";
+  const r = await pedirForm(cambio ? "Actualizar el impoconsumo de la venta" : "Agregar el impoconsumo a la venta", [{id: "v",
+    label: `${l.nombre} (${l.codigo}). Impoconsumo por unidad de Siigo: la factura trae ${plata(l.ic_unidad)}` +
+      (l.factor && l.factor !== 1 ? ` (ya dividido por el factor ${l.factor < 1 ? "1/" + Math.round(1 / l.factor) : num(l.factor)})` : "") +
+      (l.ic_ficha ? `; la ficha tiene ${plata(l.ic_ficha)}` : "") +
+      ". Al cliente no le cambia el precio: el IVA de la venta queda solo sobre la base.",
+    valor: String(l.ic_unidad || ""), inputmode: "numeric", obligatorio: true,
+    validar: v => Number(String(v).replace(/\D/g, "")) > 0 || "Debe ser mayor que 0"}], cambio ? "Actualizar" : "Agregar");
+  if(!r) return;
+  const valor = Number(String(r.v).replace(/\D/g, ""));
+  const d = await conEspera("Cambiando el producto en Siigo…", () => postAdmin({accion: "producto_ic", id: sel.id, codigo: l.codigo, valor}));
+  if(!d) return;
+  if(d.factura) reemplazar(d.factura);
+  $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ " + d.mensaje;
+  alert("Listo. Antes de vender, haz una venta de prueba de " + l.nombre + " en el POS: el total debe seguir igual y el IVA debe bajar.");
 }
 function lineaTxt(l){
   if(l.guardando) return `<span style="color:#8fc9ff">⏳ Guardando en segundo plano:</span> ` +
@@ -984,6 +1009,22 @@ async function armarMezcla(l){
   while(true){
     const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1}` : "Primer producto del reparto", [], l.desc);
     if(!p) return;
+    // El mismo producto no puede ir dos veces en el reparto: se cambia su cantidad o se elige otro
+    const ya = partes.find(x => String(x.codigo) === String(p.codigo));
+    if(ya){
+      const que = await preguntar(`${p.nombre} ya está en el reparto (${num(ya.porUnidad)} por unidad de la factura)`,
+        [["Cambiar su cantidad", "Reemplaza la que tiene", "cambiar"], ["Elegir otro producto", "", "otro"]]);
+      if(que !== "cambiar") continue;
+      const r2 = await pedirForm(p.nombre, [{id: "q", label: `¿Cuántas unidades de este producto trae CADA unidad de la factura? Ahora: ${num(ya.porUnidad)}.`,
+        valor: String(ya.porUnidad), inputmode: "decimal", obligatorio: true, validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Cambiar");
+      if(!r2) return;
+      ya.porUnidad = Number(String(r2.q).replace(",", "."));
+      if(partes.length < 2) continue;
+      const sig2 = await preguntar(resumenDe(partes), [["✓ Guardar reparto", "Temporal: se borra a medianoche. El costo se reparte según el precio de venta", "guardar"],
+        ["+ Agregar otro producto", "", "otro"]]);
+      if(sig2 === "guardar") break;
+      continue;
+    }
     const r = await pedirForm(p.nombre, [{id: "q", label: `¿Cuántas unidades de este producto trae CADA unidad de la factura? ` +
       `(ej. caja con 4 de mango + 3 de pera + 3 de durazno → 4, 3 y 3). La factura trae ${num(cantFac)}.`,
       valor: "", inputmode: "decimal", obligatorio: true, validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Agregar");
@@ -1057,6 +1098,8 @@ $("cpDetPanel").addEventListener("click", async e => {
       patch: {codigo: p.codigo, nombre: p.nombre, factor, sin_factor: false, destino: "INVENTARIO"},
       texto: `${l.desc} → ${p.nombre} × ${r.f}`, doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
   }}];
+  if(l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
+    sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
@@ -1278,7 +1321,15 @@ function pintarAjDet(){
     </div></div>`;
   h += `<div class="bloque"><button class="ppal chico" data-imagen="aj" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo (WhatsApp)</button>${
     c.imagen ? `<a href="${esc(c.imagen)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;color:var(--amarillo)">Ver la imagen guardada en Drive</a>` : ""}</div>`;
-  h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
+  if(c.prueba) h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
+    paso(1, ` Abre la compra <b>${esc(c.doc)}</b> en Siigo y toca <b>Editar</b>. Ya tiene <b>"Incluye otros Impuestos cargo"</b> activado.`) +
+    paso(2, ` <b>Borra la línea de prueba</b> (producto ${esc(c.codigo_prueba || "")}, "LINEA DE PRUEBA: BORRAR").`) +
+    paso(3, ` En cada línea marcada abajo con ⚖, botón de impuestos: <b>Impuesto cargo 2</b> con el valor indicado y
+      <b>"Impuesto como mayor valor de la compra"</b> marcado. Las demás líneas no se tocan.`) +
+    paso(4, ` En la forma de pago (${esc(c.pago || "la misma")}), cambia el valor a <b>${plata(c.total_final)}</b>.`) +
+    paso(5, ` Revisa que el <b>Total Neto</b> dé <b>${plata(c.total_final)}</b> y toca <b>Guardar</b>. Esta misma edición hace que la compra mueva el stock.`) +
+    paso(6, ` Vuelve aquí y toca <b>"Ya lo hice, revisar en Siigo"</b>.`) + `</div>`;
+  else h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
     paso(1, ` Abre la compra <b>${esc(c.doc)}</b> en Siigo y toca <b>Editar</b>.`) +
     paso(2, ` <b>Borra todas las líneas</b> de productos.`) +
     paso(3, ` Marca <b>"Incluye otros Impuestos cargo"</b>.`) +
@@ -1293,12 +1344,13 @@ function pintarAjDet(){
       <b>${i + 1}. ${x.tipo === "Account" ? "Cuenta" : "Producto"} ${esc(x.codigo)}</b> · ${esc(x.nombre)}<br>
       Cant <b>${nfmt(x.cantidad)}</b> · Valor unitario <b>${nfmt(x.precio)}</b>${x.descuento ? ` · Descuento <b>${nfmt(x.descuento)}</b>` : ""}<br>
       Impuesto cargo 1: <b>${x.iva ? "IVA " + nfmt(x.iva) + "%" : "ninguno"}</b>` +
-      (x.ic > 0 ? `<br><span style="color:#ffd23f">⚖ Impuesto cargo 2: <b>Impoconsumo por valor ${nfmt(x.ic)}</b> · ✔ mayor valor de la compra</span>` : "") +
+      (x.ic > 0 ? `<br><span style="color:#ffd23f">⚖ Impuesto cargo 2: <b>${esc(x.nom && !/consumo/i.test(x.nom) ? x.nom : "Impoconsumo por valor")} ${nfmt(x.ic)}</b> · ✔ mayor valor de la compra</span>` : "") +
     `</div>`).join("") + `</div>`;
   const faltan = (c.todas_ic || []).filter(x => !x.ok);
   if(c.revisado) h += `<div class="bloque"><h3>Última revisión</h3>` + ((c.todas_ic || []).map(x =>
       `<div class="fila-dato"><span>${x.ok ? "✅" : "❌"} ${esc(x.nombre || x.codigo)}: impoconsumo ${nfmt(x.valor)}</span></div>`).join("")) +
     `<div class="fila-dato"><span>${Math.abs((c.total_siigo || 0) - (c.total_final || 0)) <= 100 ? "✅" : "❌"} Total en Siigo ${plata(c.total_siigo)} (debe ser ${plata(c.total_final)})</span></div>` +
+    (c.prueba ? `<div class="fila-dato"><span>${c.prueba_sigue ? "❌ Falta borrar la línea de prueba" : "✅ Línea de prueba borrada"}</span></div>` : "") +
     (faltan.length ? "" : `<p class="nota" style="margin:6px 0 0">Los impuestos ya están; falta que el total cuadre.</p>`) + `</div>`;
   $("cpAjDetPanel").innerHTML = h;
 }
