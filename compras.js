@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v49";
+const COMPRAS_VERSION = "compras v50";
 const SERVIDOR_MINIMO = 37;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -100,7 +100,8 @@ const html = `
   <div class="panel" id="cpImgPanel" style="padding:0"><img id="cpImgVista" alt="Factura como debe quedar en Siigo" style="width:100%;display:block;border-radius:8px"></div>
   <div class="acciones">
     <button class="sec" id="btnCpImgDrive">Abrir en Drive</button>
-    <button class="ppal" id="btnCpImgCompartir" style="flex:2">Compartir (WhatsApp)</button>
+    <button class="sec" id="btnCpImgTexto">Compartir texto</button>
+    <button class="ppal" id="btnCpImgCompartir" style="flex:2">Compartir imagen</button>
   </div>
 </section>
 <section class="pantalla" id="cpNuevo">
@@ -1511,6 +1512,57 @@ $("btnCpImgCompartir").addEventListener("click", async () => {
   // Sin compartir archivos: enlace de Drive por WhatsApp, o descargar la imagen
   if(imgActual.drive){ window.open("https://wa.me/?text=" + encodeURIComponent(texto + " " + imgActual.drive), "_blank"); return; }
   const a = document.createElement("a"); a.href = imgActual.url; a.download = file.name; a.click();
+});
+/* La misma información de la imagen, como texto ordenado para WhatsApp (*negrita*, _cursiva_) */
+function textoFactura(d){
+  const L = [], t = d.tot, lineas = d.lineas || [];
+  const conIc = lineas.some(x => Number(x.ic) > 0);
+  L.push("*" + (d.titulo || "CÓMO DEBE QUEDAR EN SIIGO") + "*");
+  L.push("_" + (d.subtitulo || ("EDUMERCA 122 · Factura de compra (FC)" + (d.doc ? " · " + d.doc : ""))) + "_");
+  L.push("");
+  L.push("*Proveedor:* " + (d.proveedor || ""));
+  L.push("*NIT:* " + (d.nit || ""));
+  L.push("*" + (d.etiquetaFactura || "No. factura proveedor") + ":* " + (d.factura.pre ? d.factura.pre + " · " : "") + d.factura.cons);
+  if(d.afecta !== undefined) L.push("*Factura que afecta:* " + (d.afecta || "(el XML no lo dice)"));
+  if(d.motivo) L.push("*Motivo:* " + d.motivo);
+  if(d.fecha) L.push("*Fecha de elaboración:* " + fechaTxt(d.fecha));
+  if(d.pago) L.push("*Forma de pago:* " + d.pago + (d.vence ? " · vence " + fechaTxt(d.vence) : ""));
+  if(conIc) L.push("☑ *Incluye otros Impuestos cargo* · ☐ IVA / Impoconsumo incluido");
+  L.push("");
+  L.push("*PRODUCTOS (" + lineas.length + ")*");
+  lineas.forEach((x, i) => {
+    const b = Number(x.cantidad) * Number(x.precio) - (Number(x.descuento) || 0);
+    const totLin = b + Math.round(b * (Number(x.iva) || 0)) / 100 + (Number(x.ic) || 0);
+    L.push("");
+    L.push("*" + (i + 1) + ". " + (x.tipo === "Account" ? "Cuenta " : "") + x.codigo + " · " + (x.nombre || "") + "*");
+    L.push("Cant " + n0(x.cantidad) + " · Valor unit. " + n0(x.precio) + (x.descuento ? " · Desc. " + n0(x.descuento) : "") + " → " + pz(totLin));
+    L.push("Impuesto cargo 1: " + (x.iva ? "IVA " + n0(x.iva) + "%" : "ninguno"));
+    if(Number(x.ic) > 0){
+      L.push("*Impuesto cargo 2: Impoconsumo por valor " + n0(x.ic) + "*");
+      L.push("☑ Impuesto como mayor valor de la compra");
+    }
+  });
+  L.push("");
+  L.push("*TOTALES*");
+  L.push("Total bruto: " + pz(t.bruto));
+  if(t.desc) L.push("Descuentos: -" + pz(t.desc));
+  L.push("Subtotal: " + pz(t.base));
+  L.push("IVA: " + pz(t.iva));
+  if(t.ic) L.push("Impoconsumo: " + pz(t.ic));
+  L.push("*TOTAL NETO: " + pz(t.total) + "*");
+  if(d.pago) L.push("_Forma de pago " + d.pago + ": valor " + pz(t.total) + "_");
+  if(d.observaciones){ L.push(""); L.push("*Observaciones:*"); L.push(d.observaciones); }
+  return L.join("\n");
+}
+$("btnCpImgTexto").addEventListener("click", async () => {
+  if(!imgActual) return;
+  const texto = textoFactura(imgActual.d);
+  try{
+    if(navigator.share){ await navigator.share({text: texto}); return; }
+  }catch(e){ if(e && e.name === "AbortError") return; }
+  // Sin menú de compartir: se abre WhatsApp con el texto (y queda copiado por si acaso)
+  try{ await navigator.clipboard.writeText(texto); }catch(e){}
+  window.open("https://wa.me/?text=" + encodeURIComponent(texto), "_blank");
 });
 $("btnCpImgDrive").addEventListener("click", () => { if(imgActual && imgActual.drive) window.open(imgActual.drive, "_blank"); });
 $("btnCpImgVolver").addEventListener("click", () => {
