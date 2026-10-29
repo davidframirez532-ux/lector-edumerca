@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v53";
+const COMPRAS_VERSION = "compras v54";
 const SERVIDOR_MINIMO = 41;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -680,6 +680,7 @@ function pintarDetalle(){
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
         t.impoconsumo ? ` · impoconsumo ${plata(t.impoconsumo)}` : ""}${
         t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
+        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2): la borras en Siigo al agregar el impoconsumo</span>` : ""}${
         t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
@@ -1131,6 +1132,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (avisos.length ? `\n\n⚠ Tiene diferencias con el XML:\n` + avisos.map(c => "• " + c.texto.replace(/^Aviso: /, "")).join("\n") +
       `\nSe sube igual; revisa en Siigo después.\n` : "") +
     (t.impoconsumo_pendiente ? `\n+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú en Siigo = ${plata(t.total_final)}` : "") +
+    (t.prueba_ic ? `\n🧪 Lleva 1 LINEA DE PRUEBA ($2) para poder poner los impuestos en Siigo: bórrala al ajustar.` : "") +
     `\nForma de pago: ${pg.nombre}\n` +
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
     `\n\nNo se envía a la DIAN.`)) return;
@@ -1172,7 +1174,9 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.recibo_nota ? `\n⚠ No se creó recibo de pago: ${d.recibo_nota}.` : "") +
     (!d.credito ? `\nQuedó pagada con ${String(d.pago || "").replace("Contado · ", "")}.` : "") +
     (ic ? `\n\n⚖ FALTA EL IMPOCONSUMO (${plata((ic.lineas || []).reduce((t, x) => t + x.valor, 0))}). Quedó en ` +
-      `Facturas → Pendientes por ajuste de impuestos, con el paso a paso para hacerlo en Siigo. Total final ${plata(ic.total_final)}.` : "") +
+      `Facturas → Pendientes por ajuste de impuestos, con el paso a paso para hacerlo en Siigo. Total final ${plata(ic.total_final)}.` +
+      (ic.prueba ? `\n🧪 Se subió con la LINEA DE PRUEBA (${ic.codigo_prueba}): BÓRRALA en Siigo cuando pongas el impoconsumo. ` +
+        `La app te avisa mientras siga ahí.` : "") : "") +
     (d.guardar_en_siigo ? `\n\n👉 Para que sume el stock: abre ${d.guardar_en_siigo} en Siigo → Editar → Guardar` +
       (ic ? " (la misma edición del impoconsumo)." : ".") : "") +
     ((d.stock || []).length ? `\nDespués de guardarla, el stock debe quedar así:\n` + d.stock.map(x =>
