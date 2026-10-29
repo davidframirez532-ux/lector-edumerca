@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v48";
+const COMPRAS_VERSION = "compras v49";
 const SERVIDOR_MINIMO = 37;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -968,33 +968,38 @@ $("btnCpNuevoCrear").addEventListener("click", async () => {
    (Si los sabores vienen al azar, mejor regístrala como caja y usa Desarmes.) */
 const preguntar = (titulo, ops) => new Promise(ok => elegir(titulo, ops.map(([t, sub, v]) => ({t, sub, fn: () => ok(v)}))));
 async function armarMezcla(l){
-  // Se pide el TOTAL de cada producto en esta factura (ej. 305 huevos → 10 cubetas + 5 unidades);
-  // al servidor va por cada unidad de la factura (total ÷ cantidad de la factura).
+  // Se pide cuántas unidades de cada producto trae CADA unidad de la factura (ej. caja con 4 de mango, 3 de pera
+  // y 3 de durazno → 4, 3 y 3), igual que el factor. Al servidor va así, por unidad de la factura.
   const cantFac = Number(l.cant) || 1;
-  const partes = (l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, total: x.cantidad}));
+  const resumenDe = ps => ps.map(x => num(x.porUnidad) + " × " + x.nombre).join(" + ") + " por cada unidad de la factura" +
+    (cantFac !== 1 ? ` · en total: ${ps.map(x => num(x.porUnidad * cantFac)).join(" + ")}` : "");
+  // l.partes trae el total que entra a Siigo: se pasa a unidades por cada unidad de la factura
+  const partes = (l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, porUnidad: (Number(x.cantidad) || 0) / cantFac}));
   if(partes.length){
-    const seguir = await preguntar("Reparto actual: " + partes.map(x => num(x.total) + " × " + x.nombre).join(" + "),
+    const seguir = await preguntar("Reparto actual: " + resumenDe(partes),
       [["Empezar de nuevo", "Se borran los productos actuales", "nuevo"], ["Agregar otro producto", "", "agregar"]]);
     if(seguir === "nuevo") partes.length = 0;
   }
   while(true){
     const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1}` : "Primer producto del reparto", [], l.desc);
     if(!p) return;
-    const r = await pedirForm(p.nombre, [{id: "q", label: `¿Cuántas unidades de este producto entran en total? (la factura trae ${num(cantFac)})`,
+    const r = await pedirForm(p.nombre, [{id: "q", label: `¿Cuántas unidades de este producto trae CADA unidad de la factura? ` +
+      `(ej. caja con 4 de mango + 3 de pera + 3 de durazno → 4, 3 y 3). La factura trae ${num(cantFac)}.`,
       valor: "", inputmode: "decimal", obligatorio: true, validar: v => Number(String(v).replace(",", ".")) > 0 || "Debe ser mayor que 0"}], "Agregar");
     if(!r) return;
-    partes.push({codigo: p.codigo, nombre: p.nombre, total: Number(String(r.q).replace(",", "."))});
+    const q = Number(String(r.q).replace(",", "."));
+    partes.push({codigo: p.codigo, nombre: p.nombre, porUnidad: q});
     if(partes.length < 2) continue;
-    const resumen = partes.map(x => num(x.total) + " × " + x.nombre).join(" + ");
-    const sig = await preguntar(resumen, [["✓ Guardar reparto", "Temporal: se borra a medianoche. El costo se reparte según el precio de venta", "guardar"],
+    const sig = await preguntar(resumenDe(partes), [["✓ Guardar reparto", "Temporal: se borra a medianoche. El costo se reparte según el precio de venta", "guardar"],
       ["+ Agregar otro producto", "", "otro"]]);
     if(sig === "guardar") break;
   }
-  const envio = partes.map(x => ({codigo: x.codigo, cantidad: x.total / cantFac}));
+  const envio = partes.map(x => ({codigo: x.codigo, cantidad: x.porUnidad}));
   bgEncolar({tipo: "mezcla", factId: sel.id, clave: l.clave,
     cuerpo: {accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA", partes: envio, proveedor: sel.proveedor, descripcion: l.desc},
-    patch: {destino: "MEZCLA", nombre: partes.map(x => x.nombre).join(" + "), partes: partes.map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.total}))},
-    texto: `Reparto de ${l.desc}: ` + partes.map(x => num(x.total) + " × " + x.nombre).join(" + "),
+    patch: {destino: "MEZCLA", nombre: partes.map(x => x.nombre).join(" + "),
+            partes: partes.map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.porUnidad * cantFac}))},
+    texto: `Reparto de ${l.desc}: ` + resumenDe(partes),
     doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
 $("cpDetPanel").addEventListener("click", async e => {
