@@ -680,7 +680,7 @@ function pintarDetalle(){
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
         t.impoconsumo ? ` · impoconsumo ${plata(t.impoconsumo)}` : ""}${
         t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
-        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2): la borras en Siigo al agregar el impoconsumo</span>` : ""}${
+        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2,19): la borras en Siigo al agregar el impoconsumo</span>` : ""}${
         t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
@@ -1132,7 +1132,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (avisos.length ? `\n\n⚠ Tiene diferencias con el XML:\n` + avisos.map(c => "• " + c.texto.replace(/^Aviso: /, "")).join("\n") +
       `\nSe sube igual; revisa en Siigo después.\n` : "") +
     (t.impoconsumo_pendiente ? `\n+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú en Siigo = ${plata(t.total_final)}` : "") +
-    (t.prueba_ic ? `\n🧪 Lleva 1 LINEA DE PRUEBA ($2) para poder poner los impuestos en Siigo: bórrala al ajustar.` : "") +
+    (t.prueba_ic ? `\n🧪 Lleva 1 LINEA DE PRUEBA ($2,19) para poder poner los impuestos en Siigo: bórrala al ajustar.` : "") +
     `\nForma de pago: ${pg.nombre}\n` +
     (pg.credito ? `Queda como cuenta por pagar, vence ${fechaTxt(f.vence)}.` : `Queda PAGADA con ${pg.nombre.replace("Contado · ", "")}.`) +
     `\n\nNo se envía a la DIAN.`)) return;
@@ -1327,7 +1327,7 @@ function pintarAjDet(){
     c.imagen ? `<a href="${esc(c.imagen)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;color:var(--amarillo)">Ver la imagen guardada en Drive</a>` : ""}</div>`;
   if(c.prueba) h += `<div class="bloque"><h3>Paso a paso en Siigo</h3>` +
     paso(1, ` Abre la compra <b>${esc(c.doc)}</b> en Siigo y toca <b>Editar</b>. Ya tiene <b>"Incluye otros Impuestos cargo"</b> activado.`) +
-    paso(2, ` <b>Borra la línea de prueba</b> (producto ${esc(c.codigo_prueba || "")}, "LINEA DE PRUEBA: BORRAR").`) +
+    paso(2, ` <b>Borra la línea de prueba</b>: es la <b>última línea</b> de la compra (producto ${esc(c.codigo_prueba || "")}, "LINEA DE PRUEBA: BORRAR", 1 und a $1 con IVA e impoconsumo).`) +
     paso(3, ` En cada línea marcada abajo con ⚖, botón de impuestos: <b>Impuesto cargo 2</b> con el valor indicado y
       <b>"Impuesto como mayor valor de la compra"</b> marcado. Las demás líneas no se tocan.`) +
     paso(4, ` En la forma de pago (${esc(c.pago || "la misma")}), cambia el valor a <b>${plata(c.total_final)}</b>.`) +
