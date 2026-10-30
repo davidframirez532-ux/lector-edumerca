@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v54";
-const SERVIDOR_MINIMO = 41;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v55";
+const SERVIDOR_MINIMO = 42;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -622,9 +622,11 @@ function notasIva(l){
     (l.ic_pendiente ? `<br><span style="color:#ffd23f">➕ ${esc(l.otros_nom || "Impoconsumo")} ${plata(l.ic_pendiente)}: lo agregas tú en Siigo (va al costo)</span>` : "") +
     (l.iva_no_reg ? `<br><span style="color:#8fc9ff">IVA ${plata(l.iva_no_reg)} al registro de IVA descontable</span>` : "") + notaIcVenta(l);
 }
-/* ¿El producto tiene el impoconsumo en la venta (ficha de Siigo) con el valor por unidad de esta factura? */
+/* ¿El producto tiene el impoconsumo en la venta (ficha de Siigo) con el valor por unidad de esta factura?
+   Apagado: los impuestos al consumo se agregan a mano en cada compra (con la línea de prueba 🧪), no en las fichas. */
+const MOSTRAR_IC_VENTA = false;
 function notaIcVenta(l){
-  if(!l.ic_estado) return "";
+  if(!MOSTRAR_IC_VENTA || !l.ic_estado) return "";
   if(l.ic_estado === "igual") return `<br><span style="color:#4fd6a8">✓ Impoconsumo en la venta: ${plata(l.ic_ficha)} por unidad, igual a la factura</span>`;
   if(l.ic_estado === "sin_valor") return `<br><span style="color:#4fd6a8">✓ Tiene impoconsumo en la venta</span> <span style="opacity:.75">(la factura trae ${plata(l.ic_unidad)} por unidad: revisa que la ficha tenga ese valor)</span>`;
   if(l.ic_estado === "distinto") return `<br><span style="color:#ffd23f">⚠ Impoconsumo en la venta ${plata(l.ic_ficha)} por unidad, la factura trae ${plata(l.ic_unidad)}: toca la línea para actualizarlo</span>`;
@@ -712,7 +714,13 @@ function pintarDetalle(){
     `<button class="item" data-l="${i}" style="width:100%">
       <span class="cod">${esc(l.n)}</span>
       <span class="nom">${esc(l.desc)}<small>${num(l.cant)} und en la factura${l.iva ? " · IVA " + num(l.iva) + "%" : ""}${l.otros ? " · " + esc(l.otros_nom || "otros imp.") + " " + plata(l.otros) : ""}<br>${lineaTxt(l)}${detalleTxt(l)}</small></span>
-      <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") + `</div>`;
+      <span class="pre">${plata(l.base)}<small>›</small></span></button>`).join("") +
+    // Última línea que se sube cuando hay impuestos distintos al IVA: deja la compra con "Incluye otros Impuestos cargo"
+    (t.prueba_ic ? `<div class="item" style="width:100%;opacity:.85;border-style:dashed">
+      <span class="cod">🧪</span>
+      <span class="nom">LINEA DE PRUEBA: BORRAR<small>${esc(t.codigo_prueba || "")} · 1 und a $1 · IVA 19% + impoconsumo $1<br>
+        <span style="color:#8fc9ff">Se sube de última para que Siigo deje poner los impuestos cargo 2. Bórrala en Siigo al agregar los impuestos a mano.</span></small></span>
+      <span class="pre">${plata(2.19)}</span></div>` : "") + `</div>`;
   h += nota ? `<p class="nota" style="text-align:center">Asocia los productos como en las facturas: la imagen usa los productos de Siigo y el factor.</p>`
     : `<p class="nota" style="text-align:center">Al aprobar se crea la factura de compra en Siigo. No se envía a la DIAN.</p>`;
   $("cpDetPanel").innerHTML = h;
@@ -1099,7 +1107,7 @@ $("cpDetPanel").addEventListener("click", async e => {
       patch: {codigo: p.codigo, nombre: p.nombre, factor, sin_factor: false, destino: "INVENTARIO"},
       texto: `${l.desc} → ${p.nombre} × ${r.f}`, doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
   }}];
-  if(l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
+  if(MOSTRAR_IC_VENTA && l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
     sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
