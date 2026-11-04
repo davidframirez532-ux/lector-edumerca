@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v55";
+const COMPRAS_VERSION = "compras v60";
 const SERVIDOR_MINIMO = 42;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -2092,9 +2092,54 @@ window.pintarKpis = function(){
   try{ pintarMargenes(); }catch(e){ console.warn("Márgenes:", e); }
   try{ pintarFacturaCostos(); }catch(e){ console.warn("Factura en alertas de costo:", e); }
 };
+/* Alertas de costo ignoradas: hasta que llegue una compra nueva del producto. Se pueden reactivar. */
+function pintarCostosIgnorados(){
+  const ign = (kpis || {}).alertas_costos_ignoradas || [];
+  if(!ign.length) return;
+  const panel = $("kpiPanel");
+  const h = `<details class="alerta"><summary><span>Alertas de costo ignoradas</span><span class="num-alerta cero">${ign.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">No alertan hasta que entre una compra nueva del producto.</p>${ign.map((x, i) =>
+    `<div class="fila-dato" style="display:flex;align-items:center"><span style="flex:1">${esc(x.nombre || x.codigo)}
+      <small style="display:block;opacity:.7">${esc(x.alerta || "")}${x.doc ? ` · <b style="color:#8fc9ff">${esc(x.doc)}</b>` : ""} · ${esc(x.motivo || "")}${
+        x.quien ? " · " + esc(x.quien) : ""}${x.ignorado ? " · " + esc(x.ignorado) : ""}</small></span>
+      <button class="sec chico" data-ac-reactivar="${i}" style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">Reactivar</button></div>`).join("")}</details>`;
+  const bloque = [...panel.querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
+  const cont = bloque && bloque.querySelector("div");
+  if(cont) cont.insertAdjacentHTML("beforeend", h); else panel.insertAdjacentHTML("beforeend", `<div class="bloque"><h3>Costos</h3>${h}</div>`);
+}
+$("kpiPanel").addEventListener("click", async e => {
+  const b = e.target.closest("[data-ac-ignorar], [data-ac-reactivar]"); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const k = kpis || {}, reactivar = b.dataset.acReactivar !== undefined;
+  const x = reactivar ? (k.alertas_costos_ignoradas || [])[Number(b.dataset.acReactivar)]
+                      : (k.alertas_costos || []).find(a => String(a.codigo) === String(b.dataset.acIgnorar));
+  if(!x) return;
+  let motivo = "";
+  if(!reactivar){
+    motivo = await preguntar(`${x.nombre} · ${x.alerta || ""}`, [
+      ["🎁 Bonificación o promoción", "El proveedor dio un precio especial esta vez", "Bonificación o promoción"],
+      ["✓ El costo está bien", "Ya se revisó la factura y es correcto", "Costo revisado"],
+      ["✏️ Otro motivo", "Lo escribes tú", "otro"]]);
+    if(!motivo) return;
+    if(motivo === "otro"){
+      const r = await pedirForm("¿Por qué se ignora?", [{id: "m", label: "Motivo", valor: "", inputmode: "text",
+        validar: v => !!v.trim() || "Escribe el motivo"}], "Guardar");
+      if(!r) return;
+      motivo = r.m;
+    }
+  }else if(!confirm(`¿Reactivar la alerta de ${x.nombre}?`)) return;
+  b.disabled = true; b.textContent = "…";
+  try{
+    const d = await postAdmin({accion: "costo_alerta_ignorar", clave: x.clave || "", codigo: x.codigo, nombre: x.nombre,
+      alerta: x.alerta, doc: x.doc || "", fecha: x.fecha || "", motivo, reactivar});
+    if(kpis){ kpis.alertas_costos = d.alertas_costos || []; kpis.alertas_costos_ignoradas = d.alertas_costos_ignoradas || []; }
+    window.pintarKpis();
+  }catch(err){ b.disabled = false; b.textContent = reactivar ? "Reactivar" : "Ignorar"; alert("No se guardó: " + err.message); }
+});
 /* Alertas de costo (costos fuera de lo normal, vende a pérdida…): debajo de cada producto, la compra de Siigo
    que dejó el último costo (azul), la factura del proveedor y el botón Ver PDF. */
 function pintarFacturaCostos(){
+  pintarCostosIgnorados();
   const alertas = ((kpis || {}).alertas_costos || []).filter(a => a.doc);
   if(!alertas.length) return;
   const panel = $("kpiPanel");
@@ -2111,7 +2156,8 @@ function pintarFacturaCostos(){
     const info = `<div class="mr-fac" style="flex-basis:100%;width:100%;margin-top:4px;font-size:.9rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="flex:1;min-width:0"><b style="color:#8fc9ff">${esc(a.doc)}</b>${a.factura_prov ? " · fac. " + esc(a.factura_prov) : ""}${
         a.proveedor || a.nit ? " · " + esc(a.proveedor || a.nit) : ""}${a.fecha ? " · " + esc(dmy(a.fecha)) : ""}</span>${
-      a.pdf ? `<a class="sec chico" href="${esc(a.pdf)}" target="_blank" rel="noopener" style="padding:3px 10px;font-size:.8rem;text-decoration:none;flex:none">Ver PDF</a>` : ""}</div>`;
+      a.pdf ? `<a class="sec chico" href="${esc(a.pdf)}" target="_blank" rel="noopener" style="padding:3px 10px;font-size:.8rem;text-decoration:none;flex:none">Ver PDF</a>` : ""}${
+      `<button class="sec chico" data-ac-ignorar="${esc(a.codigo)}" style="padding:3px 10px;font-size:.8rem;flex:none">Ignorar</button>`}</div>`;
     if(/^(TR)$/.test(el.tagName)){ const td = el.lastElementChild; if(td) td.insertAdjacentHTML("beforeend", info); }
     else{ el.style.flexWrap = "wrap"; el.insertAdjacentHTML("beforeend", info); }
   });
