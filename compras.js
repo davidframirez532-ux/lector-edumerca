@@ -1106,15 +1106,18 @@ async function armarRepartoVariable(l, nuevo){
   let partes = (!nuevo && l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.cantidad}));
   if(partes.length){
     const q = await preguntar("Productos: " + partes.map(x => x.nombre).join(" / "), [
-      ["✓ Poner las cantidades", "", "ok"], ["+ Agregar otro producto", "Ej. llegó una talla nueva", "agregar"],
+      ["✓ Poner las cantidades", "", "ok"], ["+ Agregar otro producto", "Uno que no está en la lista", "agregar"],
       ["Elegir los productos de nuevo", "Se borran los actuales", "nuevo"]]);
     if(!q) return;
     if(q === "nuevo") partes = [];
     if(q !== "ok") partes = await elegirPartesVariable(l, partes);
   }else partes = await elegirPartesVariable(l, partes);
   if(!partes || !partes.length) return;
-  const r = await pedirForm(`¿Cuántas llegaron de cada uno? La factura trae ${num(cantFac)}`, partes.map((x, i) => ({
-    id: "p" + i, label: x.nombre, valor: String(Math.round((Number(x.cantidad) || 0) * 100) / 100), inputmode: "decimal",
+  // Los productos anteriores salen como opciones; las cantidades van en blanco (cambian en cada factura). Deja vacío lo que no llegó.
+  const yaRepartida = !nuevo && l.destino === "MEZCLA" && l.precio !== undefined;
+  const r = await pedirForm(`¿Cuántas llegaron de cada uno? La factura trae ${num(cantFac)} · deja vacío lo que no llegó`, partes.map((x, i) => ({
+    id: "p" + i, label: x.nombre, valor: yaRepartida && Number(x.cantidad) > 0 ? String(Math.round(Number(x.cantidad) * 100) / 100) : "",
+    inputmode: "decimal",
     validar: v => Number(String(v || "0").replace(",", ".")) >= 0 || "No puede ser negativo"})), "Guardar");
   if(!r) return;
   const tot = partes.map((x, i) => ({codigo: x.codigo, nombre: x.nombre, total: Number(String(r["p" + i] || "0").replace(",", ".")) || 0}))
@@ -1187,19 +1190,13 @@ $("cpDetPanel").addEventListener("click", async e => {
       patch: {codigo: p.codigo, nombre: p.nombre, factor, sin_factor: false, destino: "INVENTARIO"},
       texto: `${l.desc} → ${p.nombre} × ${r.f}`, doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
   }}];
-  if(l.margen_revisar) ops.push({t: "✅ El margen está bien (ignorar)", sub: `Margen de ${num(l.margen_venta)}% sobre la venta. ` +
-    "Para bonificaciones o productos que sí dejan ese margen", fn: () => setTimeout(() => ignorarMargenLinea(l), 60)});
-  else if(l.margen_ignorado) ops.push({t: "↩ Volver a revisar el margen", sub: "Ignorado: " + l.margen_ignorado,
-    fn: () => setTimeout(() => ignorarMargenLinea(l, true), 60)});
-  if(MOSTRAR_IC_VENTA && l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
-    sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
-  if(l.reparto_variable) ops.unshift({t: "📏 Cuántas llegaron de cada uno", sub: "Reparto que cambia en cada factura (tallas, colores…)",
-    fn: () => setTimeout(() => armarRepartoVariable(l), 60)});
-  else ops.push({t: "📏 Repartir por tallas (variable)", sub: "Mismos productos pero cantidades distintas en cada factura (ej. guantes por talla)",
-    fn: () => setTimeout(() => armarRepartoVariable(l, true), 60)});
-  ops.push({t: "🚫 Ignorar este producto (no subirlo)", sub: "Ej. recaudos o donaciones por $1. Las próximas facturas también lo ignoran",
-    fn: () => setTimeout(() => ignorarLinea(l), 60)});
-  ops.push({t: "🔀 Repartir en varios productos (fijo)", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
+  // Orden: asociar · repartir fijo · repartir variable · (volver a un solo producto) · producto nuevo · ignorar
+  ops.push({t: "🔀 Repartir en varios productos (fijo)", sub: l.destino === "MEZCLA" && !l.reparto_variable ? "Ahora: " + l.nombre :
+    "Siempre los mismos productos y cantidades (ej. caja con 6 de un sabor y 6 de otro)", fn: () => armarMezcla(l)});
+  ops.push({t: "📏 Repartir cantidad total (variable)", sub: l.reparto_variable
+      ? (l.precio !== undefined ? "Ahora: " + l.nombre : "Pon cuáles productos llegaron y cuántos de cada uno")
+      : "Los productos y las cantidades cambian en cada factura (hoy 5 + 5, mañana 5 + 5 + 5)",
+    fn: () => setTimeout(() => armarRepartoVariable(l, !l.reparto_variable), 60)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
     if(d) reemplazar(d.factura);
@@ -1208,6 +1205,15 @@ $("cpDetPanel").addEventListener("click", async e => {
     elegir("Producto nuevo · " + l.desc, [
       {t: "⚡ Crearlo en Siigo desde aquí", sub: "Con la descripción y el IVA de la factura. Puedes cambiar los datos; el código de barras lo escaneas", fn: () => abrirNuevo(l)},
       {t: "📝 Dime cómo crearlo", sub: "Los datos para crearlo tú en Siigo", fn: () => avisoNuevo(l)}]), 60)});
+  ops.push({t: "🚫 Ignorar este producto (no subirlo)", sub: "Ej. recaudos o donaciones por $1. Las próximas facturas también lo ignoran",
+    fn: () => setTimeout(() => ignorarLinea(l), 60)});
+  // Según la línea
+  if(l.margen_revisar) ops.push({t: "✅ El margen está bien (ignorar)", sub: `Margen de ${num(l.margen_venta)}% sobre la venta. ` +
+    "Para bonificaciones o productos que sí dejan ese margen", fn: () => setTimeout(() => ignorarMargenLinea(l), 60)});
+  else if(l.margen_ignorado) ops.push({t: "↩ Volver a revisar el margen", sub: "Ignorado: " + l.margen_ignorado,
+    fn: () => setTimeout(() => ignorarMargenLinea(l, true), 60)});
+  if(MOSTRAR_IC_VENTA && l.ic_estado && l.ic_estado !== "igual") ops.push({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
+    sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   elegir(l.desc, ops);
 });
 $("btnCpAprobar").addEventListener("click", async () => {
