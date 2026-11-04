@@ -2128,7 +2128,10 @@ function abrirMargen(tipo, i){
       <span class="mr-x">=</span>
       ${d("En Siigo", x.cant_siigo != null && x.cant_siigo !== "" ? num(x.cant_siigo) : "—")}
     </div>
-    ${!fx ? `<p class="nota" style="margin:6px 0 0">No encontré el factor en Productos_proveedor para este proveedor (compra subida a mano o sin asociar).</p>`
+    ${x.reparto ? `<p class="nota" style="margin:6px 0 0;opacity:1">🔀 Reparto: cada unidad de la factura${
+      x.reparto_desc ? " (" + esc(x.reparto_desc) + ")" : ""} se reparte en ${esc(x.reparto)}. La cantidad en la factura es la de la línea completa.</p>` : ""}
+    ${x.factor_otro_proveedor ? `<p class="nota" style="margin:6px 0 0">Factor tomado de la asociación de este producto con otro proveedor.</p>` : ""}
+    ${!fx ? `<p class="nota" style="margin:6px 0 0">No encontré el factor en Productos_proveedor para este producto (compra subida a mano o sin asociar).</p>`
       : fx !== "1" && x.cant_factura != null && Number(x.cant_factura) === Number(fx) ? `<p class="nota" style="margin:6px 0 0;color:#ffd23f;opacity:1">⚠ El factor es igual a la cantidad de la factura: revisa si quedó mal puesto.</p>` : ""}
     <p class="mr-sec">Costo y precio por unidad</p><div class="mr-g">
       ${d("Último costo (sin IVA)", p(x.costo_ultimo))}
