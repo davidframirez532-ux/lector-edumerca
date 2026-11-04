@@ -2019,41 +2019,145 @@ window.pintarKpis = function(){
   }catch(e){ console.warn("Alertas de pagos:", e); }
   try{ pintarIgnorarIva(); }catch(e){ console.warn("Ignorar IVA:", e); }
   try{ pintarMargenes(); }catch(e){ console.warn("Márgenes:", e); }
+  try{ pintarFacturaCostos(); }catch(e){ console.warn("Factura en alertas de costo:", e); }
 };
+/* Alertas de costo (costos fuera de lo normal, vende a pérdida…): debajo de cada producto, la compra de Siigo
+   que dejó el último costo (azul), la factura del proveedor y el botón Ver PDF. */
+function pintarFacturaCostos(){
+  const alertas = ((kpis || {}).alertas_costos || []).filter(a => a.doc);
+  if(!alertas.length) return;
+  const panel = $("kpiPanel");
+  const cajas = [...panel.querySelectorAll("details, .bloque")].filter(c => {
+    const t = (c.querySelector("summary, h3") || {}).textContent || "";
+    return /costo|pérdida|perdida|margen bajo/i.test(t) && !/Márgenes|impuesto|IVA|stock|recibo/i.test(t);
+  });
+  if(!cajas.length) return;
+  const filas = [];
+  cajas.forEach(c => c.querySelectorAll(".fila-dato, li, .item, tr").forEach(el => { if(!el.querySelector(".mr-fac")) filas.push(el); }));
+  alertas.forEach(a => {
+    const el = filas.find(x => (a.nombre && x.textContent.includes(a.nombre)) || (a.codigo && x.textContent.includes(String(a.codigo))));
+    if(!el || el.querySelector(".mr-fac")) return;
+    const info = `<div class="mr-fac" style="flex-basis:100%;width:100%;margin-top:4px;font-size:.9rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="flex:1;min-width:0"><b style="color:#8fc9ff">${esc(a.doc)}</b>${a.factura_prov ? " · fac. " + esc(a.factura_prov) : ""}${
+        a.proveedor || a.nit ? " · " + esc(a.proveedor || a.nit) : ""}${a.fecha ? " · " + esc(dmy(a.fecha)) : ""}</span>${
+      a.pdf ? `<a class="sec chico" href="${esc(a.pdf)}" target="_blank" rel="noopener" style="padding:3px 10px;font-size:.8rem;text-decoration:none;flex:none">Ver PDF</a>` : ""}</div>`;
+    if(/^(TR)$/.test(el.tagName)){ const td = el.lastElementChild; if(td) td.insertAdjacentHTML("beforeend", info); }
+    else{ el.style.flexWrap = "wrap"; el.insertAdjacentHTML("beforeend", info); }
+  });
+}
 /* ══════════════ MÁRGENES POR REVISAR (03_costos) ══════════════
-   Productos cuyo último costo deja más de 25% de margen sobre la venta, con la factura que lo dejó.
-   "Ignorar" (bonificación, margen real…) los pasa a "Márgenes ignorados", donde se pueden reactivar. */
+   Productos cuyo último costo deja más de 35% de margen sobre la venta, con la compra de Siigo que lo dejó.
+   La lista muestra lo básico; al tocar un producto se abre una ventana con el detalle (cantidades en la factura
+   y en Siigo, factor, márgenes, costos) y abajo los botones Ver PDF e Ignorar / Reactivar. */
 function pintarMargenes(){
   const k = kpis || {}, panel = $("kpiPanel");
   const lista = k.margenes_revisar || [], ign = k.margenes_ignorados || [];
   if(!lista.length && !ign.length) return;
-  const sub = x => [x.margen_venta_pct != null ? `margen ${num(x.margen_venta_pct)}%` : "",
-    x.costo_ultimo ? "costo " + plata(x.costo_ultimo) + " sin IVA" : "", x.precio ? "precio " + plata(x.precio) : "",
-    x.doc ? esc(x.doc) : "", x.factura_prov ? "fac. " + esc(x.factura_prov) : "", esc(x.proveedor || x.nit || ""),
-    x.ignorado ? "ignorado " + esc(x.ignorado) : x.fecha ? esc(dmy(x.fecha)) : "", x.motivo ? "motivo: " + esc(x.motivo) : "", x.quien ? esc(x.quien) : ""].filter(Boolean).join(" · ");
-  const boton = (i, tipo, x) => (x && x.pdf ? `<a class="sec chico" href="${esc(x.pdf)}" target="_blank" rel="noopener"
-    style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none;text-decoration:none">Ver PDF</a>` : "") +
-    `<button class="sec chico" data-mr-${tipo}="${i}"
-    style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">${tipo === "ignorar" ? "Ignorar" : "Reactivar"}</button>`;
-  const fila = (x, acc) => `<div class="fila-dato" style="display:flex;align-items:center"><span style="flex:1">${esc(x.nombre || x.codigo)}
-    <small style="display:block;opacity:.65">${esc(x.codigo || "")} · ${sub(x)}</small></span>${acc}</div>`;
+  const fila = (x, i, tipo) => `<button class="item" data-mr-abrir="${tipo}:${i}" style="width:100%;text-align:left">
+    <span class="nom" style="font-size:1rem">${esc(x.nombre || x.codigo)}
+      <small style="display:block;font-size:.9rem;margin-top:2px">${x.doc ? `<b style="color:#8fc9ff">${esc(x.doc)}</b> · ` : ""}${
+        esc(x.proveedor || x.nit || "")}${tipo === "ign" && x.motivo ? " · " + esc(x.motivo) : ""}</small></span>
+    <span class="pre" style="font-size:1.05rem;color:${tipo === "ign" ? "inherit" : "#ff9a86"}">${
+      x.margen_venta_pct != null ? num(x.margen_venta_pct) + "%" : ""}<small>›</small></span></button>`;
   let h = `<details class="alerta"><summary><span>Márgenes por revisar</span>
     <span class="num-alerta ${lista.length ? "" : "cero"}">${lista.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">Más de 35% de margen sobre la venta con el último costo (sin las bonificaciones a $1). Casi siempre es un factor mal puesto:
-    revisa esa factura en Siigo. Si es bonificación o el margen es real, tócalo en "Ignorar".</p>${lista.map((x, i) => fila(x, boton(i, "ignorar", x))).join("")}</details>`;
+    <p class="nota" style="margin:0 0 6px">Más de 35% de margen sobre la venta con el último costo (sin las bonificaciones a $1).
+    Toca un producto para ver el detalle y compararlo con la factura.</p>${lista.map((x, i) => fila(x, i, "rev")).join("")}</details>`;
   if(ign.length) h += `<details class="alerta"><summary><span>Márgenes ignorados</span><span class="num-alerta cero">${ign.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${ign.map((x, i) => fila(x, boton(i, "reactivar", x))).join("")}</details>`;
+    <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${
+      ign.map((x, i) => fila(x, i, "ign")).join("")}</details>`;
   const bloque = [...panel.querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
   const cont = bloque && bloque.querySelector("div");
   if(cont) cont.insertAdjacentHTML("afterbegin", h);
   else panel.insertAdjacentHTML("beforeend", `<div class="bloque"><h3>Márgenes</h3>${h}</div>`);
 }
-$("kpiPanel").addEventListener("click", async e => {
-  const b = e.target.closest("[data-mr-ignorar], [data-mr-reactivar]"); if(!b) return;
-  e.preventDefault(); e.stopPropagation();
-  const reactivar = b.dataset.mrReactivar !== undefined;
-  const x = ((kpis || {})[reactivar ? "margenes_ignorados" : "margenes_revisar"] || [])[Number(reactivar ? b.dataset.mrReactivar : b.dataset.mrIgnorar)];
+
+/* Ventana sobrepuesta (ocupa ~85% de la pantalla, desde abajo) */
+(function(){
+  const st = document.createElement("style");
+  st.textContent = `#mrVentana{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+    #mrVentana[hidden]{display:none}
+    #mrCaja{width:100%;max-width:640px;margin:0 auto;height:85vh;background:#171b24;color:#f2f2f2;border-radius:18px 18px 0 0;
+      display:flex;flex-direction:column;box-shadow:0 -6px 24px rgba(0,0,0,.4);padding-bottom:env(safe-area-inset-bottom,0px)}
+    #mrCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:6px 16px 12px}
+    #mrPie{flex:none;display:flex;gap:8px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.12)}
+    #mrPie > *{flex:1;text-align:center;font-size:1rem;padding:12px 8px;text-decoration:none}
+    .mr-tit{font-size:1.2rem;font-weight:800;margin:0}
+    .mr-sec{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin:16px 0 6px}
+    .mr-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .mr-d{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px}
+    .mr-d span{display:block;font-size:.8rem;opacity:.7}
+    .mr-d b{display:block;font-size:1.15rem;margin-top:2px}
+    .mr-d.ancho{grid-column:1/-1}
+    .mr-flujo{display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:center}
+    .mr-flujo .mr-d{flex:1}
+    .mr-x{font-size:1.3rem;opacity:.6}`;
+  document.head.appendChild(st);
+  const v = document.createElement("div");
+  v.id = "mrVentana"; v.hidden = true;
+  v.innerHTML = `<div id="mrCaja"><div style="display:flex;justify-content:center;padding:8px 0 2px">
+      <div style="width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.3)"></div></div>
+    <div id="mrCuerpo"></div><div id="mrPie"></div></div>`;
+  document.body.appendChild(v);
+  v.addEventListener("click", e => { if(e.target === v || e.target.closest("[data-mr-cerrar]")) cerrarMargen(); });
+})();
+let mrActual = null;
+function cerrarMargen(){ $("mrVentana").hidden = true; mrActual = null; }
+function abrirMargen(tipo, i){
+  const k = kpis || {};
+  const x = ((tipo === "ign" ? k.margenes_ignorados : k.margenes_revisar) || [])[i];
   if(!x) return;
+  mrActual = {x, reactivar: tipo === "ign"};
+  const d = (t, val, ancho, color) => `<div class="mr-d${ancho ? " ancho" : ""}"><span>${t}</span><b${color ? ` style="color:${color}"` : ""}>${val}</b></div>`;
+  const p = v => v === "" || v == null ? "—" : plata(Number(v));
+  const pc = v => v === "" || v == null ? "—" : num(v) + "%";
+  const fx = x.factor ? String(x.factor) : "";
+  let h = `<p class="mr-tit">${esc(x.nombre || x.codigo)}</p>
+    <p class="nota" style="margin:2px 0 0">${esc(x.codigo || "")}${x.categoria ? " · " + esc(x.categoria) : ""}</p>`;
+  if(tipo === "ign") h += `<div class="mr-d ancho" style="margin-top:12px;border:1px solid rgba(255,255,255,.15)">
+    <span>Ignorado${x.ignorado ? " el " + esc(x.ignorado) : ""}${x.quien ? " por " + esc(x.quien) : ""}</span><b>${esc(x.motivo || "")}</b></div>`;
+  h += `<p class="mr-sec">Margen</p><div class="mr-g">
+      ${d("Sobre la venta", pc(x.margen_venta_pct), false, tipo === "ign" ? "" : "#ff9a86")}
+      ${d("Sobre el costo", pc(x.margen_costo_pct))}
+    </div>
+    <p class="mr-sec">Cantidades de la última compra</p>
+    <div class="mr-flujo">
+      ${d("En la factura", x.cant_factura != null && x.cant_factura !== "" ? num(x.cant_factura) : "—")}
+      <span class="mr-x">×</span>
+      ${d("Factor", fx ? esc(fx) : "—", false, fx && fx !== "1" ? "#ffd23f" : "")}
+      <span class="mr-x">=</span>
+      ${d("En Siigo", x.cant_siigo != null && x.cant_siigo !== "" ? num(x.cant_siigo) : "—")}
+    </div>
+    ${!fx ? `<p class="nota" style="margin:6px 0 0">No encontré el factor en Productos_proveedor para este proveedor (compra subida a mano o sin asociar).</p>`
+      : fx !== "1" && x.cant_factura != null && Number(x.cant_factura) === Number(fx) ? `<p class="nota" style="margin:6px 0 0;color:#ffd23f;opacity:1">⚠ El factor es igual a la cantidad de la factura: revisa si quedó mal puesto.</p>` : ""}
+    <p class="mr-sec">Costo y precio por unidad</p><div class="mr-g">
+      ${d("Último costo (sin IVA)", p(x.costo_ultimo))}
+      ${d("Costo promedio (sin IVA)", p(x.costo_promedio))}
+      ${d("Precio de venta", p(x.precio))}
+      ${d("Precio sin IVA" + (x.iva !== "" && x.iva != null ? " (IVA " + num(x.iva) + "%)" : ""), p(x.precio_sin_iva))}
+    </div>
+    <p class="mr-sec">Factura</p><div class="mr-g">
+      ${d("Compra en Siigo", x.doc ? esc(x.doc) : "—", false, "#8fc9ff")}
+      ${d("Factura del proveedor", x.factura_prov ? esc(x.factura_prov) : "—")}
+      ${d("Proveedor", esc(x.proveedor || "—") + (x.nit ? `<small style="display:block;font-size:.8rem;font-weight:400;opacity:.7">NIT ${esc(x.nit)}</small>` : ""), true)}
+      ${d("Fecha", x.fecha ? esc(dmy(x.fecha)) : "—", true)}
+    </div>`;
+  $("mrCuerpo").innerHTML = h;
+  $("mrCuerpo").scrollTop = 0;
+  $("mrPie").innerHTML = (x.pdf ? `<a class="sec" href="${esc(x.pdf)}" target="_blank" rel="noopener">📄 Ver PDF</a>` : "") +
+    `<button class="${tipo === "ign" ? "sec" : "ppal"}" data-mr-accion="1">${tipo === "ign" ? "↩ Reactivar" : "✅ Ignorar"}</button>` +
+    `<button class="sec" data-mr-cerrar="1" style="flex:.6">Cerrar</button>`;
+  $("mrVentana").hidden = false;
+}
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("[data-mr-abrir]"); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const [tipo, i] = b.dataset.mrAbrir.split(":");
+  abrirMargen(tipo, Number(i));
+});
+$("mrPie").addEventListener("click", async e => {
+  const b = e.target.closest("[data-mr-accion]"); if(!b || !mrActual) return;
+  const {x, reactivar} = mrActual;
   let motivo = "";
   if(!reactivar){
     motivo = await preguntar(`${x.nombre} · margen ${num(x.margen_venta_pct)}%`, [
@@ -2071,10 +2175,15 @@ $("kpiPanel").addEventListener("click", async e => {
   b.disabled = true; b.textContent = "…";
   try{
     const d = await postAdmin({accion: "margen_ignorar", clave: x.clave, codigo: x.codigo, nombre: x.nombre, nit: x.nit,
-      numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, pdf: x.pdf || "", margen: x.margen_venta_pct, motivo, reactivar});
+      numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, pdf: x.pdf || "", margen: x.margen_venta_pct,
+      detalle: {categoria: x.categoria, costo_ultimo: x.costo_ultimo, costo_promedio: x.costo_promedio, precio: x.precio,
+        precio_sin_iva: x.precio_sin_iva, iva: x.iva, margen_costo_pct: x.margen_costo_pct, cant_factura: x.cant_factura,
+        cant_siigo: x.cant_siigo, factor: x.factor, fecha: x.fecha},
+      motivo, reactivar});
     if(kpis){ kpis.margenes_revisar = d.margenes_revisar || []; kpis.margenes_ignorados = d.margenes_ignorados || []; }
+    cerrarMargen();
     window.pintarKpis();
-  }catch(err){ b.disabled = false; b.textContent = reactivar ? "Reactivar" : "Ignorar"; alert("No se guardó: " + err.message); }
+  }catch(err){ b.disabled = false; b.textContent = reactivar ? "↩ Reactivar" : "✅ Ignorar"; alert("No se guardó: " + err.message); }
 });
 /* ══════════════ ALERTAS DE IVA: IGNORAR / REACTIVAR ══════════════
    Cada alerta de la revisión de IVA lleva un botón "Ignorar" (ej. pagos a la contadora que no son productos).
