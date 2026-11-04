@@ -1710,7 +1710,7 @@ function htmlHoras(horas, dia){
 }
 
 /* Historial: cómo han ido las semanas y los meses (sale del registro diario en Drive) */
-let histVista = "semanas";
+let histVista = "meses";
 function htmlHistorial(hst){
   const filas = ((hst || {})[histVista] || []);
   const etiqueta = x => histVista === "meses"
@@ -1730,7 +1730,7 @@ function htmlHistorial(hst){
 }
 
 /* Más vendidos: semana / mes / 3 meses, top 5 / 10 / 20, por unidades o por plata */
-let topDias = "7", topN = 10, topPor = "unidades";
+let topDias = "7", topN = 5, topPor = "unidades";
 function bloqueTopVentas(r){
   const top = (r && r.top) || {};
   if(!Object.keys(top).length && !(r && r.top_30d && r.top_30d.length)) return "";
