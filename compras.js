@@ -2020,30 +2020,7 @@ window.pintarKpis = function(){
   try{ pintarIgnorarIva(); }catch(e){ console.warn("Ignorar IVA:", e); }
   try{ pintarMargenes(); }catch(e){ console.warn("Márgenes:", e); }
   try{ pintarFacturaCostos(); }catch(e){ console.warn("Factura en alertas de costo:", e); }
-  try{ historialEnMeses(); }catch(e){ console.warn("Historial en meses:", e); }
 };
-/* Historial: abre con "Meses" seleccionado (una vez por pintada; si tocas "Semanas" se respeta) */
-let mrPonerMeses = false, mrEligioHistorial = false;
-// Si tú tocas Semanas o Meses, se deja lo que escogiste hasta que cierres la app
-$("kpiPanel").addEventListener("click", e => {
-  if(mrPonerMeses) return;
-  const b = e.target.closest("button, [role=tab], .chip");
-  const caja = b && b.closest(".bloque, details");
-  if(caja && /historial/i.test((caja.querySelector("h3, summary") || {}).textContent || "") && /^\s*(semanas?|mes(es)?)\s*$/i.test(b.textContent))
-    mrEligioHistorial = true;
-}, true);
-function historialEnMeses(){
-  if(mrPonerMeses || mrEligioHistorial) return;
-  const panel = $("kpiPanel");
-  const caja = [...panel.querySelectorAll(".bloque, details")].find(b => /historial/i.test((b.querySelector("h3, summary") || {}).textContent || ""));
-  if(!caja) return;
-  const meses = [...caja.querySelectorAll("button, [role=tab], .chip")].find(b => /^\s*mes(es)?\s*$/i.test(b.textContent));
-  if(!meses) return;
-  const ya = meses.getAttribute("aria-pressed") === "true" || meses.classList.contains("activo") || meses.classList.contains("on");
-  if(ya) return;
-  mrPonerMeses = true;
-  try{ meses.click(); } finally { setTimeout(() => { mrPonerMeses = false; }, 0); }
-}
 /* Alertas de costo (costos fuera de lo normal, vende a pérdida…): debajo de cada producto, la compra de Siigo
    que dejó el último costo (azul), la factura del proveedor y el botón Ver PDF. */
 function pintarFacturaCostos(){
