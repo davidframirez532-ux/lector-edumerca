@@ -533,7 +533,7 @@ let filtroCola = "";
 const FILTROS_COLA = [
   ["", "Todas", f => true],
   ["lista", "✓ Listas", f => f.lista],
-  ["asociar", "Sin asociar", f => !f.lista && (f.lineas || []).some(l => l.precio === undefined && l.destino !== "OBSEQUIO" &&
+  ["asociar", "Sin asociar", f => !f.lista && (f.lineas || []).some(l => l.precio === undefined && l.destino !== "OBSEQUIO" && l.destino !== "IGNORADA" &&
       /asoci|Productos_proveedor|Sin producto|no existe|varios productos/i.test(l.motivo || ""))],
   ["costo", "Caja / costo alto", f => (f.lineas || []).some(l => /caja|Costo|factor/i.test((l.motivo || "") + " " + (l.alerta || "")))],
   ["prov", "Proveedor no existe", f => (f.conciliacion || []).some(c => !c.ok && /proveedor no existe/i.test(c.texto))],
@@ -653,6 +653,7 @@ function lineaTxt(l){
   if(l.guardando) return `<span style="color:#8fc9ff">⏳ Guardando en segundo plano:</span> ` +
     (l.destino === "MEZCLA" ? `🔀 ${esc(l.nombre)}` : `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? " × " + (l.factor < 1 ? "1/" + Math.round(1 / l.factor) : num(l.factor)) : ""}`);
   if(l.destino === "OBSEQUIO") return `<span style="opacity:.7">Cantidad 0 · no se sube</span>`;
+  if(l.destino === "IGNORADA") return `<span style="opacity:.7">🚫 Ignorado · no se sube${l.total_ignorado ? " (" + plata(l.total_ignorado) + ")" : ""} · toca para volver a subirlo</span>`;
   if(l.por_fuera) return `🎁 Bonificación de un producto no facturado: no se sube (queda en las observaciones)` + notasIva(l);
   if(l.bonificacion && l.fusion) return `🎁 Bonificación sumada a la línea ${esc(l.fusion)} (costo promedio)` + notasIva(l);
   const bon = l.bonificacion ? `🎁 Bonificación · ` : "";
@@ -726,7 +727,7 @@ function pintarDetalle(){
     <p class="nota" style="margin:0 0 8px;opacity:1">⚖ Tiene impuestos adicionales al IVA (impoconsumo / IBUA).</p>
     <button class="ppal chico" data-imagen="det" style="width:100%">🖼 Imagen: cómo debe quedar en Siigo</button></div>`;
   if((f.avisos || []).length) h += `<div class="bloque"><h3>Avisos</h3>${f.avisos.map(a => `<p class="nota" style="margin:0 0 6px">⚠ ${esc(a)}</p>`).join("")}</div>`;
-  const sinAsociar = (f.lineas || []).filter(l => l.destino !== "OBSEQUIO" && (l.precio === undefined || l.sin_factor)).length;
+  const sinAsociar = (f.lineas || []).filter(l => l.destino !== "OBSEQUIO" && l.destino !== "IGNORADA" && (l.precio === undefined || l.sin_factor)).length;
   // "+" a la derecha del título: más acciones sobre las líneas (por ahora, leer los EAN del PDF con Claude)
   h += `<div class="bloque"><h3>Líneas <span style="display:flex;align-items:center;gap:10px"><small>toca para cambiar</small>
       <button class="sec chico" data-lineas-mas="1" data-sin="${sinAsociar}" aria-label="Más opciones de líneas"
@@ -1074,6 +1075,18 @@ async function armarMezcla(l){
     texto: `Reparto de ${l.desc}: ` + resumenDe(partes),
     doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
+/* Ignorar un producto de la factura (no se sube) o volver a subirlo */
+async function ignorarLinea(l, deshacer){
+  if(!deshacer){
+    const valor = (Number(l.base) || 0) * (1 + (Number(l.iva) || 0) / 100);
+    if(!confirm(`¿Ignorar "${l.desc}"${valor ? " (" + plata(valor) + ")" : ""}?\n\nNo se sube a Siigo, la factura se aprueba sin esa línea ` +
+      "y en las próximas facturas de este proveedor también se ignora.")) return;
+    if(valor > 1000 && !confirm(`Ojo: vale ${plata(valor)}. ¿Seguro que no es mercancía?`)) return;
+  }
+  const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_linea_ignorar", id: sel.id, linea: l.clave,
+    descripcion: l.desc, proveedor: sel.proveedor, deshacer: !!deshacer}));
+  if(d && d.factura) reemplazar(d.factura);
+}
 /* Escoge los productos (tallas, colores) de un reparto variable */
 async function elegirPartesVariable(l, partes){
   partes = partes.slice();
@@ -1154,6 +1167,8 @@ $("cpDetPanel").addEventListener("click", async e => {
   const b = e.target.closest("[data-l]"); if(!b || !sel) return;
   const l = sel.lineas[Number(b.dataset.l)];
   if(l.destino === "OBSEQUIO") return alert("Esta línea viene con cantidad 0: no se sube.");
+  if(l.destino === "IGNORADA") return elegir(l.desc, [{t: "↩ Volver a subir este producto", sub: "Deja de ignorarse en esta y en las próximas facturas",
+    fn: () => ignorarLinea(l, true)}]);
   const ops = [{t: l.sin_factor ? "📦 Confirmar el factor" : "📦 Asociar a un producto de Siigo",
     sub: l.codigo ? "Ahora: " + l.nombre + (l.sin_factor ? " · SIN FACTOR" : " × " + (l.factor || 1)) : "Queda guardado para las próximas facturas", fn: async () => {
     const actual = l.codigo ? [{codigo: l.codigo, nombre: l.nombre + " (el actual: solo cambiar el factor)"}] : [];
@@ -1182,6 +1197,8 @@ $("cpDetPanel").addEventListener("click", async e => {
     fn: () => setTimeout(() => armarRepartoVariable(l), 60)});
   else ops.push({t: "📏 Repartir por tallas (variable)", sub: "Mismos productos pero cantidades distintas en cada factura (ej. guantes por talla)",
     fn: () => setTimeout(() => armarRepartoVariable(l, true), 60)});
+  ops.push({t: "🚫 Ignorar este producto (no subirlo)", sub: "Ej. recaudos o donaciones por $1. Las próximas facturas también lo ignoran",
+    fn: () => setTimeout(() => ignorarLinea(l), 60)});
   ops.push({t: "🔀 Repartir en varios productos (fijo)", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
