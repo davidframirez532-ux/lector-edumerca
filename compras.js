@@ -2031,16 +2031,18 @@ function pintarMargenes(){
     x.costo_ultimo ? "costo " + plata(x.costo_ultimo) + " sin IVA" : "", x.precio ? "precio " + plata(x.precio) : "",
     x.doc ? esc(x.doc) : "", x.factura_prov ? "fac. " + esc(x.factura_prov) : "", esc(x.proveedor || x.nit || ""),
     x.ignorado ? "ignorado " + esc(x.ignorado) : x.fecha ? esc(dmy(x.fecha)) : "", x.motivo ? "motivo: " + esc(x.motivo) : "", x.quien ? esc(x.quien) : ""].filter(Boolean).join(" · ");
-  const boton = (i, tipo) => `<button class="sec chico" data-mr-${tipo}="${i}"
+  const boton = (i, tipo, x) => (x && x.pdf ? `<a class="sec chico" href="${esc(x.pdf)}" target="_blank" rel="noopener"
+    style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none;text-decoration:none">Ver PDF</a>` : "") +
+    `<button class="sec chico" data-mr-${tipo}="${i}"
     style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">${tipo === "ignorar" ? "Ignorar" : "Reactivar"}</button>`;
   const fila = (x, acc) => `<div class="fila-dato" style="display:flex;align-items:center"><span style="flex:1">${esc(x.nombre || x.codigo)}
     <small style="display:block;opacity:.65">${esc(x.codigo || "")} · ${sub(x)}</small></span>${acc}</div>`;
   let h = `<details class="alerta"><summary><span>Márgenes por revisar</span>
     <span class="num-alerta ${lista.length ? "" : "cero"}">${lista.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">Más de 35% de margen sobre la venta con el último costo (sin las bonificaciones a $1). Casi siempre es un factor mal puesto:
-    revisa esa factura en Siigo. Si es bonificación o el margen es real, tócalo en "Ignorar".</p>${lista.map((x, i) => fila(x, boton(i, "ignorar"))).join("")}</details>`;
+    revisa esa factura en Siigo. Si es bonificación o el margen es real, tócalo en "Ignorar".</p>${lista.map((x, i) => fila(x, boton(i, "ignorar", x))).join("")}</details>`;
   if(ign.length) h += `<details class="alerta"><summary><span>Márgenes ignorados</span><span class="num-alerta cero">${ign.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${ign.map((x, i) => fila(x, boton(i, "reactivar"))).join("")}</details>`;
+    <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${ign.map((x, i) => fila(x, boton(i, "reactivar", x))).join("")}</details>`;
   const bloque = [...panel.querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
   const cont = bloque && bloque.querySelector("div");
   if(cont) cont.insertAdjacentHTML("afterbegin", h);
@@ -2069,7 +2071,7 @@ $("kpiPanel").addEventListener("click", async e => {
   b.disabled = true; b.textContent = "…";
   try{
     const d = await postAdmin({accion: "margen_ignorar", clave: x.clave, codigo: x.codigo, nombre: x.nombre, nit: x.nit,
-      numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, margen: x.margen_venta_pct, motivo, reactivar});
+      numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, pdf: x.pdf || "", margen: x.margen_venta_pct, motivo, reactivar});
     if(kpis){ kpis.margenes_revisar = d.margenes_revisar || []; kpis.margenes_ignorados = d.margenes_ignorados || []; }
     window.pintarKpis();
   }catch(err){ b.disabled = false; b.textContent = reactivar ? "Reactivar" : "Ignorar"; alert("No se guardó: " + err.message); }
