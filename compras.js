@@ -2075,7 +2075,7 @@ function pintarMargenes(){
 /* Ventana sobrepuesta (ocupa ~85% de la pantalla, desde abajo) */
 (function(){
   const st = document.createElement("style");
-  st.textContent = `#mrVentana{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+  st.textContent = `#mrVentana{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
     #mrVentana[hidden]{display:none}
     #mrCaja{width:100%;max-width:640px;margin:0 auto;height:85vh;background:#171b24;color:#f2f2f2;border-radius:18px 18px 0 0;
       display:flex;flex-direction:column;box-shadow:0 -6px 24px rgba(0,0,0,.4);padding-bottom:env(safe-area-inset-bottom,0px)}
