@@ -1195,7 +1195,7 @@ $("cpDetPanel").addEventListener("click", async e => {
     "Siempre los mismos productos y cantidades (ej. caja con 6 de un sabor y 6 de otro)", fn: () => armarMezcla(l)});
   ops.push({t: "📏 Repartir cantidad total (variable)", sub: l.reparto_variable
       ? (l.precio !== undefined ? "Ahora: " + l.nombre : "Pon cuáles productos llegaron y cuántos de cada uno")
-      : "Los productos y las cantidades cambian en cada factura (hoy 5 + 5, mañana 5 + 5 + 5)",
+      : "Los productos y las cantidades cambian en cada factura (ej. guantes por tallas: hoy 5 S + 5 M, mañana 5 S + 5 M + 5 L)",
     fn: () => setTimeout(() => armarRepartoVariable(l, !l.reparto_variable), 60)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
