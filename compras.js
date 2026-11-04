@@ -1074,6 +1074,30 @@ async function armarMezcla(l){
     texto: `Reparto de ${l.desc}: ` + resumenDe(partes),
     doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
+/* Reparto variable (13: REPARTO VARIABLE): los mismos productos con cantidades distintas en cada factura
+   (guantes por tallas). Se escribe cuántas llegaron de cada uno en total; para cambiar los productos, "Repartir". */
+async function armarRepartoVariable(l){
+  const cantFac = Number(l.cant) || 1;
+  const partes = l.partes || [];
+  if(!partes.length) return armarMezcla(l);
+  const r = await pedirForm(`¿Cuántas llegaron de cada uno? La factura trae ${num(cantFac)}`, partes.map((x, i) => ({
+    id: "p" + i, label: x.nombre, valor: String(Math.round((Number(x.cantidad) || 0) * 100) / 100), inputmode: "decimal",
+    validar: v => Number(String(v || "0").replace(",", ".")) >= 0 || "No puede ser negativo"})), "Guardar");
+  if(!r) return;
+  const tot = partes.map((x, i) => ({codigo: x.codigo, nombre: x.nombre, total: Number(String(r["p" + i] || "0").replace(",", ".")) || 0}))
+    .filter(x => x.total > 0);
+  if(!tot.length) return alert("Pon al menos una cantidad");
+  const suma = tot.reduce((s, x) => s + x.total, 0);
+  if(Math.abs(suma - cantFac) > 1e-9 && !confirm(`Suman ${num(suma)} y la factura trae ${num(cantFac)}. ¿Guardar así?`)) return;
+  const texto = tot.map(x => num(x.total) + " × " + x.nombre).join(" + ");
+  bgEncolar({tipo: "mezcla", factId: sel.id, clave: l.clave,
+    cuerpo: {accion: "compra_destino", id: sel.id, linea: l.clave, destino: "MEZCLA", variable: true,
+             partes: tot.map(x => ({codigo: x.codigo, cantidad: x.total / cantFac})), proveedor: sel.proveedor, descripcion: l.desc},
+    patch: {destino: "MEZCLA", nombre: tot.map(x => x.nombre).join(" + "), motivo: "",
+            partes: tot.map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.total}))},
+    texto: `Reparto de ${l.desc}: ` + texto,
+    doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
+}
 $("cpDetPanel").addEventListener("click", async e => {
   const mas = e.target.closest("[data-lineas-mas]");
   if(mas && sel){
@@ -1134,6 +1158,8 @@ $("cpDetPanel").addEventListener("click", async e => {
     fn: () => setTimeout(() => ignorarMargenLinea(l, true), 60)});
   if(MOSTRAR_IC_VENTA && l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
     sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
+  if(l.reparto_variable) ops.unshift({t: "📏 Cuántas llegaron de cada uno", sub: "Reparto que cambia en cada factura (tallas, colores…)",
+    fn: () => setTimeout(() => armarRepartoVariable(l), 60)});
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
