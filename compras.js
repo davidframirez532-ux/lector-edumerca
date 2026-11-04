@@ -1074,12 +1074,32 @@ async function armarMezcla(l){
     texto: `Reparto de ${l.desc}: ` + resumenDe(partes),
     doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
 }
+/* Escoge los productos (tallas, colores) de un reparto variable */
+async function elegirPartesVariable(l, partes){
+  partes = partes.slice();
+  while(true){
+    const p = await elegirProducto(partes.length ? `Producto ${partes.length + 1} (ej. otra talla)` : "Primer producto (ej. una talla)", [], l.desc);
+    if(!p) return partes;
+    if(!partes.find(x => String(x.codigo) === String(p.codigo))) partes.push({codigo: p.codigo, nombre: p.nombre, cantidad: 0});
+    const sig = await preguntar("Productos: " + partes.map(x => x.nombre).join(" / "), [
+      ["+ Agregar otro producto", "", "mas"], ["✓ Listo, poner las cantidades", "", "listo"]]);
+    if(sig !== "mas") return sig === "listo" ? partes : null;
+  }
+}
 /* Reparto variable (13: REPARTO VARIABLE): los mismos productos con cantidades distintas en cada factura
    (guantes por tallas). Se escribe cuántas llegaron de cada uno en total; para cambiar los productos, "Repartir". */
-async function armarRepartoVariable(l){
+async function armarRepartoVariable(l, nuevo){
   const cantFac = Number(l.cant) || 1;
-  const partes = l.partes || [];
-  if(!partes.length) return armarMezcla(l);
+  let partes = (!nuevo && l.partes || []).map(x => ({codigo: x.codigo, nombre: x.nombre, cantidad: x.cantidad}));
+  if(partes.length){
+    const q = await preguntar("Productos: " + partes.map(x => x.nombre).join(" / "), [
+      ["✓ Poner las cantidades", "", "ok"], ["+ Agregar otro producto", "Ej. llegó una talla nueva", "agregar"],
+      ["Elegir los productos de nuevo", "Se borran los actuales", "nuevo"]]);
+    if(!q) return;
+    if(q === "nuevo") partes = [];
+    if(q !== "ok") partes = await elegirPartesVariable(l, partes);
+  }else partes = await elegirPartesVariable(l, partes);
+  if(!partes || !partes.length) return;
   const r = await pedirForm(`¿Cuántas llegaron de cada uno? La factura trae ${num(cantFac)}`, partes.map((x, i) => ({
     id: "p" + i, label: x.nombre, valor: String(Math.round((Number(x.cantidad) || 0) * 100) / 100), inputmode: "decimal",
     validar: v => Number(String(v || "0").replace(",", ".")) >= 0 || "No puede ser negativo"})), "Guardar");
@@ -1160,7 +1180,9 @@ $("cpDetPanel").addEventListener("click", async e => {
     sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   if(l.reparto_variable) ops.unshift({t: "📏 Cuántas llegaron de cada uno", sub: "Reparto que cambia en cada factura (tallas, colores…)",
     fn: () => setTimeout(() => armarRepartoVariable(l), 60)});
-  ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
+  else ops.push({t: "📏 Repartir por tallas (variable)", sub: "Mismos productos pero cantidades distintas en cada factura (ej. guantes por talla)",
+    fn: () => setTimeout(() => armarRepartoVariable(l, true), 60)});
+  ops.push({t: "🔀 Repartir en varios productos (fijo)", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
   if(l.destino === "GASTO" || l.destino === "MEZCLA") ops.push({t: "↩ Volver a un solo producto", sub: "Usa la asociación de Productos_proveedor", fn: async () => {
     const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_destino", id: sel.id, linea: l.clave, destino: "INVENTARIO"}));
     if(d) reemplazar(d.factura);
