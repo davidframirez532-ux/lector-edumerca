@@ -2037,7 +2037,7 @@ function pintarMargenes(){
     <small style="display:block;opacity:.65">${esc(x.codigo || "")} · ${sub(x)}</small></span>${acc}</div>`;
   let h = `<details class="alerta"><summary><span>Márgenes por revisar</span>
     <span class="num-alerta ${lista.length ? "" : "cero"}">${lista.length}</span></summary>
-    <p class="nota" style="margin:0 0 6px">Más de 25% de margen sobre la venta con el último costo. Casi siempre es un factor mal puesto:
+    <p class="nota" style="margin:0 0 6px">Más de 35% de margen sobre la venta con el último costo (sin las bonificaciones a $1). Casi siempre es un factor mal puesto:
     revisa esa factura en Siigo. Si es bonificación o el margen es real, tócalo en "Ignorar".</p>${lista.map((x, i) => fila(x, boton(i, "ignorar"))).join("")}</details>`;
   if(ign.length) h += `<details class="alerta"><summary><span>Márgenes ignorados</span><span class="num-alerta cero">${ign.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${ign.map((x, i) => fila(x, boton(i, "reactivar"))).join("")}</details>`;
