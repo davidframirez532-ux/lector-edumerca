@@ -663,7 +663,28 @@ function lineaTxt(l){
   if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
   return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} ${l.factor < 1 ? "÷ " + num(Math.round(1 / l.factor)) : "× " + num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
     (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") + notasIva(l) +
-    (l.alerta ? `<br><span style="color:#ffd23f">⚠ ${esc(l.alerta)}</span>` : "");
+    (l.alerta ? `<br><span style="color:${l.margen_revisar ? "#ff9a86" : "#ffd23f"}">⚠ ${esc(l.alerta)}</span>` +
+      (l.margen_revisar ? `<br><b style="color:#ff9a86">Toca la línea: corrige el factor${l.factor_margen ? " (probable: " + esc(l.factor_margen) + ")" : ""} o marca que el margen está bien</b>` : "") : "");
+}
+/* Margen por revisar: "El margen está bien" con motivo, o volver a revisarlo */
+async function ignorarMargenLinea(l, reactivar){
+  let motivo = "";
+  if(!reactivar){
+    motivo = await preguntar(`${l.nombre} · margen ${num(l.margen_venta)}% sobre la venta`, [
+      ["🎁 Bonificación", "El proveedor regaló unidades y el costo promedio bajó", "Bonificación"],
+      ["💲 Margen real", "El factor está bien y el producto deja ese margen (ej. encendedores)", "Margen real"],
+      ["✏️ Otro motivo", "Lo escribes tú", "otro"]]);
+    if(!motivo) return;
+    if(motivo === "otro"){
+      const r = await pedirForm("¿Por qué el margen está bien?", [{id: "m", label: "Motivo", valor: "", inputmode: "text",
+        validar: v => !!v.trim() || "Escribe el motivo"}], "Guardar");
+      if(!r) return;
+      motivo = r.m;
+    }
+  }else if(!confirm("¿Volver a revisar el margen de " + l.nombre + "? La factura no se podrá aprobar hasta corregir el factor o ignorarlo.")) return;
+  const d = await conEspera("Guardando…", () => postAdmin({accion: "compra_margen_ignorar", id: sel.id, linea: l.n,
+    codigo: l.codigo, nombre: l.nombre, motivo, reactivar: !!reactivar}));
+  if(d && d.factura) reemplazar(d.factura);
 }
 function pintarDetalle(){
   const f = sel; if(!f) return;
@@ -1095,7 +1116,7 @@ $("cpDetPanel").addEventListener("click", async e => {
     const p = await elegirProducto("¿Qué producto es?", actual, l.desc);
     if(!p) return;
     // Sin factor confirmado (asociación automática o pendiente): el campo no trae 1 escrito, hay que ponerlo
-    const fx = l.sin_factor ? (l.factor_sugerido || "") : l.factor && l.factor < 1 ? "1/" + Math.round(1 / l.factor) : (l.factor_sugerido || l.factor || 1);
+    const fx = l.margen_revisar && l.factor_margen ? l.factor_margen : l.sin_factor ? (l.factor_sugerido || "") : l.factor && l.factor < 1 ? "1/" + Math.round(1 / l.factor) : (l.factor_sugerido || l.factor || 1);
     const r = await pedirForm(p.nombre, [{id: "f", label: `En la factura: ${l.desc} · ${num(l.cant)} und. ` + "Factor. Caja de 15 que se vende suelta → 15 · Igual que en Siigo → 1 · " +
       "Viene suelto y en Siigo se vende por paquete (30 huevos = 1 cubeta) → 1/30", valor: fx, inputmode: "text",
       validar: v => leerFactor(v) > 0 || "Escribe un número (15) o una fracción (1/30)"}], "Asociar");
@@ -1107,6 +1128,10 @@ $("cpDetPanel").addEventListener("click", async e => {
       patch: {codigo: p.codigo, nombre: p.nombre, factor, sin_factor: false, destino: "INVENTARIO"},
       texto: `${l.desc} → ${p.nombre} × ${r.f}`, doc: (sel.es_nota ? "NC " : "") + sel.proveedor + " · " + sel.numero});
   }}];
+  if(l.margen_revisar) ops.push({t: "✅ El margen está bien (ignorar)", sub: `Margen de ${num(l.margen_venta)}% sobre la venta. ` +
+    "Para bonificaciones o productos que sí dejan ese margen", fn: () => setTimeout(() => ignorarMargenLinea(l), 60)});
+  else if(l.margen_ignorado) ops.push({t: "↩ Volver a revisar el margen", sub: "Ignorado: " + l.margen_ignorado,
+    fn: () => setTimeout(() => ignorarMargenLinea(l, true), 60)});
   if(MOSTRAR_IC_VENTA && l.ic_estado && l.ic_estado !== "igual") ops.unshift({t: l.ic_estado === "falta" ? "🧾 Agregar el impoconsumo a la venta" : "🧾 Actualizar el impoconsumo de la venta",
     sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   ops.push({t: "🔀 Repartir en varios productos", sub: l.destino === "MEZCLA" ? "Ahora: " + l.nombre : "Ej. caja con 6 de un sabor y 6 de otro", fn: () => armarMezcla(l)});
@@ -1993,7 +2018,62 @@ window.pintarKpis = function(){
     if(cont) cont.insertAdjacentHTML("afterbegin", hic + hg + h);
   }catch(e){ console.warn("Alertas de pagos:", e); }
   try{ pintarIgnorarIva(); }catch(e){ console.warn("Ignorar IVA:", e); }
+  try{ pintarMargenes(); }catch(e){ console.warn("Márgenes:", e); }
 };
+/* ══════════════ MÁRGENES POR REVISAR (03_costos) ══════════════
+   Productos cuyo último costo deja más de 25% de margen sobre la venta, con la factura que lo dejó.
+   "Ignorar" (bonificación, margen real…) los pasa a "Márgenes ignorados", donde se pueden reactivar. */
+function pintarMargenes(){
+  const k = kpis || {}, panel = $("kpiPanel");
+  const lista = k.margenes_revisar || [], ign = k.margenes_ignorados || [];
+  if(!lista.length && !ign.length) return;
+  const sub = x => [x.margen_venta_pct != null ? `margen ${num(x.margen_venta_pct)}%` : "",
+    x.costo_ultimo ? "costo " + plata(x.costo_ultimo) + " sin IVA" : "", x.precio ? "precio " + plata(x.precio) : "",
+    x.doc ? esc(x.doc) : "", x.factura_prov ? "fac. " + esc(x.factura_prov) : "", esc(x.proveedor || x.nit || ""),
+    x.ignorado ? "ignorado " + esc(x.ignorado) : x.fecha ? esc(dmy(x.fecha)) : "", x.motivo ? "motivo: " + esc(x.motivo) : "", x.quien ? esc(x.quien) : ""].filter(Boolean).join(" · ");
+  const boton = (i, tipo) => `<button class="sec chico" data-mr-${tipo}="${i}"
+    style="margin-left:8px;padding:3px 10px;font-size:.8rem;flex:none">${tipo === "ignorar" ? "Ignorar" : "Reactivar"}</button>`;
+  const fila = (x, acc) => `<div class="fila-dato" style="display:flex;align-items:center"><span style="flex:1">${esc(x.nombre || x.codigo)}
+    <small style="display:block;opacity:.65">${esc(x.codigo || "")} · ${sub(x)}</small></span>${acc}</div>`;
+  let h = `<details class="alerta"><summary><span>Márgenes por revisar</span>
+    <span class="num-alerta ${lista.length ? "" : "cero"}">${lista.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">Más de 25% de margen sobre la venta con el último costo. Casi siempre es un factor mal puesto:
+    revisa esa factura en Siigo. Si es bonificación o el margen es real, tócalo en "Ignorar".</p>${lista.map((x, i) => fila(x, boton(i, "ignorar"))).join("")}</details>`;
+  if(ign.length) h += `<details class="alerta"><summary><span>Márgenes ignorados</span><span class="num-alerta cero">${ign.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">No alertan. Revisa que de verdad sean bonificaciones o márgenes reales.</p>${ign.map((x, i) => fila(x, boton(i, "reactivar"))).join("")}</details>`;
+  const bloque = [...panel.querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
+  const cont = bloque && bloque.querySelector("div");
+  if(cont) cont.insertAdjacentHTML("afterbegin", h);
+  else panel.insertAdjacentHTML("beforeend", `<div class="bloque"><h3>Márgenes</h3>${h}</div>`);
+}
+$("kpiPanel").addEventListener("click", async e => {
+  const b = e.target.closest("[data-mr-ignorar], [data-mr-reactivar]"); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const reactivar = b.dataset.mrReactivar !== undefined;
+  const x = ((kpis || {})[reactivar ? "margenes_ignorados" : "margenes_revisar"] || [])[Number(reactivar ? b.dataset.mrReactivar : b.dataset.mrIgnorar)];
+  if(!x) return;
+  let motivo = "";
+  if(!reactivar){
+    motivo = await preguntar(`${x.nombre} · margen ${num(x.margen_venta_pct)}%`, [
+      ["🎁 Bonificación", "El proveedor regaló unidades y el costo bajó", "Bonificación"],
+      ["💲 Margen real", "El costo está bien y el producto deja ese margen", "Margen real"],
+      ["✏️ Otro motivo", "Lo escribes tú", "otro"]]);
+    if(!motivo) return;
+    if(motivo === "otro"){
+      const r = await pedirForm("¿Por qué el margen está bien?", [{id: "m", label: "Motivo", valor: "", inputmode: "text",
+        validar: v => !!v.trim() || "Escribe el motivo"}], "Guardar");
+      if(!r) return;
+      motivo = r.m;
+    }
+  }else if(!confirm(`¿Reactivar ${x.nombre}? Vuelve a alertar si el margen sigue alto.`)) return;
+  b.disabled = true; b.textContent = "…";
+  try{
+    const d = await postAdmin({accion: "margen_ignorar", clave: x.clave, codigo: x.codigo, nombre: x.nombre, nit: x.nit,
+      numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, margen: x.margen_venta_pct, motivo, reactivar});
+    if(kpis){ kpis.margenes_revisar = d.margenes_revisar || []; kpis.margenes_ignorados = d.margenes_ignorados || []; }
+    window.pintarKpis();
+  }catch(err){ b.disabled = false; b.textContent = reactivar ? "Reactivar" : "Ignorar"; alert("No se guardó: " + err.message); }
+});
 /* ══════════════ ALERTAS DE IVA: IGNORAR / REACTIVAR ══════════════
    Cada alerta de la revisión de IVA lleva un botón "Ignorar" (ej. pagos a la contadora que no son productos).
    Lo ignorado deja de alertar y queda en "Ignorados en la revisión de IVA", donde se puede reactivar. */
