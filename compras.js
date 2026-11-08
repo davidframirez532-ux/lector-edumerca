@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v62";
-const SERVIDOR_MINIMO = 55;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v63";
+const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -142,6 +142,10 @@ const html = `
   .pr-fila .pr-precios{font-size:1.05rem;margin:2px 0}
   .pr-fila .pr-sub{font-size:.82rem;opacity:.85}
   .pr-acciones{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .pr-costos{border-collapse:collapse;margin:4px 0 2px;font-size:.88rem;min-width:62%}
+  .pr-costos td{padding:1px 0}
+  .pr-costos td:last-child{text-align:right;padding-left:14px;font-variant-numeric:tabular-nums}
+  .pr-costos .pr-total td{border-top:1px solid rgba(251,250,245,.35);font-weight:600;padding-top:2px}
   .pr-acciones .chip{text-transform:none;padding:6px 12px}
   .cp-mes{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 4px;font-weight:600;font-size:.95rem;
     color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
@@ -1229,8 +1233,9 @@ function pintarPrecios(){
       return `<div class="pr-fila">
         <div class="pr-nom">${esc(p.nombre)}</div>
         <div class="pr-sub">Código ${esc(p.codigo)}${p.barras && p.barras !== p.codigo ? " · barras " + esc(p.barras) : ""}</div>
-        <div class="pr-precios">Precio <b>${plata(p.precio_actual)}</b> · costo ${plata(p.costo)} · margen
+        <div class="pr-precios">Precio de venta <b>${plata(p.precio_actual)}</b> · margen
           <b style="color:${perdida ? "#ff9a86" : "inherit"}">${pctTxt(p.margen_actual)}</b>${perdida ? " ⚠ a pérdida" : ""}</div>
+        ${prDesglose(p)}
         ${pm && pm > p.precio_actual ? `<div class="pr-sub">Al ${pctTxt(meta)}: <b style="color:var(--amarillo)">${plata(pm)}</b> (sube ${plata(pm - p.precio_actual)})</div>` : ""}
         ${me ? `<div class="pr-sub">Último cambio en la app: ${plata(me.precio)}${me.margen != null && !isNaN(me.margen) ? " al " + pctTxt(me.margen) : ""} · ${esc(me.fecha || "")}</div>` : ""}
         <div class="pr-sub">Última factura: ${esc(f.proveedor || "")}${f.numero ? " · " + esc(f.numero) : ""} · ${esc(f.fecha || "")}` +
@@ -1244,6 +1249,17 @@ function pintarPrecios(){
       </div>`;
     }).join("") : `<div class="vacio">${prCargando ? "Cargando…" : prVerIgn ? "No hay productos ignorados." : "No hay productos en esta franja."}</div>`) +
     (d.nota ? `<p class="np-ayuda" style="margin:10px 2px">${esc(d.nota)}</p>` : "");
+}
+/* Costo por unidad de la última compra, claro: sin IVA + IVA + otros impuestos = costo total */
+function prDesglose(p){
+  if(p.costo_sin_iva == null) return `<div class="pr-sub">Costo por unidad ${plata(p.costo)} con impuestos (toca ↻ para ver el costo sin IVA)</div>`;
+  const fila = (t, v, fuerte) => `<tr${fuerte ? ' class="pr-total"' : ""}><td>${t}</td><td>${plata(v)}</td></tr>`;
+  return `<table class="pr-costos">
+    ${fila("Costo sin IVA", p.costo_sin_iva)}
+    ${fila("+ IVA" + (p.iva_pct ? " " + num(p.iva_pct) + "%" : ""), p.iva || 0)}
+    ${p.otros ? fila("+ Otros impuestos (impoconsumo, IBUA…)", p.otros) : ""}
+    ${fila("= Costo con impuestos", p.costo, true)}
+  </table>`;
 }
 function prEstado(t, malo){ const e = $("cpPrEstado"); e.style.color = malo ? "#ff9a86" : ""; e.textContent = t; }
 async function prConEspera(texto, fn){
@@ -1262,7 +1278,8 @@ async function prCambiarPrecio(p){
     const precio = precioConMargen(p.costo, m), dif = precio - p.precio_actual;
     return {t: `${pctTxt(m)} → ${plata(precio)}`, sub: dif === 0 ? "Igual al precio de hoy" : (dif > 0 ? "Sube " : "Baja ") + plata(Math.abs(dif)), v: {precio, margen: m}};
   };
-  const elegido = await new Promise(ok => elegir(`${p.nombre} · hoy ${plata(p.precio_actual)} (${pctTxt(p.margen_actual)})`,
+  const elegido = await new Promise(ok => elegir(`${p.nombre} · hoy ${plata(p.precio_actual)} (${pctTxt(p.margen_actual)}) · costo ` +
+    (p.costo_sin_iva != null ? `${plata(p.costo_sin_iva)} sin IVA, ` : "") + `${plata(p.costo)} con impuestos`,
     ms.map(op).map(o => ({t: o.t, sub: o.sub, fn: () => ok(o.v)})).concat([
       {t: "Otro margen…", sub: "Escribe el % sobre la venta", fn: () => {
         const m = leerMargen(prompt("Margen sobre la venta (%)", ""));
@@ -1352,7 +1369,8 @@ $("btnCpPrCompartir").addEventListener("click", async () => {
   if(!lista.length) return alert("No hay productos en la lista.");
   const titulo = prVerIgn ? "Ignorados" : prBandaActual().txt;
   const txt = `*Ajuste de precios · ${titulo}*\n` + lista.map(p =>
-    `• ${p.nombre} (${p.codigo}): ${plata(p.precio_actual)} · costo ${plata(p.costo)} · margen ${pctTxt(p.margen_actual)} · ` +
+    `• ${p.nombre} (${p.codigo}): precio ${plata(p.precio_actual)} · costo sin IVA ${plata(p.costo_sin_iva != null ? p.costo_sin_iva : p.costo)} · ` +
+    `con impuestos ${plata(p.costo)} · margen ${pctTxt(p.margen_actual)} · ` +
     `${p.factura.proveedor || ""} ${p.factura.numero || ""} ${p.factura.fecha || ""}`.trim()).join("\n");
   try{
     if(navigator.share) await navigator.share({text: txt});
