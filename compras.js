@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v63";
+const COMPRAS_VERSION = "compras v64";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -1225,7 +1225,12 @@ function pintarPrecios(){
   const lista = filtroPrecios(), d = prDatos, act = prBandaActual();
   const hace = Math.round((Date.now() - (d.t || 0)) / 6e4);
   const meta = !prVerIgn && isFinite(act.max) ? act.max : null;      // margen de arriba de la franja: precio para llegar a él
-  cont.innerHTML = `<p class="nota" style="margin:6px 0">Compras desde el ${esc(d.desde)} · revisado ${hace < 1 ? "ahora" : "hace " + (hace < 60 ? hace + " min" : Math.round(hace / 60) + " h")}.</p>` +
+  const viejo = (d.version_servidor || 0) < SERVIDOR_MINIMO;
+  cont.innerHTML = (viejo ? `<div class="bloque" style="border:2px solid var(--rojo)"><p class="nota" style="margin:0;opacity:1">
+      ⚠ <b>El servidor no está actualizado</b> (versión ${d.version_servidor || "anterior a la 56"}, se necesita ${SERVIDOR_MINIMO}), por eso no
+      sale el costo sin IVA. En Apps Script: pega 15_compras.gs → Implementar → Gestionar implementaciones → ✏️ → Versión: <b>Nueva versión</b> →
+      Implementar. Luego toca ↻ aquí.</p></div>` : "") +
+    `<p class="nota" style="margin:6px 0">Compras desde el ${esc(d.desde)} · revisado ${hace < 1 ? "ahora" : "hace " + (hace < 60 ? hace + " min" : Math.round(hace / 60) + " h")}.</p>` +
     (lista.length ? lista.map(p => {
       const f = p.factura || {}, i = d.productos.indexOf(p), perdida = p.margen_actual < 0;
       const pm = meta != null ? precioConMargen(p.costo, meta) : 0;
@@ -1252,7 +1257,7 @@ function pintarPrecios(){
 }
 /* Costo por unidad de la última compra, claro: sin IVA + IVA + otros impuestos = costo total */
 function prDesglose(p){
-  if(p.costo_sin_iva == null) return `<div class="pr-sub">Costo por unidad ${plata(p.costo)} con impuestos (toca ↻ para ver el costo sin IVA)</div>`;
+  if(p.costo_sin_iva == null) return `<div class="pr-sub">Costo con impuestos ${plata(p.costo)} · <span style="color:#ff9a86">falta el costo sin IVA: ver el aviso de arriba</span></div>`;
   const fila = (t, v, fuerte) => `<tr${fuerte ? ' class="pr-total"' : ""}><td>${t}</td><td>${plata(v)}</td></tr>`;
   return `<table class="pr-costos">
     ${fila("Costo sin IVA", p.costo_sin_iva)}
