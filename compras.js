@@ -3,8 +3,8 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v60";
-const SERVIDOR_MINIMO = 42;   /* versión de 15_compras.gs que necesita esta app */
+const COMPRAS_VERSION = "compras v61";
+const SERVIDOR_MINIMO = 54;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
@@ -104,6 +104,16 @@ const html = `
     <button class="ppal" id="btnCpImgCompartir" style="flex:2">Compartir imagen</button>
   </div>
 </section>
+<section class="pantalla" id="cpPrecios">
+  <div class="cabeza"><h2 style="font-size:1.35rem">Ajuste de precios</h2>
+    <button class="sec" id="btnCpPrActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
+    <button class="sec" id="btnCpPrVolver">Volver</button></div>
+  <div class="np-margenes" id="cpPrMargenes"></div>
+  <p id="cpPrEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
+  <input class="buscador" id="cpPrBuscar" type="search" placeholder="Buscar producto, código o proveedor" autocomplete="off" enterkeyhint="search">
+  <div class="items" id="cpPrItems"></div>
+  <div class="acciones"><button class="sec" id="btnCpPrCompartir" style="flex:1">Compartir lista</button></div>
+</section>
 <section class="pantalla" id="cpNuevo">
   <div class="cabeza"><h2 style="font-size:1.35rem">Producto nuevo</h2><button class="sec" id="btnCpNuevoVolver">Volver</button></div>
   <p id="cpNuevoEstado" style="margin:0;font-size:.9rem;text-align:center;min-height:1.2em;font-weight:600"></p>
@@ -123,14 +133,56 @@ const html = `
   .np-fila .buscador{flex:1;min-width:0}
   #cpNuevoPanel .buscador,#cpNuevoPanel select{width:100%;box-sizing:border-box}
   .np-ayuda{margin:4px 0 0;font-size:.8rem;opacity:.8;line-height:1.35}
+  .np-margenes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:none}
+  .np-margenes .chip{text-transform:none;padding:8px 14px;font-size:1rem}
+  .np-margenes input{width:84px;flex:none;padding:8px;font-size:1rem;text-align:center}
+  .pr-fila{border-bottom:1px solid rgba(251,250,245,.14);padding:10px 2px;font-size:.92rem;line-height:1.45}
+  .pr-fila .pr-nom{font-weight:600}
+  .pr-fila .pr-precios{font-size:1.05rem;margin:2px 0}
+  .pr-fila .pr-sub{font-size:.82rem;opacity:.85}
   .cp-mes{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 4px;font-weight:600;font-size:.95rem;
     color:var(--amarillo);border-bottom:1px solid rgba(251,250,245,.25)}
 </style>`;
 document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
-["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar", "cpNotas", "cpNuevo"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
+["cpDet", "cpDs", "cpCola", "cpTodas", "cpBuscar", "cpNotas", "cpNuevo", "cpPrecios"].forEach(id => { if(!ESCRIBIBLES.includes(id)) ESCRIBIBLES.push(id); });
+
+/* Pantalla siempre encendida mientras hay un proceso con el servidor (subir a Siigo, crear productos, leer PDF…):
+   si el celular apaga la pantalla a mitad de un proceso, Android congela la página y el proceso falla.
+   Usa el Wake Lock del navegador: se pide al empezar cualquier llamada (fetch) y se suelta 15 s después de la última.
+   Si la app pasa a segundo plano, el navegador lo suelta; al volver se pide otra vez si sigue algo corriendo. */
+(function(){
+  if(window.__pantallaEncendida) return;
+  window.__pantallaEncendida = true;
+  let activos = 0, lock = null, pidiendo = false, tSoltar = null;
+  async function pedir(){
+    if(lock || pidiendo || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    pidiendo = true;
+    try{
+      lock = await navigator.wakeLock.request("screen");
+      lock.addEventListener("release", () => { lock = null; });
+      if(!activos) soltarLuego();
+    }catch(e){ lock = null; }
+    finally{ pidiendo = false; }
+  }
+  function soltar(){ if(lock && !activos){ const l = lock; lock = null; l.release().catch(() => {}); } }
+  function soltarLuego(){ clearTimeout(tSoltar); tSoltar = setTimeout(soltar, 15000); }
+  window.pantallaOcupada = {
+    inicio(){ activos++; clearTimeout(tSoltar); pedir(); },
+    fin(){ activos = Math.max(0, activos - 1); if(!activos) soltarLuego(); }
+  };
+  const fetchOriginal = window.fetch.bind(window);
+  window.fetch = function(){
+    window.pantallaOcupada.inicio();
+    let p;
+    try{ p = fetchOriginal.apply(window, arguments); }
+    catch(e){ window.pantallaOcupada.fin(); throw e; }
+    return p.finally(() => window.pantallaOcupada.fin());
+  };
+  document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible" && activos) pedir(); });
+})();
 
 /* 🏠 en las pantallas nuevas */
-["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg", "cpNotas", "cpNuevo"].forEach(id => {
+["cpMenuProv", "cpMenuFact", "cpCola", "cpDet", "cpDs", "cpTodas", "cpBuscar", "cpAjustes", "cpAjDet", "cpImg", "cpNotas", "cpNuevo", "cpPrecios"].forEach(id => {
   const cab = $(id).querySelector(".cabeza");
   const b = document.createElement("button");
   b.className = "sec casita"; b.textContent = "🏠"; b.setAttribute("aria-label", "Menú principal");
@@ -143,9 +195,11 @@ const menu = document.querySelector("#compras .menu");
 const subProv = $("cpMenuProvBotones");
 [["btnProveedores", "Ver todos los proveedores", "ghost"], ["btnPedidos", "Pedidos sugeridos", "ppal"], ["btnAbastosPlaza", "Lista de abastos", "ghost"]]
   .forEach(([id, txt, cls]) => { const b = $(id); b.textContent = txt; b.className = cls; subProv.appendChild(b); });
-menu.innerHTML = `<button class="ppal" id="btnCpMenuProv">Proveedores</button><button class="ghost" id="btnCpMenuFact">Facturas</button>`;
+menu.innerHTML = `<button class="ppal" id="btnCpMenuProv">Proveedores</button><button class="ghost" id="btnCpMenuFact">Facturas</button>` +
+  `<button class="ghost" id="btnCpMenuPrecios">Ajuste de precios</button>`;
 $("btnCpMenuProv").addEventListener("click", () => irMenu("cpMenuProv"));
 $("btnCpMenuFact").addEventListener("click", () => irMenu("cpMenuFact"));
+$("btnCpMenuPrecios").addEventListener("click", () => abrirPrecios());
 $("btnCpMenuProvVolver").addEventListener("click", () => irMenu("compras"));
 $("btnCpMenuFactVolver").addEventListener("click", () => irMenu("compras"));
 /* Los "Volver" de proveedores, pedidos y abastos ahora regresan al submenú */
@@ -858,7 +912,7 @@ function avisoNuevo(l){
   const pv = precioSugerido(l, f, ivaDeLinea(l));
   alert(`Producto nuevo: créalo primero en Siigo.\n\nNombre: ${String(l.desc).toUpperCase()}\nCódigo: Escanéalo (el código de barras del producto, no el código del proveedor). ` +
     `Ponlo también en "Código de barras".\nIVA: ${l.iva ? l.iva + "%" : "0% / excluido (verifícalo)"}\n` +
-    (pv ? `Precio sugerido: ${plata(pv.precio)} (costo ${plata(pv.costo)} sin IVA por unidad${f !== 1 ? ", con factor " + num(f) : ""}, margen 8%)\n` : "") +
+    (pv ? `Precio sugerido: ${plata(pv.precio)} (costo ${plata(pv.costo)} por unidad con impuestos${f !== 1 ? ", con factor " + num(f) : ""}, margen ${pctTxt(pv.margen)})\n` : "") +
     `Categoría: la que corresponda (no se puede cambiar después de la primera venta).\n\nDespués de crearlo, en Inventario toca "Actualizar inventario desde Siigo" y vuelve aquí a asociarlo.`);
 }
 
@@ -869,12 +923,30 @@ let nuevoCtx = null;
 const OPC_KEY = "cp_prod_opciones";
 const ivaDeLinea = l => !l.iva ? "0X" : Math.round(l.iva) === 5 ? "5" : "19";
 const pctIva = t => t === "19" ? 19 : t === "5" ? 5 : 0;
-/* Precio como lo pone la tienda: costo sin IVA ÷ 0,92 (8%) + IVA, redondeado hacia arriba a múltiplo de 100 */
-function precioSugerido(l, factor, ivaTipo){
+/* Márgenes generales (vienen del servidor, CP.MARGENES) y el último que elegiste */
+const MARGENES_DEF = [5, 8, 12, 15];
+const margenesApp = () => (cola && Array.isArray(cola.margenes) && cola.margenes.length) ? cola.margenes : MARGENES_DEF;
+function margenGuardado(){
+  const m = Number(leerJSON("cp_margen", null));
+  return m >= 0 && m < 90 ? m : ((cola && cola.margen_defecto) || 8);
+}
+function guardarMargen(m){ try{ localStorage.setItem("cp_margen", JSON.stringify(m)); }catch(e){} }
+const leerMargen = v => { const m = Number(String(v || "").replace(",", ".").replace(/[^\d.]/g, "")); return String(v || "").trim() !== "" && m >= 0 && m < 90 ? m : null; };
+const pctTxt = m => num(Math.round(m * 10) / 10) + "%";
+/* Precio = costo por unidad CON TODOS los impuestos ÷ (1 − margen), al siguiente múltiplo de $100 (igual que 15_compras.gs) */
+const precioConMargen = (costo, m) => costo > 0 && m >= 0 && m < 90 ? Math.ceil(costo / (1 - m / 100) / 100 - 1e-9) * 100 : 0;
+/* Costo por unidad de venta con todo: (base + IVA + impoconsumo/IBUA/ICUI) ÷ (cantidad × factor).
+   El IVA es el de la factura; si cambias el IVA del producto, se recalcula con el que elegiste. */
+function precioSugerido(l, factor, ivaTipo, margen){
   const und = (Number(l.cant) || 0) * (factor || 1);
-  if(!(und > 0) || !(Number(l.base) > 0)) return null;
-  const costo = (Number(l.base) + (Number(l.otros) || 0)) / und;
-  return {costo, precio: Math.ceil(costo / 0.92 * (1 + pctIva(ivaTipo) / 100) / 100) * 100};
+  const base = Number(l.base) || 0;
+  if(!(und > 0) || !(base > 0)) return null;
+  const pct = pctIva(ivaTipo), ivaXml = Number(l.iva_xml) || 0;
+  const iva = Math.round(Number(l.iva) || 0) === pct && ivaXml > 0 ? ivaXml : base * pct / 100;
+  const sinIva = (base + (Number(l.otros) || 0)) / und;
+  const costo = (base + iva + (Number(l.otros) || 0)) / und;
+  const m = margen == null ? margenGuardado() : margen;
+  return {costo, sinIva, margen: m, precio: precioConMargen(costo, m)};
 }
 async function abrirNuevo(l){
   if(!sel) return;
@@ -925,20 +997,48 @@ function pintarNuevo(op){
     <label class="np-campo" for="npFactor">Factor</label>
     <input class="buscador" id="npFactor" inputmode="text" autocomplete="off" value="${esc(fx0 < 1 ? "1/" + Math.round(1 / fx0) : fx0)}">
     <p class="np-ayuda">Cuántas unidades trae CADA unidad de la factura (no el total). Caja de 25 encendedores que vendes sueltos → 25 · Viene suelto → 1.</p>
+    <label class="np-campo">Margen sobre la venta</label>
+    <div class="np-margenes" id="npMargenes"></div>
     <label class="np-campo" for="npPrecio">Precio de venta (con IVA)</label>
     <input class="buscador" id="npPrecio" inputmode="numeric" autocomplete="off" placeholder="Múltiplo de 100">
     <p class="np-ayuda" id="npSug"></p>
   </div>`;
+  nuevoCtx.margen = margenGuardado();
+  nuevoCtx.auto = true;                     // el precio lo pone el margen hasta que lo escribas a mano
   pintarGrupos(op);
+  pintarMargenesNuevo();
   actualizarSug();
+}
+/* Botones de margen (5, 8, 12, 15 %) y casilla para escribir otro */
+function htmlMargenes(actual, idOtro){
+  const ms = margenesApp(), esOtro = actual != null && !ms.some(m => Number(m) === Number(actual));
+  return ms.map(m => `<button class="chip" data-margen="${m}" aria-pressed="${Number(m) === Number(actual)}">${pctTxt(Number(m))}</button>`).join("") +
+    `<input class="buscador" id="${idOtro}" inputmode="decimal" autocomplete="off" placeholder="Otro %" value="${esOtro ? esc(String(actual)) : ""}"` +
+    `${esOtro ? ' style="border-color:var(--amarillo)"' : ""}>`;
+}
+function pintarMargenesNuevo(){
+  if(!nuevoCtx || !$("npMargenes")) return;
+  $("npMargenes").innerHTML = htmlMargenes(nuevoCtx.margen, "npMargenOtro");
+}
+function marcarMargenes(cont, actual, idOtro){
+  cont.querySelectorAll("[data-margen]").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.margen) === Number(actual))));
+  const o = $(idOtro);
+  if(o) o.style.borderColor = actual != null && !margenesApp().some(m => Number(m) === Number(actual)) ? "var(--amarillo)" : "";
 }
 function actualizarSug(){
   if(!nuevoCtx || !$("npSug")) return;
   const f = leerFactor($("npFactor").value);
-  const pv = f ? precioSugerido(nuevoCtx.l, f, $("npIva").value) : null;
+  const pv = f ? precioSugerido(nuevoCtx.l, f, $("npIva").value, nuevoCtx.margen) : null;
+  if(pv && nuevoCtx.auto && pv.precio) $("npPrecio").value = pv.precio;
+  const precio = Number(String($("npPrecio").value).replace(/\D/g, ""));
+  const real = pv && precio > 0 ? (1 - pv.costo / precio) * 100 : null;
   $("npSug").innerHTML = !f ? `<span style="color:#ff9a86">Escribe el factor (15 o 1/30)</span>`
-    : pv ? `Sugerido: <b>${plata(pv.precio)}</b> (costo ${plata(pv.costo)} sin IVA por unidad, margen 8%) ` +
-           `<button class="chip" id="npUsarSug" style="text-transform:none;padding:4px 10px">Usar</button>` : "";
+    : pv ? `Costo por unidad con impuestos: <b>${plata(pv.costo)}</b>` +
+           (Math.abs(pv.costo - pv.sinIva) > 0.5 ? ` (${plata(pv.sinIva)} sin IVA)` : "") + `<br>` +
+           `Sugerido al ${pctTxt(pv.margen)}: <b>${plata(pv.precio)}</b>` +
+           (!nuevoCtx.auto && precio !== pv.precio ? ` <button class="chip" id="npUsarSug" style="text-transform:none;padding:4px 10px">Usar</button>` : "") +
+           (real != null ? `<br>Con ${plata(precio)} el margen queda en <b style="color:${real < 0 ? "#ff9a86" : "inherit"}">${pctTxt(real)}</b> sobre la venta` : "")
+    : "";
 }
 function ponerCodigoNuevo(c){
   const v = String(c || "").replace(/\s/g, "");
@@ -949,7 +1049,18 @@ function ponerCodigoNuevo(c){
   $("cpNuevoEstado").textContent = ya ? "⚠ Ese código ya existe: " + ya.n : "Código " + v + " listo";
   if(navigator.vibrate) navigator.vibrate(40);
 }
-$("cpNuevoPanel").addEventListener("input", e => { if(e.target.id === "npFactor") actualizarSug(); });
+$("cpNuevoPanel").addEventListener("input", e => {
+  if(!nuevoCtx) return;
+  if(e.target.id === "npFactor") actualizarSug();
+  else if(e.target.id === "npPrecio"){ nuevoCtx.auto = !String(e.target.value).trim(); actualizarSug(); }
+  else if(e.target.id === "npMargenOtro"){
+    const m = leerMargen(e.target.value);
+    if(m == null) return;
+    nuevoCtx.margen = m; nuevoCtx.auto = true; guardarMargen(m);
+    marcarMargenes($("npMargenes"), m, "npMargenOtro");
+    actualizarSug();
+  }
+});
 $("cpNuevoPanel").addEventListener("change", e => { if(e.target.id === "npIva") actualizarSug(); });
 $("cpNuevoPanel").addEventListener("keydown", e => {
   if(e.key === "Enter" && e.target.id === "npCod"){ e.preventDefault(); ponerCodigoNuevo(e.target.value); $("npNom").focus(); }
@@ -957,10 +1068,14 @@ $("cpNuevoPanel").addEventListener("keydown", e => {
 $("cpNuevoPanel").addEventListener("click", e => {
   if(e.target.closest("#npCam")) return abrirCamara("asociar");
   if(e.target.closest("#npUsarXml") && nuevoCtx) return ponerCodigoNuevo(nuevoCtx.l.barras);
-  if(e.target.closest("#npUsarSug") && nuevoCtx){
-    const pv = precioSugerido(nuevoCtx.l, leerFactor($("npFactor").value), $("npIva").value);
-    if(pv) $("npPrecio").value = pv.precio;
+  const bm = e.target.closest("[data-margen]");
+  if(bm && nuevoCtx){
+    nuevoCtx.margen = Number(bm.dataset.margen); nuevoCtx.auto = true; guardarMargen(nuevoCtx.margen);
+    if($("npMargenOtro")) $("npMargenOtro").value = "";
+    marcarMargenes($("npMargenes"), nuevoCtx.margen, "npMargenOtro");
+    return actualizarSug();
   }
+  if(e.target.closest("#npUsarSug") && nuevoCtx){ nuevoCtx.auto = true; actualizarSug(); }
 });
 $("btnCpNuevoVolver").addEventListener("click", () => { nuevoCtx = null; ir("cpDet"); });
 /* La cámara y el lector de código de barras llenan el código mientras la pantalla está abierta */
@@ -1001,10 +1116,12 @@ $("btnCpNuevoCrear").addEventListener("click", async () => {
   if(!(precio > 0)) return malo("Pon el precio de venta");
   if(precio % 100) return malo("El precio debe ser múltiplo de 100");
   const nomGrupo = $("npGrupo").selectedOptions[0].textContent, nomIva = $("npIva").selectedOptions[0].textContent.replace(" (el de la factura)", "");
-  const pv = precioSugerido(l, factor, iva);
+  const pv = precioSugerido(l, factor, iva, c.margen);
+  const mReal = pv ? (1 - pv.costo / precio) * 100 : null;
+  if(mReal != null && mReal < 0 && !confirm(`⚠ Con ${plata(precio)} lo vendes por debajo del costo (${plata(pv.costo)} con impuestos). ¿Seguir?`)) return;
   if(!confirm(`¿Crear en Siigo?\n\n${nombre}\nCódigo: ${cod}\nCategoría: ${nomGrupo} (no se puede cambiar después de la primera venta)\n${nomIva} · precio ${plata(precio)}\n` +
     `Factor ${$("npFactor").value} → ${num((Number(l.cant) || 0) * factor)} und en Siigo` +
-    (pv ? `\nCosto ${plata(pv.costo * (1 + pctIva(iva) / 100))} con IVA por unidad (margen ${Math.round((precio / (pv.costo * (1 + pctIva(iva) / 100)) - 1) * 100)}% sobre el costo)` : ""))) return;
+    (pv ? `\nCosto ${plata(pv.costo)} por unidad con impuestos · margen ${pctTxt(mReal)} sobre la venta` : ""))) return;
   const btn = $("btnCpNuevoCrear"), t0 = Date.now();
   btn.disabled = true; msg.style.color = "";
   const reloj = setInterval(() => { msg.textContent = "Creando en Siigo… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
@@ -1019,6 +1136,106 @@ $("btnCpNuevoCrear").addEventListener("click", async () => {
     $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "✓ " + d.mensaje;
   }catch(e){ malo(e.message); }
   finally{ clearInterval(reloj); btn.disabled = false; }
+});
+
+/* ══════════════ AJUSTE DE PRECIOS (Compras → Ajuste de precios) ══════════════
+   Productos cuyo precio de venta quedó por debajo del sugerido con el costo de su ÚLTIMA compra en Siigo
+   (con IVA y los otros impuestos), con el margen que elijas: 5, 8, 12, 15 % u otro. */
+const PR_KEY = "cp_ajuste_precios";
+let prDatos = leerJSON(PR_KEY, null), prMargen = null, prCargando = false;
+function abrirPrecios(){
+  if(prMargen == null) prMargen = prDatos && prDatos.margen != null ? prDatos.margen : margenGuardado();
+  $("cpPrMargenes").innerHTML = htmlMargenes(prMargen, "cpPrOtro");
+  abrir("cpPrecios");
+  pintarPrecios();
+  if(!prDatos || Number(prDatos.margen) !== Number(prMargen) || Date.now() - (prDatos.t || 0) > 3 * 36e5) cargarPrecios();
+}
+async function cargarPrecios(){
+  if(prCargando) return;
+  prCargando = true;
+  const est = $("cpPrEstado"), t0 = Date.now(), m = prMargen;
+  est.style.color = "";
+  const reloj = setInterval(() => { est.textContent = `Revisando las compras en Siigo al ${pctTxt(m)}… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
+  est.textContent = `Revisando las compras en Siigo al ${pctTxt(m)}…`;
+  try{
+    const d = await postAdmin({accion: "compras_ajuste_precios", margen: m});
+    if(!d || d.ok === false) throw new Error((d && d.error) || "Sin respuesta del servidor");
+    d.t = Date.now();
+    if(Number(m) === Number(prMargen)){ prDatos = d; try{ localStorage.setItem(PR_KEY, JSON.stringify(d)); }catch(e){} }
+    est.textContent = "";
+  }catch(e){
+    est.style.color = "#ff9a86";
+    est.textContent = /accion|acción|desconocid/i.test(e.message) ? "Actualiza el servidor (15_compras.gs v54) y crea una nueva versión de la implementación" : e.message;
+  }finally{
+    clearInterval(reloj); prCargando = false;
+    if(Number(m) !== Number(prMargen)) cargarPrecios();     // cambiaste el margen mientras cargaba
+    else pintarPrecios();
+  }
+}
+function filtroPrecios(){
+  const q = normal($("cpPrBuscar").value || "").trim();
+  const lista = (prDatos && Number(prDatos.margen) === Number(prMargen) && prDatos.productos) || [];
+  if(!q) return lista;
+  const pal = q.split(/\s+/);
+  return lista.filter(p => { const t = normal([p.nombre, p.codigo, p.barras, p.factura.proveedor, p.factura.numero].join(" ")); return pal.every(w => t.includes(w)); });
+}
+function pintarPrecios(){
+  const cont = $("cpPrItems");
+  if(!prDatos || Number(prDatos.margen) !== Number(prMargen)){
+    cont.innerHTML = `<div class="vacio">${prCargando ? "Cargando…" : "Toca ↻ para revisar los precios."}</div>`;
+    return;
+  }
+  const lista = filtroPrecios(), d = prDatos;
+  const hace = Math.round((Date.now() - (d.t || 0)) / 6e4);
+  const cab = `<p class="nota" style="margin:6px 0">${d.productos.length} de ${d.revisados} productos comprados desde el ${esc(d.desde)} ` +
+    `quedan por debajo del ${pctTxt(d.margen)}. Revisado ${hace < 1 ? "ahora" : "hace " + (hace < 60 ? hace + " min" : Math.round(hace / 60) + " h")}.</p>`;
+  cont.innerHTML = cab + (lista.length ? lista.map(p => {
+    const f = p.factura || {};
+    const perdida = p.margen_actual < 0;
+    return `<div class="pr-fila">
+      <div class="pr-nom">${esc(p.nombre)}</div>
+      <div class="pr-sub">Código ${esc(p.codigo)}${p.barras && p.barras !== p.codigo ? " · barras " + esc(p.barras) : ""}</div>
+      <div class="pr-precios">${plata(p.precio_actual)} → <b style="color:var(--amarillo)">${plata(p.precio_sugerido)}</b>
+        <span style="font-size:.85rem;opacity:.85">(+${plata(p.subir)})</span></div>
+      <div class="pr-sub">Costo ${plata(p.costo)} con impuestos · margen hoy
+        <b style="color:${perdida ? "#ff9a86" : "inherit"}">${pctTxt(p.margen_actual)}</b>${perdida ? " ⚠ a pérdida" : ""} · con el nuevo precio ${pctTxt(p.margen_sugerido)}</div>
+      <div class="pr-sub">Última factura: ${esc(f.proveedor || "")}${f.numero ? " · " + esc(f.numero) : ""} · ${esc(f.fecha || "")}` +
+        `${f.doc_siigo ? " · " + esc(f.doc_siigo) : ""}${f.cantidad ? " · " + num(f.cantidad) + " und" : ""}</div>
+    </div>`;
+  }).join("") : `<div class="vacio">${d.productos.length ? "Nada coincide con la búsqueda." : "✅ Todos los precios cubren el " + pctTxt(d.margen) + " con su última compra."}</div>`) +
+    (d.nota ? `<p class="np-ayuda" style="margin:10px 2px">${esc(d.nota)}</p>` : "");
+}
+function cambiarMargenPrecios(m){
+  if(m == null || Number(m) === Number(prMargen)) return;
+  prMargen = m; guardarMargen(m);
+  marcarMargenes($("cpPrMargenes"), m, "cpPrOtro");
+  pintarPrecios();
+  cargarPrecios();
+}
+$("cpPrMargenes").addEventListener("click", e => {
+  const b = e.target.closest("[data-margen]"); if(!b) return;
+  if($("cpPrOtro")) $("cpPrOtro").value = "";
+  cambiarMargenPrecios(Number(b.dataset.margen));
+});
+let tPrOtro = null;
+$("cpPrMargenes").addEventListener("input", e => {
+  if(e.target.id !== "cpPrOtro") return;
+  clearTimeout(tPrOtro);
+  tPrOtro = setTimeout(() => cambiarMargenPrecios(leerMargen(e.target.value)), 900);   // espera a que termines de escribir
+});
+$("cpPrBuscar").addEventListener("input", pintarPrecios);
+$("btnCpPrActualizar").addEventListener("click", () => cargarPrecios());
+$("btnCpPrVolver").addEventListener("click", () => irMenu("compras"));
+$("btnCpPrCompartir").addEventListener("click", async () => {
+  const lista = filtroPrecios();
+  if(!lista.length) return alert("No hay productos en la lista.");
+  const txt = `*Ajuste de precios · margen ${pctTxt(prMargen)}*\n` + lista.map(p =>
+    `• ${p.nombre} (${p.codigo}): ${plata(p.precio_actual)} → *${plata(p.precio_sugerido)}* · costo ${plata(p.costo)} · ` +
+    `${p.factura.proveedor || ""} ${p.factura.numero || ""} ${p.factura.fecha || ""}`.trim()).join("\n");
+  try{
+    if(navigator.share) await navigator.share({text: txt});
+    else { await navigator.clipboard.writeText(txt); alert("Lista copiada."); }
+  }catch(e){ if(e && e.name !== "AbortError") alert("No se pudo compartir: " + e.message); }
 });
 
 /* Una línea del proveedor repartida en 2 o más productos con cantidades fijas.
