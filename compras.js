@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v66";
+const COMPRAS_VERSION = "compras v67";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -472,7 +472,7 @@ setInterval(pintarCampana, 5000);                                      // la cam
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ORDENES = [["reciente", "Más recientes"], ["antigua", "Más antiguas"], ["proveedor", "Proveedor A-Z"], ["valor", "Mayor valor"]];
-const fx = {cola: {mes: "", prov: "", orden: "reciente"}, todas: {mes: "", prov: "", orden: "reciente"}};
+const fx = {cola: {mes: "", prov: "", orden: "antigua"}, todas: {mes: "", prov: "", orden: "reciente"}};   // por aprobar: primero las más antiguas
 const mesDe = f => String(f.fecha || "").slice(0, 7);
 const nombreMes = m => m ? MESES_L[Number(m.slice(5, 7)) - 1] + " " + m.slice(0, 4) : "Sin fecha";
 /* Pinta los 3 selectores con las opciones que existen en la lista (base = antes de filtrar por mes y proveedor) */
