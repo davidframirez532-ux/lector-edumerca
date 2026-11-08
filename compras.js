@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v65";
+const COMPRAS_VERSION = "compras v66";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -1161,9 +1161,14 @@ function prBandas(){
     b.push({k: "b" + i, t: pctTxt(ms[i]), min: ms[i - 1], max: ms[i], txt: `Margen mayor que ${pctTxt(ms[i - 1])} y menor que ${pctTxt(ms[i])}`});
   return b;
 }
-/* Solo están por ajustar los que quedan por debajo del margen general más alto (15%): los que ya lo superan no salen */
+/* Están por ajustar solo los que quedan por debajo del margen general más alto (15%) y cuyo precio NO es exactamente
+   el de uno de los márgenes generales (costo ÷ 0,95 · 0,92 · 0,88 · 0,85 al siguiente múltiplo de $100).
+   Por el redondeo a $100 el margen real queda un poco por encima (ej. al 8% puede dar 8,6%): eso cuenta como exacto. */
 const margenTope = () => Math.max.apply(null, margenesApp().map(Number));
-const porAjustar = p => p.margen_actual < margenTope();
+/* Margen general con el que da exacto el precio de hoy, o null. El costo llega redondeado: se mira ±$0,5 */
+const margenExacto = p => margenesApp().map(Number).find(m =>
+  p.precio_actual >= precioConMargen(p.costo - 0.5, m) && p.precio_actual <= precioConMargen(p.costo + 0.5, m));
+const porAjustar = p => p.margen_actual < margenTope() && margenExacto(p) == null;
 const prLista = () => ((prDatos && prDatos.productos) || []).filter(porAjustar);
 function prBandaActual(){
   if(prFiltro && prFiltro.otro != null) return {k: "otro", min: -Infinity, max: Math.min(prFiltro.otro, margenTope()),
