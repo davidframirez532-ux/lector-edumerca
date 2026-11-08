@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v64";
+const COMPRAS_VERSION = "compras v65";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -1159,11 +1159,15 @@ function prBandas(){
   const b = [{k: "b0", t: pctTxt(ms[0]), min: -Infinity, max: ms[0], txt: `Margen menor que ${pctTxt(ms[0])} (incluye los que están a pérdida)`}];
   for(let i = 1; i < ms.length; i++)
     b.push({k: "b" + i, t: pctTxt(ms[i]), min: ms[i - 1], max: ms[i], txt: `Margen mayor que ${pctTxt(ms[i - 1])} y menor que ${pctTxt(ms[i])}`});
-  b.push({k: "mas", t: ">" + pctTxt(ult), min: ult, max: Infinity, txt: `Margen mayor que ${pctTxt(ult)}`});
   return b;
 }
+/* Solo están por ajustar los que quedan por debajo del margen general más alto (15%): los que ya lo superan no salen */
+const margenTope = () => Math.max.apply(null, margenesApp().map(Number));
+const porAjustar = p => p.margen_actual < margenTope();
+const prLista = () => ((prDatos && prDatos.productos) || []).filter(porAjustar);
 function prBandaActual(){
-  if(prFiltro && prFiltro.otro != null) return {k: "otro", min: -Infinity, max: prFiltro.otro, txt: `Margen menor que ${pctTxt(prFiltro.otro)}`};
+  if(prFiltro && prFiltro.otro != null) return {k: "otro", min: -Infinity, max: Math.min(prFiltro.otro, margenTope()),
+    txt: `Margen menor que ${pctTxt(Math.min(prFiltro.otro, margenTope()))}`};
   const bs = prBandas();
   return bs.find(b => prFiltro && b.k === prFiltro.k) || bs[0];
 }
@@ -1199,7 +1203,7 @@ async function cargarPrecios(){
 }
 function guardarPrecios(){ try{ localStorage.setItem(PR_KEY, JSON.stringify(prDatos)); }catch(e){} }
 function pintarFiltrosPrecios(){
-  const lista = (prDatos && prDatos.productos) || [], vivos = lista.filter(p => !p.ignorado), act = prBandaActual();
+  const lista = prLista(), vivos = lista.filter(p => !p.ignorado), act = prBandaActual();
   const nIgn = lista.length - vivos.length;
   $("cpPrMargenes").innerHTML = prBandas().map(b =>
     `<button class="chip" data-banda="${b.k}" aria-pressed="${!prVerIgn && act.k === b.k}">${esc(b.t)}${prDatos ? " · " + vivos.filter(p => enBanda(p, b)).length : ""}</button>`).join("") +
@@ -1212,7 +1216,7 @@ function pintarFiltrosPrecios(){
 function filtroPrecios(){
   const q = normal($("cpPrBuscar").value || "").trim();
   const act = prBandaActual();
-  let lista = ((prDatos && prDatos.productos) || []).filter(p => prVerIgn ? !!p.ignorado : !p.ignorado && enBanda(p, act));
+  let lista = prLista().filter(p => prVerIgn ? !!p.ignorado : !p.ignorado && enBanda(p, act));
   if(q){
     const pal = q.split(/\s+/);
     lista = lista.filter(p => { const t = normal([p.nombre, p.codigo, p.barras, p.factura.proveedor, p.factura.numero].join(" ")); return pal.every(w => t.includes(w)); });
