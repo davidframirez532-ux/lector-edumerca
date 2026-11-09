@@ -538,7 +538,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.3.15 · 8-nov-2026";
+const VERSION = "v2.4.0 · 9-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -705,7 +705,7 @@ async function cargarUltimos(){
   if(!url || sincronizando) return;
   sincronizando = true;
   try{
-    const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=conteos&t=" + Date.now());
+    const r = await fetch(url + (url.includes("?")?"&":"?") + "accion=conteos" + pinUrl() + "&t=" + Date.now());
     const d = await r.json();
     if(d.ok && d.conteos){
       ultimos = d.conteos;
@@ -964,7 +964,7 @@ async function enviarCola(){
   const lote = cola.slice();
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({quien, conteo: lote})});
+      body: JSON.stringify({quien, conteo: lote, clave: claveAdmin})});
     const d = await r.json();
     if(d.ok){
       cola = cola.filter(l=>!lote.includes(l));
@@ -1159,7 +1159,7 @@ async function enviarConteo(){
   const btn = $("btnConteoDrive"); btn.disabled = true; btn.textContent = "Guardando…";
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({sesion: fechaHora(new Date()), conteo})});
+      body: JSON.stringify({sesion: fechaHora(new Date()), conteo, clave: claveAdmin})});
     const d = await r.json();
     if(!d.ok) throw new Error(d.error || "error");
     if(confirm(`Se guardaron ${d.guardadas} líneas en Drive.\n\n¿Borrar el conteo del celular?`)){
@@ -1244,7 +1244,7 @@ async function generarPlantilla(){
   $("ajEstado").textContent = "Calculando con las cantidades actuales de Siigo…";
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({accion:"plantilla", quien})});
+      body: JSON.stringify({accion:"plantilla", quien, clave: claveAdmin})});
     const d = await r.json();
     if(!d.ok) throw new Error(d.error || "error");
     if(!d.filas) { $("ajEstado").textContent = "No hubo diferencias para incluir."; return; }
@@ -1293,7 +1293,7 @@ async function marcarAjustados(codigos){
   btn.textContent = "Marcando…";
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify({accion:"ajustados", quien, codigos})});
+      body: JSON.stringify({accion:"ajustados", quien, codigos, clave: claveAdmin})});
     const d = await r.json();
     if(!d.ok) throw new Error(d.error || "error");
     codigos.forEach(c=>{ if(ultimos[c]) ultimos[c].a = new Date().toISOString(); });
@@ -1368,7 +1368,9 @@ async function validarPinServidor(pin){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
     body: JSON.stringify({accion:"clave", clave:pin})});
   const d = leerRespuesta(await r.text());
-  return !!d.ok;
+  if(d.ok) return true;
+  // Bloqueado por demasiados intentos: se muestra ese mensaje en vez de "PIN incorrecto"
+  return d.error && !/clave incorrecta|pin incorrecto/i.test(d.error) ? d.error : false;
 }
 async function entrar(){
   if(esAdmin()){ irMenu("principal"); return; }
@@ -1394,6 +1396,13 @@ async function pedirClave(){
   return claveAdmin;
 }
 function olvidarClave(){ claveAdmin = ""; guardar("clave_admin", ""); }
+/* Si el servidor rechazó el PIN guardado (lo cambiaron), se olvida para pedirlo de nuevo en la próxima operación */
+function revisarClave(d){
+  if(d && !d.ok && /clave incorrecta|pin incorrecto/i.test(d.error || "")) olvidarClave();
+  return d;
+}
+/* Para las consultas por URL (GET): &pin=... con el PIN guardado */
+function pinUrl(){ return "&pin=" + encodeURIComponent(claveAdmin || ""); }
 /* Convierte la respuesta de Apps Script en datos; si vino una página de error, saca el mensaje */
 function leerRespuesta(texto){
   try{ return JSON.parse(texto); }
@@ -1832,17 +1841,21 @@ async function postApp(cuerpo, msTimeout){
 async function postAppUnaVez(cuerpo, msTimeout){
   const url = apiUrl();
   if(!url) throw new Error("Falta configurar la URL de Apps Script.");
+  // El servidor pide el PIN en todo: se manda el que quedó guardado al entrar (solo se pregunta si no hay)
+  const clave = await pedirClave();
+  if(clave === null) throw new Error("Cancelado");
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), msTimeout || 60000);
   let texto;
   try{
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body: JSON.stringify(Object.assign({}, cuerpo, {quien})), signal: ctrl.signal});
+      body: JSON.stringify(Object.assign({}, cuerpo, {quien, clave})), signal: ctrl.signal});
     texto = await r.text();
   }catch(e){
     throw new Error(e.name === "AbortError" ? "Apps Script no respondió a tiempo" : "Sin conexión");
   }finally{ clearTimeout(t); }
   const d = leerRespuesta(texto);
+  revisarClave(d);
   if(!d.ok) throw new Error(d.error || "error");
   return d;
 }
@@ -3136,7 +3149,7 @@ $("btnActualizarSiigo").addEventListener("click", async ()=>{
   msg.textContent = "Trae el inventario de Siigo. Puede tardar varios minutos, no cierres la app.";
 
   // Se dispara la orden sin esperar respuesta (el proceso es largo)
-  fetch(url + (url.includes("?")?"&":"?") + "accion=actualizar&t=" + Date.now(),
+  fetch(url + (url.includes("?")?"&":"?") + "accion=actualizar" + pinUrl() + "&t=" + Date.now(),
     {mode:"no-cors", cache:"no-store"}).catch(()=>{});
 
   // Y se revisa cada 15 segundos si el CSV ya cambió
