@@ -548,7 +548,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.30 · 10-nov-2026";
+const VERSION = "v2.4.35 · 10-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1792,7 +1792,7 @@ function htmlHistorial(hst){
 }
 
 /* Más vendidos: semana / mes / 3 meses, top 5 / 10 / 20, por unidades o por plata */
-let topDias = "7", topN = 5, topPor = "unidades";
+let topDias = "7", topN = 5, topPor = "ingreso";
 function bloqueTopVentas(r){
   const top = (r && r.top) || {};
   if(!Object.keys(top).length && !(r && r.top_30d && r.top_30d.length)) return "";
@@ -1802,7 +1802,7 @@ function bloqueTopVentas(r){
   return `<div class="bloque" id="bloqueTop"><h3>Más vendidos</h3>
     ${seg("dias", topDias, [["7", "Semana"], ["30", "Mes"], ["90", "3 meses"]])}
     ${seg("n", topN, [[5, "Top 5"], [10, "Top 10"], [20, "Top 20"]])}
-    ${seg("por", topPor, [["unidades", "Por unidades"], ["ingreso", "Por plata"]])}` +
+    ${seg("por", topPor, [["ingreso", "Por plata"], ["unidades", "Por unidades"]])}` +
     (lista.length ? lista.slice(0, topN).map((p, i) => `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)}
       <small style="display:block;opacity:.65">${num(p.por_dia)}/día${p.existencias != null ? " · quedan " + num(p.existencias) : ""}</small></span>
       <b>${topPor === "ingreso" ? plata(p.ingreso) : num(p.unidades) + " und"}</b></div>`).join("")
