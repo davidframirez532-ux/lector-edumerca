@@ -64,9 +64,14 @@
   #camara{background:#000;border-radius:12px;overflow:hidden;width:min(92vw,54vh);aspect-ratio:3/4}
   #camara video{width:100%!important;height:100%!important;object-fit:cover}
   .marco-camara{position:relative}
-  #btnPausa{position:absolute;top:10px;right:10px;z-index:5;width:46px;height:46px;border-radius:50%;
+  .btn-pausa{position:absolute;top:10px;right:10px;z-index:5;width:46px;height:46px;border-radius:50%;
     border:2px solid #fff;background:rgba(0,0,0,.55);color:#fff;font-size:1.2rem;line-height:1;padding:0;cursor:pointer}
-  #btnPausa.pausado{background:var(--amarillo);color:#000;border-color:var(--amarillo)}
+  .btn-pausa.pausado{background:var(--amarillo);color:#000;border-color:var(--amarillo)}
+  .etiqueta{position:relative}
+  .etiqueta .nombre{padding:0 34px}
+  .etiqueta .btn-pausa{top:8px;right:8px;width:40px;height:40px;font-size:1rem;
+    border-color:var(--gris);background:transparent;color:var(--gris)}
+  .etiqueta .btn-pausa.pausado{background:var(--amarillo);color:#000;border-color:var(--amarillo)}
   #escaneo p{margin:0;font-size:1.1rem}
   .fila{display:flex;align-items:center;gap:18px;justify-content:center;flex-wrap:wrap}
   .cuenta{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:2.6rem;color:var(--amarillo);min-width:2ch}
@@ -255,7 +260,7 @@
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
     <div class="marco-camara">
       <div id="camara"></div>
-      <button id="btnPausa" type="button" aria-label="Pausar cámara" title="Pausar">⏸</button>
+      <button id="btnPausa" class="btn-pausa" type="button" aria-label="Pausar cámara" title="Pausar">⏸</button>
     </div>
     <p>Pon el código de barras frente a la cámara</p>
     <div class="fila">
@@ -545,7 +550,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.15 · 10-nov-2026";
+const VERSION = "v2.4.20 · 10-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -840,6 +845,27 @@ function pintarEtiqueta(html, error, volverA){
   const barra = document.createElement("div");
   barra.className = "barra";
   barra.style.animation = `baja ${SEGUNDOS_RESULTADO}s linear forwards`;
+  // Botón de pausa: deja el precio en pantalla hasta que lo vuelvan a tocar
+  const pausa = document.createElement("button");
+  pausa.type = "button"; pausa.className = "btn-pausa";
+  pausa.textContent = "⏸"; pausa.title = "Pausar"; pausa.setAttribute("aria-label", "Dejar en pantalla");
+  pausa.addEventListener("click", ev=>{
+    ev.stopPropagation();   // tocar la pantalla la cierra; el botón no
+    const anim = barra.getAnimations()[0];
+    const pausado = pausa.classList.toggle("pausado");
+    if(pausado){
+      clearTimeout(tResultado);
+      if(anim) anim.pause();
+      pausa.textContent = "▶"; pausa.title = "Seguir"; pausa.setAttribute("aria-label", "Seguir");
+    }else{
+      const total = SEGUNDOS_RESULTADO*1000;
+      const quedan = anim ? Math.max(0, total - (anim.currentTime || 0)) : total;
+      if(anim) anim.play();
+      tResultado = setTimeout(volverDeResultado, quedan);
+      pausa.textContent = "⏸"; pausa.title = "Pausar"; pausa.setAttribute("aria-label", "Dejar en pantalla");
+    }
+  });
+  div.appendChild(pausa);
   $("resultado").replaceChildren(div, barra);
   $("resultado").dataset.volver = volverA || "inicio";
   ir("resultado");
