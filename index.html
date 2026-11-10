@@ -3066,8 +3066,8 @@ $("kpiPanel").addEventListener("click", e => {
 });
 $("btnKpiActualizar").addEventListener("click", () => cargarKpis(true));
 $("btnVolverKpis").addEventListener("click", () => irMenu("principal"));
-$("segHoy").addEventListener("click", () => { diaKpi = "hoy"; pintarKpis(); $("kpiPanel").scrollTop = 0; });
-$("segAyer").addEventListener("click", () => { diaKpi = "ayer"; pintarKpis(); $("kpiPanel").scrollTop = 0; });
+$("segHoy").addEventListener("click", () => { const sc = $("kpiPanel").scrollTop; diaKpi = "hoy"; pintarKpis(); $("kpiPanel").scrollTop = sc; });
+$("segAyer").addEventListener("click", () => { const sc = $("kpiPanel").scrollTop; diaKpi = "ayer"; pintarKpis(); $("kpiPanel").scrollTop = sc; });
 
 /* ---------- Eventos ---------- */
 $("btnEscanear").addEventListener("click", ()=>abrirCamara("precio"));
