@@ -8,8 +8,9 @@ App web instalable (PWA) de **Minimercado Edumerca**, publicada con GitHub Pages
 - `sw.js`: service worker. Subir `CACHE` cuando cambie algo para que los celulares bajen la versión nueva.
 
 El servidor es Google Apps Script y su código está en el repo **privado** `davidframirez532-ux/apps-script-edumerca`
-(con su propio `CLAUDE.md`: cómo publicar, reglas del PIN, dónde están las claves). Para cambios que tocan los dos,
-abrir la sesión con ambos repos.
+(con su propio `CLAUDE.md`: cómo publicar, reglas del PIN, dónde están las claves). El usuario solo puede elegir un
+repo al crear el chat: si la tarea toca el servidor (Siigo, cálculos, datos que manda Apps Script), conecta
+`apps-script-edumerca` a la sesión tú mismo (herramienta para agregar repos) y lee su `CLAUDE.md`.
 
 ## Reglas
 
