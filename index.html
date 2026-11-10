@@ -676,6 +676,7 @@ async function descargarCatalogo(){
   try{
     if(!url) throw new Error("sin URL");
     const d = await pedirPrecios(url);
+    if(d.servidor){ guardar("servidor_version", d.servidor); pintarVersion(); }
     if(d.error) throw new Error(d.error);
     if(!Array.isArray(d.productos) || !d.productos.length) throw new Error("vacío");
     cargarEnMapa(d.productos);
@@ -3607,7 +3608,12 @@ $("marca").addEventListener("click", async ()=>{
     ir("ajustes");
   }
 });
-$("verApp").textContent = "Versión " + VERSION;
+/* Versión de la app y del servidor de Apps Script (la que respondió la última vez que bajaron los precios) */
+function pintarVersion(){
+  const s = leer("servidor_version");
+  $("verApp").textContent = "App " + VERSION + " · Servidor " + (s || "sin conectar aún");
+}
+pintarVersion();
 $("btnCerrarAjustes").addEventListener("click", inicio);
 $("btnForzar").addEventListener("click", async ()=>{
   $("msgAjustes").textContent = "Buscando versión nueva…";
