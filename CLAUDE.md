@@ -19,7 +19,7 @@ repo al crear el chat: si la tarea toca el servidor (Siigo, cálculos, datos que
   lo agregan al cuerpo, `pinUrl()` a las consultas GET. Toda llamada nueva al servidor debe usar esas funciones.
 - **No cambiar `VERSION`** sin avisar: `esAdmin()` la compara y cambiarla obliga a todos a ingresar el PIN de nuevo.
 - **Numeración de `VERSION`**: cada cambio publicado sube el último número de 5 en 5 (`v2.4.05`, `v2.4.10`, … `v2.4.95`);
-  al llegar a 100 pasa a `v2.5.00`, luego `v2.5.05`, y así. Va con la fecha del día (`v2.4.05 · 10-nov-2026`).
+  al llegar a 100 pasa a `v2.5.00`, luego `v2.5.05`, y así. Va con la fecha del día (`v2.4.05 · 9-nov-2026`).
 - Si el servidor va a exigir algo nuevo, **publicar primero la app** (compatible con el servidor viejo) y después el
   servidor.
 - En **Ajustes** se ve "App vX · Servidor vNNN": así el usuario confirma qué versión responde.
