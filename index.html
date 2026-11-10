@@ -538,7 +538,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.05 · 9-nov-2026";
+const VERSION = "v2.4.10 · 9-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1260,7 +1260,7 @@ async function generarPlantilla(){
 }
 
 let claveAdmin = "";
-try{ if(localStorage.getItem("admin") === VERSION) claveAdmin = localStorage.getItem("clave_admin") || ""; }catch(e){}
+try{ if(esAdmin()) claveAdmin = localStorage.getItem("clave_admin") || ""; }catch(e){}
 async function borrarConteos(codigos, nombre, yaConfirmado){
   const url = apiUrl();
   if(!url) return alert("Falta configurar la URL de Apps Script.");
@@ -1326,7 +1326,13 @@ function csvAjustes(){
 }
 
 /* ---------- Modo administración ---------- */
-function esAdmin(){ return leer("admin") === VERSION; }
+/* El PIN se pide una vez al día (no con cada versión): "admin" guarda el día en que se ingresó */
+function diaHoy(){ const d = new Date(); return "dia " + d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+function esAdmin(){
+  const a = leer("admin");
+  if(a && a[0] === "v"){ guardar("admin", diaHoy()); return true; } // celulares que ya habían entrado con el sistema anterior (guardaba la versión)
+  return a === diaHoy();
+}
 /* Pide el PIN en una ventana propia con teclado numérico.
    validar(pin) devuelve true/false o un texto de error; la ventana sigue abierta hasta acertar o cancelar. */
 function pedirPin(titulo, validar){
@@ -1379,7 +1385,7 @@ async function entrar(){
   if(pin === null) return;
   claveAdmin = pin;
   guardar("clave_admin", claveAdmin);
-  guardar("admin", VERSION);
+  guardar("admin", diaHoy());
   pedirQuien(false);
   irMenu("principal");
 }
@@ -3671,6 +3677,8 @@ function soltarTeclado(){
 window.addEventListener("pageshow", soltarTeclado);
 document.addEventListener("visibilitychange", ()=>{
   if(!document.hidden) soltarTeclado();
+  // Cambió el día con la app abierta: se vuelve a pedir el PIN
+  if(!document.hidden && leer("admin") && !esAdmin()){ olvidarClave(); guardar("admin", ""); inicio(); }
   if(document.hidden && escaner){
     const enConteo = modoCamara === "conteo";
     cerrarCamara().then(()=> enConteo ? abrirConteo() : inicio());
