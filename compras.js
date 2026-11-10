@@ -292,7 +292,8 @@ const abrir = id => { clearTimeout(tLista); ir(id); };
 })();
 
 /* Versión visible en Ajustes (5 toques en el logo), para saber si el celular tiene el compras.js nuevo */
-$("verApp").textContent += " · " + COMPRAS_VERSION;
+window.COMPRAS_VERSION = COMPRAS_VERSION;
+pintarVersion(); // incluye COMPRAS_VERSION (si se sumara aquí, se borraría al bajar los precios)
 /* ✅ cuadra · ⚠ aviso (diferencia de total o IVA mayor a la tolerancia: deja subir) · ❌ bloquea */
 const chk = c => `<div class="fila-dato"><span${c.aviso ? ' style="color:#ffd23f"' : ""}>${c.ok ? "✅" : c.aviso ? "⚠️" : "❌"} ${esc(c.texto)}</span></div>`;
 

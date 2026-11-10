@@ -3611,7 +3611,8 @@ $("marca").addEventListener("click", async ()=>{
 /* Versión de la app y del servidor de Apps Script (la que respondió la última vez que bajaron los precios) */
 function pintarVersion(){
   const s = leer("servidor_version");
-  $("verApp").textContent = "App " + VERSION + " · Servidor " + (s || "sin conectar aún");
+  const c = window.COMPRAS_VERSION ? " · " + window.COMPRAS_VERSION : "";
+  $("verApp").textContent = "App " + VERSION + c + " · Servidor " + (s || "sin conectar aún");
 }
 pintarVersion();
 $("btnCerrarAjustes").addEventListener("click", inicio);
