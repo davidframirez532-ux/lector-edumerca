@@ -2502,7 +2502,7 @@ $("kpiPanel").addEventListener("click", async e => {
   }else if(!confirm(`¿Reactivar la alerta de ${x.nombre}?`)) return;
   b.disabled = true; b.textContent = "…";
   try{
-    const d = await postAdmin({accion: "costo_alerta_ignorar", clave: x.clave || "", codigo: x.codigo, nombre: x.nombre,
+    const d = await postAdmin({accion: "costo_alerta_ignorar", clave_alerta: x.clave || "", codigo: x.codigo, nombre: x.nombre,
       alerta: x.alerta, doc: x.doc || "", fecha: x.fecha || "", motivo, reactivar});
     if(kpis){ kpis.alertas_costos = d.alertas_costos || []; kpis.alertas_costos_ignoradas = d.alertas_costos_ignoradas || []; }
     window.pintarKpis();
@@ -2538,7 +2538,31 @@ function pintarFacturaCostos(){
    Productos cuyo último costo deja más de 35% de margen sobre la venta, con la compra de Siigo que lo dejó.
    La lista muestra lo básico; al tocar un producto se abre una ventana con el detalle (cantidades en la factura
    y en Siigo, factor, márgenes, costos) y abajo los botones Ver PDF e Ignorar / Reactivar. */
+/* Cambios hechos desde este celular en los últimos 30 min: se aplican encima de lo que llegue del servidor, por si una
+   carga de KPIs que ya venía en camino trae la lista de antes de ignorar. */
+const MR_CAMBIOS = "kpi_mr_cambios";
+function mrRecordar(x, reactivar, motivo){
+  const c = leerJSON(MR_CAMBIOS, {}), ahora = Date.now();
+  Object.keys(c).forEach(k => { if(ahora - c[k].t > 18e5) delete c[k]; });
+  c[x.clave || x.codigo] = {t: ahora, reactivar, x: Object.assign({}, x, reactivar ? {} : {motivo, ignorado: "ahora", quien})};
+  try{ guardar(MR_CAMBIOS, JSON.stringify(c)); }catch(e){}
+}
+function mrAplicarCambios(){
+  if(!kpis) return;
+  const c = leerJSON(MR_CAMBIOS, {}), ahora = Date.now();
+  Object.keys(c).forEach(clave => {
+    const z = c[clave]; if(!z || ahora - z.t > 18e5) return;
+    const mismo = y => (y.clave || y.codigo) === clave;
+    const rev = kpis.margenes_revisar || [], ign = kpis.margenes_ignorados || [];
+    if(z.reactivar){ kpis.margenes_ignorados = ign.filter(y => !mismo(y)); }
+    else{
+      kpis.margenes_revisar = rev.filter(y => !mismo(y));
+      if(!ign.some(mismo)) kpis.margenes_ignorados = [z.x].concat(ign);
+    }
+  });
+}
 function pintarMargenes(){
+  try{ mrAplicarCambios(); }catch(e){}
   const k = kpis || {}, panel = $("kpiPanel");
   const lista = k.margenes_revisar || [], ign = k.margenes_ignorados || [];
   if(!lista.length && !ign.length) return;
@@ -2664,19 +2688,50 @@ $("mrPie").addEventListener("click", async e => {
       motivo = r.m;
     }
   }else if(!confirm(`¿Reactivar ${x.nombre}? Vuelve a alertar si el margen sigue alto.`)) return;
-  b.disabled = true; b.textContent = "…";
+  // La ventana se cierra ya y se vuelve a KPIs; el cambio se ve de una vez y se guarda en el servidor por detrás
+  cerrarMargen();
+  const k = kpis || {}, mismo = y => y === x || (x.clave && y.clave === x.clave);
+  const antes = {rev: k.margenes_revisar || [], ign: k.margenes_ignorados || []};
+  if(kpis){
+    if(reactivar){ kpis.margenes_ignorados = antes.ign.filter(y => !mismo(y)); kpis.margenes_revisar = [x].concat(antes.rev); }
+    else{
+      kpis.margenes_revisar = antes.rev.filter(y => !mismo(y));
+      kpis.margenes_ignorados = [Object.assign({}, x, {motivo, ignorado: "ahora", quien})].concat(antes.ign.filter(y => !mismo(y)));
+    }
+  }
+  mrRecordar(x, reactivar, motivo);
+  const msg = $("kpiEstado");
+  msg.textContent = "Guardando " + (x.nombre || x.codigo) + "…";
+  repintarMargenes();
   try{
-    const d = await postAdmin({accion: "margen_ignorar", clave: x.clave, codigo: x.codigo, nombre: x.nombre, nit: x.nit,
+    const d = await postAdmin({accion: "margen_ignorar", clave_margen: x.clave, codigo: x.codigo, nombre: x.nombre, nit: x.nit,
       numero: x.factura_prov, doc: x.doc, proveedor: x.proveedor, pdf: x.pdf || "", margen: x.margen_venta_pct,
       detalle: {categoria: x.categoria, costo_ultimo: x.costo_ultimo, costo_promedio: x.costo_promedio, precio: x.precio,
         precio_sin_iva: x.precio_sin_iva, iva: x.iva, margen_costo_pct: x.margen_costo_pct, cant_factura: x.cant_factura,
         cant_siigo: x.cant_siigo, factor: x.factor, fecha: x.fecha},
       motivo, reactivar});
-    if(kpis){ kpis.margenes_revisar = d.margenes_revisar || []; kpis.margenes_ignorados = d.margenes_ignorados || []; }
-    cerrarMargen();
-    window.pintarKpis();
-  }catch(err){ b.disabled = false; b.textContent = reactivar ? "↩ Reactivar" : "✅ Ignorar"; alert("No se guardó: " + err.message); }
+    if(kpis && Array.isArray(d.margenes_revisar)){ kpis.margenes_revisar = d.margenes_revisar; kpis.margenes_ignorados = d.margenes_ignorados || []; }
+    msg.textContent = "✓ " + (reactivar ? "Reactivado: " : "Ignorado: ") + (x.nombre || x.codigo);
+  }catch(err){
+    if(kpis){ kpis.margenes_revisar = antes.rev; kpis.margenes_ignorados = antes.ign; }
+    try{ const c = leerJSON(MR_CAMBIOS, {}); delete c[x.clave || x.codigo]; guardar(MR_CAMBIOS, JSON.stringify(c)); }catch(e){}
+    msg.textContent = "";
+    alert("No se guardó: " + err.message);
+  }
+  repintarMargenes();
 });
+/* Repinta los KPIs sin cerrar las listas de márgenes que estaban abiertas y guarda la copia del celular,
+   para que al volver a entrar no aparezcan otra vez los que ya se ignoraron. */
+function repintarMargenes(){
+  const abiertas = [...$("kpiPanel").querySelectorAll("details.alerta[open] > summary > span:first-child")].map(s => s.textContent);
+  const y = window.scrollY;
+  try{ if(kpis) guardar("kpis", JSON.stringify(kpis)); }catch(e){}
+  window.pintarKpis();
+  $("kpiPanel").querySelectorAll("details.alerta > summary > span:first-child").forEach(s => {
+    if(abiertas.includes(s.textContent)) s.closest("details").open = true;
+  });
+  window.scrollTo(0, y);
+}
 /* ══════════════ ALERTAS DE IVA: IGNORAR / REACTIVAR ══════════════
    Cada alerta de la revisión de IVA lleva un botón "Ignorar" (ej. pagos a la contadora que no son productos).
    Lo ignorado deja de alertar y queda en "Ignorados en la revisión de IVA", donde se puede reactivar. */
