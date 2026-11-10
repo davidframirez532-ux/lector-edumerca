@@ -2463,7 +2463,69 @@ window.pintarKpis = function(){
   try{ pintarIgnorarIva(); }catch(e){ console.warn("Ignorar IVA:", e); }
   try{ pintarMargenes(); }catch(e){ console.warn("Márgenes:", e); }
   try{ pintarFacturaCostos(); }catch(e){ console.warn("Factura en alertas de costo:", e); }
+  try{ agruparAlertas(); }catch(e){ console.warn("Agrupar alertas:", e); }
 };
+/* ══════════════ ALERTAS AGRUPADAS ══════════════
+   Junta las listas sueltas del bloque Alertas en grupos (Márgenes, IVA, Costos, Pagos…). Cada grupo muestra cuántas
+   hay por revisar (sin contar las ignoradas, que van aparte y al final del grupo). Los grupos en 0 bajan al final.
+   Corre de último, cuando ya se pintaron todas las listas (las de index.html y las que agrega este archivo). */
+const GRUPOS_ALERTAS = [
+  ["margenes", "💲 Márgenes", /^Márgenes/i],
+  ["desarmes", "✂ Desarmes", /desarmes/i],
+  ["iva", "🧾 IVA e impuestos", /IVA|ajuste de impuestos/i],
+  ["costos", "📈 Costos", /Costo fuera de lo normal|Alertas de costo/i],
+  ["pagos", "💳 Pagos a proveedores", /recibo en Siigo|vencidas sin pagar|Pagos parciales/i],
+  ["facturas", "📄 Facturas y Siigo", /Facturas del correo|diferencia contra Siigo|Notas crédito|sin factura en el correo|movido el stock/i],
+  ["proveedor", "🔗 Productos de proveedor", /registrado como varios|producto equivocado|Código Siigo que no existe|Productos de proveedor/i],
+  ["inventario", "📦 Inventario y reposición", /Reponer|Agotados|Bajo el mínimo|Baja rotación|Sin venta/i],
+  ["precio", "🏷 Cambios de precio", /Cambios de precio/i]
+];
+const GRUPOS_ABIERTOS = "kpi_grupos_abiertos";
+function agruparAlertas(){
+  const bloque = [...$("kpiPanel").querySelectorAll(".bloque")].find(b => /^Alertas/.test((b.querySelector("h3") || {}).textContent || ""));
+  const cont = bloque && bloque.querySelector("div");
+  if(!cont || cont.querySelector(":scope > details.grupo-al")) return;
+  const abiertos = leerJSON(GRUPOS_ABIERTOS, []);
+  const grupos = GRUPOS_ALERTAS.map(([id, titulo, re]) => ({id, titulo, re, hijos: []}));
+  const otras = {id: "otras", titulo: "Otras alertas", hijos: []};
+  [...cont.querySelectorAll(":scope > details.alerta")].forEach(d => {
+    const t = (d.querySelector(":scope > summary > span") || {}).textContent || "";
+    (grupos.find(g => g.re.test(t)) || otras).hijos.push(d);
+  });
+  const listos = grupos.concat(otras).filter(g => g.hijos.length).map(g => {
+    let n = 0, ign = 0, urgente = false, amarillo = false, gris = false;
+    // Dentro del grupo: primero lo que hay por revisar, al final lo ignorado
+    const esIgn = d => /ignorad/i.test((d.querySelector(":scope > summary > span") || {}).textContent || "");
+    g.hijos.sort((a, b) => esIgn(a) - esIgn(b));
+    g.hijos.forEach(d => {
+      const b = d.querySelector(":scope > summary .num-alerta"), v = parseInt(((b || {}).textContent || "").replace(/\D/g, ""), 10) || 0;
+      if(esIgn(d)){ ign += v; return; }
+      n += v;
+      if(!v || !b) return;
+      if(b.classList.contains("amarillo")) amarillo = true;
+      else if(b.classList.contains("gris")) gris = true;
+      else if(!b.classList.contains("cero")) urgente = true;
+    });
+    const clase = !n ? "cero" : urgente ? "" : amarillo ? "amarillo" : "gris";
+    const g2 = document.createElement("details");
+    g2.className = "alerta grupo-al"; g2.dataset.grupo = g.id;
+    if(abiertos.includes(g.id)) g2.open = true;
+    g2.innerHTML = `<summary><span>${g.titulo}</span><span style="display:flex;align-items:center;flex:none">${
+      ign ? `<span class="grupo-al-ign">${ign} ign.</span>` : ""}<span class="num-alerta ${clase}">${n}</span></span></summary>
+      <div class="grupo-al-cuerpo"></div>`;
+    const cuerpo = g2.querySelector(".grupo-al-cuerpo");
+    g.hijos.forEach(d => cuerpo.appendChild(d));
+    return {g2, n};
+  });
+  // Los grupos con algo por revisar arriba (en el orden de la lista), los que están en 0 al final
+  listos.filter(x => x.n).concat(listos.filter(x => !x.n)).forEach(x => cont.appendChild(x.g2));
+}
+$("kpiPanel").addEventListener("toggle", e => {
+  const d = e.target; if(!d.classList || !d.classList.contains("grupo-al")) return;
+  const a = leerJSON(GRUPOS_ABIERTOS, []).filter(id => id !== d.dataset.grupo);
+  if(d.open) a.push(d.dataset.grupo);
+  try{ guardar(GRUPOS_ABIERTOS, JSON.stringify(a)); }catch(err){}
+}, true);
 /* Alertas de costo ignoradas: hasta que llegue una compra nueva del producto. Se pueden reactivar. */
 function pintarCostosIgnorados(){
   const ign = (kpis || {}).alertas_costos_ignoradas || [];
