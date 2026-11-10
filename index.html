@@ -1503,6 +1503,7 @@ function pintarKpis(){
   h += `<p class="nota" style="text-align:center">Calculado ${esc(fechaHora(k.generado))}</p>`;
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
+  activarTendencia();
 }
 /* Utilidad bruta = ventas sin IVA − costo de lo vendido (antes de gastos fijos) */
 function bloqueUtilidadBruta(k){
@@ -1531,6 +1532,17 @@ function bloqueComparacion(titulo, c, sub){
     ${dato("Ticket promedio", plata(a.ticket_promedio), b.ticket_promedio ? "antes " + plata(b.ticket_promedio) : "")}
   </div>${a.margen ? `<p class="nota">Margen bruto: ${plata(a.margen)}</p>` : ""}</div>`;
 }
+let tendencia30 = [];
+function activarTendencia(){
+  const svg = $("svgTend"); if(!svg) return;
+  svg.addEventListener("click", e => {
+    const i = e.target.getAttribute && e.target.getAttribute("data-i");
+    if(i == null) return;
+    const x = tendencia30[+i]; if(!x) return;
+    svg.querySelectorAll(".tBar").forEach(r => r.setAttribute("fill", r.dataset.i === i ? "#f59e0b" : r.dataset.color));
+    $("tendDia").textContent = fechaLarga(x.fecha) + ": " + plata(x.ventas || 0);
+  });
+}
 function bloqueTendencia(t){
   if(!t || !t.length) return "";
   const max = Math.max(...t.map(x => x.ventas || 0), 1);
@@ -1538,13 +1550,16 @@ function bloqueTendencia(t){
   const barras = t.map((x, i) => {
     const bh = Math.max(1, (x.ventas || 0) / max * (H - 4));
     const domingo = new Date(x.fecha + "T12:00:00").getDay() === 0;
-    return `<rect x="${(i*bw + 1).toFixed(1)}" y="${(H - bh).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}"
-      height="${bh.toFixed(1)}" rx="1.5" fill="${domingo ? "#3b82f6" : "#8fc9ff"}"></rect>`;
+    return `<rect class="tBar" data-i="${i}" x="${(i*bw + 1).toFixed(1)}" y="${(H - bh).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}"
+      height="${bh.toFixed(1)}" rx="1.5" fill="${domingo ? "#3b82f6" : "#8fc9ff"}" data-color="${domingo ? "#3b82f6" : "#8fc9ff"}"></rect>
+      <rect data-i="${i}" x="${(i*bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" fill="transparent" style="cursor:pointer"></rect>`;
   }).join("");
+  tendencia30 = t;
   const prom = t.reduce((s, x) => s + (x.ventas || 0), 0) / t.length;
   const mejor = t.reduce((a, x) => (x.ventas || 0) > (a.ventas || 0) ? x : a, t[0]);
   return `<div class="bloque"><h3>Ventas 30 días <small>promedio ${plata(prom)}/día</small></h3>
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:90px">${barras}</svg>
+    <svg id="svgTend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:90px">${barras}</svg>
+    <p class="nota" id="tendDia" style="text-align:center;font-weight:600">Toca una barra para ver la venta de ese día</p>
     <p class="nota">Mejor día: ${fechaTxt(mejor.fecha)} con ${plata(mejor.ventas)} · domingos en azul</p></div>`;
 }
 function bloqueUtilidad(u){
