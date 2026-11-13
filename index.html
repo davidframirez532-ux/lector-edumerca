@@ -203,6 +203,9 @@
   .campo input,.campo textarea{border:0;border-radius:8px;padding:11px 12px;font:500 1.05rem "Barlow",sans-serif;
     background:var(--papel);color:var(--tinta);-webkit-user-select:text;user-select:text;width:100%}
   .campo textarea{min-height:5em;resize:vertical}
+  .fila-campo{display:flex;gap:6px;align-items:center}
+  .campo.bloqueado input{opacity:.6;background:var(--verde3);color:var(--papel)}
+  .escanear-campo{margin-top:4px}
   .fijo{display:grid;grid-template-columns:1fr 7.5em auto auto;gap:6px;align-items:center;padding:7px 0;
     border-bottom:1px solid rgba(251,250,245,.12)}
   .fijo input{border:0;border-radius:8px;padding:10px;font:500 .95rem "Barlow",sans-serif;background:var(--papel);
@@ -759,7 +762,7 @@ async function abrirCamara(modo){
   if(ocupado) return; ocupado = true;
   modoCamara = modo || "precio";
   clearTimeout(tResultado); clearTimeout(tLista);
-  $("tituloEscaneo").textContent = modoCamara === "conteo" ? "Conteo · escanea el producto"
+  $("tituloEscaneo").textContent = modoCamara === "campo" ? "Escanea el código de barras" : modoCamara === "conteo" ? "Conteo · escanea el producto"
     : modoCamara === "desarme" ? "Desarme · escanea el producto" : "Escanea el producto";
   $("btnDigitarEsc").hidden = modoCamara !== "conteo" && modoCamara !== "desarme";
   ir("escaneo");
@@ -792,11 +795,12 @@ async function abrirCamara(modo){
         const m = modoCamara;
         await cerrarCamara();
         if(m === "conteo") pedirCantidad(codigo); else if(m === "lista") buscarEnLista(codigo);
-        else if(m === "desarme") desRecibirCodigo(codigo); else mostrar(codigo);
+        else if(m === "desarme") desRecibirCodigo(codigo); else if(m === "campo") volverDeEscaneoCampo(codigo); else mostrar(codigo);
       }, ()=>{});
   }catch(err){
     await cerrarCamara();
-    mostrarError("No se pudo abrir la cámara", "Revise el permiso de cámara del navegador");
+    if(modoCamara === "campo"){ alert("No se pudo abrir la cámara. Revise el permiso de cámara del navegador."); volverDeEscaneoCampo(null); }
+    else mostrarError("No se pudo abrir la cámara", "Revise el permiso de cámara del navegador");
   }
 }
 async function cerrarCamara(){
@@ -2824,7 +2828,8 @@ $("btnVolverPedido").addEventListener("click", () => { ir("pedidos"); pintarPedi
 let prodSel = null;
 const normCod = c => String(c || "").trim().replace(/^0+(?=\d)/, "");
 function volverDeCamara(){
-  if(modoCamara === "desarme") ir("desarmeForm");
+  if(modoCamara === "campo") volverDeEscaneoCampo(null);
+  else if(modoCamara === "desarme") ir("desarmeForm");
   else if(modoCamara === "conteo") abrirConteo();
   else if(modoCamara === "lista") abrirLista(false);
   else inicio();
@@ -2896,6 +2901,22 @@ $("prodFicha").addEventListener("click", e => {
   abrirProveedor(p, "producto");
 });
 $("prodFicha").addEventListener("click", e => { if(e.target.closest("#btnProdEditar")) editarProducto(); });
+/* Escanear un código para un campo del formulario: se esconde la ventana, se abre la cámara y al leer vuelve */
+let campoEscaneo = null, pantallaEscaneo = "";
+function escanearCampo(idInput){
+  campoEscaneo = idInput;
+  const act = document.querySelector(".pantalla.activa");
+  pantallaEscaneo = act ? act.id : "inicio";
+  $("formVentana").hidden = true;
+  abrirCamara("campo");
+}
+function volverDeEscaneoCampo(codigo){
+  ir(pantallaEscaneo || "inicio");
+  $("formVentana").hidden = false;
+  const inp = campoEscaneo && $(campoEscaneo);
+  if(inp && codigo){ inp.value = codigo; inp.focus(); }
+  campoEscaneo = null;
+}
 /* Lápiz de la ficha: cambia en Siigo el nombre, el código de barras o el precio del producto */
 function prodEstado(t, malo){
   const e = $("prodEstado"); if(!e) return;
@@ -2911,6 +2932,7 @@ async function editarProducto(){
   const r = await pedirForm("Editar producto", [
     {id:"nombre", label:"Nombre", valor: it.n, obligatorio:true, validar: v => !!v || "Escribe el nombre"},
     {id:"barras", label:"Código de barras", valor: barrasAntes, inputmode:"numeric", placeholder:"(sin código de barras)",
+      bloqueado:true, escanear:true,
       validar: v => /^[0-9A-Za-z-]*$/.test(v.replace(/\s/g, "")) || "Solo números y letras, sin espacios"},
     {id:"precio", label:"Precio de venta con IVA", valor: String(it.p || ""), inputmode:"numeric", obligatorio:true,
       validar: v => { const n = Number(v.replace(/\D/g, "")); return !(n > 0) ? "Escribe el precio" : n % 100 ? "El precio debe ser múltiplo de 100" : true; }}
@@ -2919,7 +2941,7 @@ async function editarProducto(){
   const nuevo = {nombre: r.nombre.replace(/\s+/g, " ").trim(), barras: r.barras.replace(/\s/g, ""), precio: Number(r.precio.replace(/\D/g, ""))};
   const cambios = [];
   if(nuevo.nombre !== it.n) cambios.push(`Nombre: ${it.n} → ${nuevo.nombre}`);
-  if(nuevo.barras !== barrasAntes) cambios.push(`Código de barras: ${barrasAntes || "(ninguno)"} → ${nuevo.barras || "(ninguno)"}`);
+  if(nuevo.barras !== barrasAntes) cambios.push(`⚠ Código de barras: ${barrasAntes || "(ninguno)"} → ${nuevo.barras || "(ninguno)"}`);
   if(nuevo.precio !== it.p) cambios.push(`Precio: ${plata(it.p)} → ${plata(nuevo.precio)}`);
   if(!cambios.length) return prodEstado("No cambiaste nada.");
   if(!confirm(`¿Guardar en Siigo?\n\n${it.n}\n\n${cambios.join("\n")}`)) return;
@@ -2984,9 +3006,29 @@ function pedirForm(titulo, campos, okTexto){
     const v = $("formVentana"), err = $("formError"), ok = $("formOk");
     $("formTitulo").textContent = titulo;
     ok.textContent = okTexto || "Guardar"; err.textContent = "";
-    $("formCampos").innerHTML = campos.map(c => `<label class="campo">${esc(c.label)}<input id="fc_${c.id}" value="${esc(c.valor || "")}"
-      ${c.inputmode ? `inputmode="${c.inputmode}"` : ""} placeholder="${esc(c.placeholder || "")}" autocomplete="off"
-      style="${c.mayus ? "text-transform:uppercase" : ""}"></label>`).join("");
+    $("formCampos").innerHTML = campos.map(c => {
+      const inp = `<input id="fc_${c.id}" value="${esc(c.valor || "")}" ${c.bloqueado ? "readonly" : ""}
+        ${c.inputmode ? `inputmode="${c.inputmode}"` : ""} placeholder="${esc(c.placeholder || "")}" autocomplete="off"
+        style="${c.mayus ? "text-transform:uppercase" : ""}">`;
+      if(!c.bloqueado) return `<label class="campo">${esc(c.label)}${inp}</label>`;
+      // Bloqueado: solo se puede cambiar tocando su lápiz (para no cambiarlo sin darse cuenta)
+      return `<div class="campo bloqueado" id="fcc_${c.id}"><span>🔒 ${esc(c.label)}</span>
+        <div class="fila-campo">${inp}<button type="button" class="lapiz" data-desbloquear="${c.id}" title="Desbloquear" aria-label="Desbloquear ${esc(c.label)}">✏️</button></div>
+        ${c.escanear ? `<button type="button" class="sec escanear-campo" data-escanear="${c.id}" hidden>📷 Escanear código</button>` : ""}</div>`;
+    }).join("");
+    $("formCampos").onclick = e => {
+      const d = e.target.closest("[data-desbloquear]");
+      if(d){
+        const caja = $("fcc_" + d.dataset.desbloquear), inp = $("fc_" + d.dataset.desbloquear);
+        caja.classList.remove("bloqueado"); caja.querySelector("span").textContent = caja.querySelector("span").textContent.replace("🔒", "🔓");
+        inp.readOnly = false; d.hidden = true;
+        const sc = caja.querySelector("[data-escanear]"); if(sc) sc.hidden = false;
+        inp.focus(); inp.select();
+        return;
+      }
+      const sc = e.target.closest("[data-escanear]");
+      if(sc) escanearCampo("fc_" + sc.dataset.escanear);
+    };
     v.hidden = false;
     setTimeout(() => { const p = $("fc_" + campos[0].id); if(p) p.focus(); }, 80);
     const cerrar = r => { v.hidden = true; ok.onclick = null; $("formCancelar").onclick = null; resolve(r); };
