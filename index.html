@@ -192,6 +192,8 @@
   .seg button{flex:1;border:0;border-radius:8px;padding:9px;background:transparent;color:var(--papel);
     font-weight:600;font-size:1rem;cursor:pointer}
   .seg button[aria-pressed="true"]{background:var(--amarillo);color:var(--verde)}
+  .lapiz{background:none;border:0;padding:2px 4px;font-size:1rem;line-height:1;cursor:pointer;opacity:.75;flex:none}
+  .lapiz:active{opacity:1;transform:scale(.9)}
   .etq{display:inline-block;border-radius:6px;padding:1px 7px;font-size:.72rem;font-weight:600;
     background:var(--amarillo);color:var(--verde);margin-left:6px;vertical-align:middle;text-transform:uppercase}
   .etq.gris{background:var(--verde3);color:var(--papel)}
@@ -2858,7 +2860,9 @@ function pintarProducto(){
   const u = ultimoDe(it);
   const iva = cp ? Number(cp.iva) || 0 : 0;
   const psi = it.p ? it.p / (1 + iva / 100) : 0;
-  let h = `<div class="bloque"><h3 style="margin-bottom:4px">${esc(it.n)}</h3>
+  let h = `<div class="bloque"><h3 style="margin-bottom:4px;justify-content:flex-start;gap:8px"><span style="flex:1">${esc(it.n)}</span>
+      <button type="button" class="lapiz" id="btnProdEditar" title="Editar producto" aria-label="Editar producto">✏️</button></h3>
+    <p class="nota" id="prodEstado" style="margin:0 0 4px" hidden></p>
     <p class="nota" style="margin:0">Código ${esc(it.c || "—")}${it.b && it.b !== it.c ? " · barras " + esc(it.b) : ""}${it.cat ? " · " + esc(it.cat) : ""}</p>
     <div class="grilla" style="margin-top:10px">
       ${dato("Precio", plata(it.p), iva ? `IVA ${iva}% · sin IVA ${plata(psi)}` : "")}
@@ -2891,6 +2895,60 @@ $("prodFicha").addEventListener("click", e => {
   provs = lista.length ? lista : provs;
   abrirProveedor(p, "producto");
 });
+$("prodFicha").addEventListener("click", e => { if(e.target.closest("#btnProdEditar")) editarProducto(); });
+/* Lápiz de la ficha: cambia en Siigo el nombre, el código de barras o el precio del producto */
+function prodEstado(t, malo){
+  const e = $("prodEstado"); if(!e) return;
+  e.hidden = !t; e.textContent = t || ""; e.style.color = malo ? "#ff9a86" : "";
+}
+async function editarProducto(){
+  const it = prodSel; if(!it) return;
+  if(!it.c) return alert("Este producto no tiene código de Siigo: no se puede editar desde aquí.");
+  let copia = [];
+  try{ copia = JSON.parse(leer("catalogo") || "[]"); }catch(e){}
+  const fila = copia.find(x => String(x.codigo || "") === it.c);
+  const barrasAntes = fila ? String(fila.barras || "") : (it.b !== it.c ? it.b : "");
+  const r = await pedirForm("Editar producto", [
+    {id:"nombre", label:"Nombre", valor: it.n, obligatorio:true, validar: v => !!v || "Escribe el nombre"},
+    {id:"barras", label:"Código de barras", valor: barrasAntes, inputmode:"numeric", placeholder:"(sin código de barras)",
+      validar: v => /^[0-9A-Za-z-]*$/.test(v.replace(/\s/g, "")) || "Solo números y letras, sin espacios"},
+    {id:"precio", label:"Precio de venta con IVA", valor: String(it.p || ""), inputmode:"numeric", obligatorio:true,
+      validar: v => { const n = Number(v.replace(/\D/g, "")); return !(n > 0) ? "Escribe el precio" : n % 100 ? "El precio debe ser múltiplo de 100" : true; }}
+  ]);
+  if(!r) return;
+  const nuevo = {nombre: r.nombre.replace(/\s+/g, " ").trim(), barras: r.barras.replace(/\s/g, ""), precio: Number(r.precio.replace(/\D/g, ""))};
+  const cambios = [];
+  if(nuevo.nombre !== it.n) cambios.push(`Nombre: ${it.n} → ${nuevo.nombre}`);
+  if(nuevo.barras !== barrasAntes) cambios.push(`Código de barras: ${barrasAntes || "(ninguno)"} → ${nuevo.barras || "(ninguno)"}`);
+  if(nuevo.precio !== it.p) cambios.push(`Precio: ${plata(it.p)} → ${plata(nuevo.precio)}`);
+  if(!cambios.length) return prodEstado("No cambiaste nada.");
+  if(!confirm(`¿Guardar en Siigo?\n\n${it.n}\n\n${cambios.join("\n")}`)) return;
+  const btn = $("btnProdEditar"); if(btn) btn.disabled = true;
+  prodEstado("Guardando en Siigo…");
+  let d;
+  try{
+    d = await postAdmin({accion: "producto_editar", codigo: it.c, nombre: nuevo.nombre, barras: nuevo.barras, precio: nuevo.precio});
+  }catch(e){
+    if(btn) btn.disabled = false;
+    return prodEstado(e.message === "Cancelado" ? "" : "No se guardó: " + e.message, true);
+  }
+  if(!d.editado){   // servidor viejo: no conoce esta acción
+    if(btn) btn.disabled = false;
+    return prodEstado("El servidor todavía no tiene esta opción. Intenta más tarde.", true);
+  }
+  const p = d.producto || nuevo;
+  // Se cambia también en el catálogo guardado en el celular, para verlo ya (el servidor lo manda igual desde ahora)
+  if(fila){
+    fila.nombre = p.nombre; fila.barras = p.barras; fila.precio = p.precio;
+    guardar("catalogo", JSON.stringify(copia));
+    cargarEnMapa(copia);
+    prodSel = catalogo.get("#" + it.c) || it;
+  }else{
+    Object.assign(it, {n: p.nombre, p: p.precio, b: p.barras || it.c});
+  }
+  pintarProducto();
+  prodEstado("✓ " + (d.mensaje || "Guardado en Siigo"));
+}
 $("btnVolverProducto").addEventListener("click", () => abrirLista(false));
 $("btnProdPrecio").addEventListener("click", () => { if(prodSel) mostrarItem(prodSel, "lista"); });
 
