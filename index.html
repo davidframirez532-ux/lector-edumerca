@@ -575,7 +575,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.45 · 15-nov-2026";
+const VERSION = "v2.4.50 · 15-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1451,12 +1451,13 @@ async function entrar(){
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
 
 /* ---------- Transferencias: lo que llegó por SMS (Nequi/Daviplata) contra el total de la hoja de papel ---------- */
-let trDia = "hoy", trDatos = null, trCargando = false;   // trDia: "hoy", "ayer" o una fecha yyyy-mm-dd de la tabla
+let trDia = "hoy", trDatos = null, trCargando = false, trPagosAbierto = false;
+let trFiltro = leer("tr_filtro") || "", trOrden = leer("tr_orden") || "reciente";   // filtro: "", "Nequi" o "Daviplata"
 function trFechaDe(n){ const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate()); }
 function trFecha(){ return trDia === "hoy" ? trFechaDe(0) : trDia === "ayer" ? trFechaDe(1) : trDia; }
 function trElegir(dia){ if(trFecha() === (dia === "hoy" ? trFechaDe(0) : dia === "ayer" ? trFechaDe(1) : dia)) return;
   const previo = trDatos; trDia = dia; trDatos = previo ? {dias: previo.dias, fecha: trFecha(), cargando: true} : null; pintarTransf(); cargarTransf(); }
-function abrirTransf(){ trDia = "hoy"; trDatos = null; pintarTransf(); ir("transferencias"); cargarTransf(); }
+function abrirTransf(){ clearTimeout(tLista); trDia = "hoy"; trDatos = null; pintarTransf(); ir("transferencias"); cargarTransf(); }
 async function cargarTransf(hojita){
   if(trCargando) return;
   trCargando = true;
@@ -1512,14 +1513,24 @@ function pintarTransf(){
         dif > 0 ? " · Revisa en la hoja cuáles no aparecen en la lista de abajo" : ""}</small></div>`;
   }
   h += `</div>`;
-  h += `<details class="alerta"${pagos.length && c && d.diferencia ? " open" : ""}><summary><span>Pagos que llegaron</span><span class="num-alerta gris">${pagos.length}</span></summary>` +
-    (pagos.length ? pagos.map(x => `<div class="fila-dato"><span>${esc(x.hora)} · ${esc(x.banco)}${x.quien ? `<small style="display:block;opacity:.65">${esc(x.quien)}</small>` : ""}</span><b>${plata(x.valor)}</b></div>`).join("")
-      : `<p class="nota" style="margin:0">Ninguno este día.</p>`) + `</details>`;
+  const lista = pagos.filter(x => !trFiltro || x.banco === trFiltro)
+    .sort((a, b) => (a.hora < b.hora ? -1 : a.hora > b.hora ? 1 : 0) * (trOrden === "antigua" ? 1 : -1));
+  const chip = (attr, val, actual, txt) => `<button class="chip" ${attr}="${val}" aria-pressed="${actual === val}" style="text-transform:none">${txt}</button>`;
+  h += `<details class="alerta" id="trPagos"${trPagosAbierto || (pagos.length && c && d.diferencia) ? " open" : ""}><summary><span>Pagos que llegaron</span><span class="num-alerta gris">${lista.length}${trFiltro ? " de " + pagos.length : ""}</span></summary>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+      ${chip("data-trfiltro", "", trFiltro, "Todos")}${chip("data-trfiltro", "Nequi", trFiltro, "Nequi")}${chip("data-trfiltro", "Daviplata", trFiltro, "Daviplata")}
+      <span style="flex:1"></span>
+      ${chip("data-trorden", trOrden === "antigua" ? "reciente" : "antigua", "", trOrden === "antigua" ? "↑ Más antigua primero" : "↓ Más reciente primero")}
+    </div>` +
+    (lista.length ? lista.map(x => `<div class="fila-dato"><span>${esc(x.hora)} · ${esc(x.banco)}${x.quien ? `<small style="display:block;opacity:.65">${esc(x.quien)}</small>` : ""}</span><b>${plata(x.valor)}</b></div>`).join("") +
+      (trFiltro ? `<div class="fila-dato"><span>Total ${esc(trFiltro)}</span><b>${plata(lista.reduce((t, x) => t + (x.valor || 0), 0))}</b></div>` : "")
+      : `<p class="nota" style="margin:0">${pagos.length ? "Ninguno de " + esc(trFiltro) + " este día." : "Ninguno este día."}</p>`) + `</details>`;
   h += htmlTrDias(d.dias);
   if(ign.length) h += `<details class="alerta" style="margin-top:8px"><summary><span>Mensajes que no parecen pagos</span><span class="num-alerta gris">${ign.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">No se sumaron. Si alguno sí era un pago que te hicieron, avísale a quien mantiene la app para que lo reconozca.</p>` +
     ign.map(x => `<div class="fila-dato" style="display:block"><small style="opacity:.65">${esc(x.hora)} · ${esc(x.banco)}</small><div style="font-size:.9em">${esc(x.texto)}</div></div>`).join("") + `</details>`;
   p.innerHTML = h;
+  const det = $("trPagos"); if(det) det.addEventListener("toggle", () => { trPagosAbierto = det.open; });
   const inp = $("trHojita"); if(!inp) return;
   inp.addEventListener("input", () => { const v = inp.value.replace(/\D/g, ""); inp.value = v ? pesos(Number(v)) : ""; });
   const calc = () => { const v = inp.value.replace(/\D/g, ""); if(!v){ $("trEstado").textContent = "Escribe el total de la hoja"; return; } cargarTransf(v); };
@@ -3318,7 +3329,13 @@ $("btnVolverTr").addEventListener("click", ()=>irMenu("ventas"));
 $("btnTrActualizar").addEventListener("click", ()=>cargarTransf());
 $("trHoy").addEventListener("click", ()=>trElegir("hoy"));
 $("trAyer").addEventListener("click", ()=>trElegir("ayer"));
-$("trPanel").addEventListener("click", e => { const f = e.target.closest("[data-trdia]"); if(f) trElegir(f.dataset.trdia); });
+$("trPanel").addEventListener("click", e => {
+  const f = e.target.closest("[data-trdia]"); if(f) return trElegir(f.dataset.trdia);
+  const fl = e.target.closest("[data-trfiltro]");
+  if(fl){ trFiltro = fl.dataset.trfiltro; guardar("tr_filtro", trFiltro); trPagosAbierto = true; return pintarTransf(); }
+  const o = e.target.closest("[data-trorden]");
+  if(o){ trOrden = o.dataset.trorden; guardar("tr_orden", trOrden); trPagosAbierto = true; return pintarTransf(); }
+});
 $("btnProveedores").addEventListener("click", abrirProveedores);
 $("btnSalirPrin").addEventListener("click", inicio);
 $("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
