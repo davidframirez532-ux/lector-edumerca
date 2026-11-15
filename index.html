@@ -284,7 +284,21 @@
     <button class="ppal" id="btnMenuKpis">KPIs del negocio</button>
     <button class="ghost" id="btnMenuInv">Inventario</button>
     <button class="ppal" id="btnMenuCompras">Compras</button>
+    <button class="ghost" id="btnMenuTransf">Transferencias (Nequi y Daviplata)</button>
   </div>
+</section>
+
+<!-- ============ TRANSFERENCIAS ============ -->
+<section class="pantalla" id="transferencias">
+  <div class="cabeza"><h2>Transferencias</h2>
+    <button class="sec" id="btnTrActualizar" aria-label="Actualizar" style="font-size:1.3rem;padding:8px 14px">↻</button>
+    <button class="sec" id="btnVolverTr">Volver</button></div>
+  <div class="seg">
+    <button id="trHoy" aria-pressed="true">Hoy</button>
+    <button id="trAyer" aria-pressed="false">Ayer</button>
+  </div>
+  <p id="trEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="trPanel"></div>
 </section>
 
 <!-- ============ INVENTARIO ============ -->
@@ -553,7 +567,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.40 · 13-nov-2026";
+const VERSION = "v2.4.45 · 15-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -575,7 +589,7 @@ window.fetch = (url, op) => {
   if(/script\.google(usercontent)?\.com/.test(u)) op = Object.assign({credentials:"omit", redirect:"follow"}, op || {});
   return fetchOriginal(url, op);
 };
-const ESCRIBIBLES = ["lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos","pedido"];
+const ESCRIBIBLES = ["transferencias","lista","conteoItem","ajustes","ajustar","fijos","proveedores","proveedor","abastos","pedido"];
 const estado = $("estado"), entrada = $("entrada");
 let catalogo = new Map(), productos = [], sinCodigo = new Set(), categoria = "", filtroExtra = "";
 let escaner = null, modoCamara = "precio", pendiente = null;
@@ -1427,6 +1441,64 @@ async function entrar(){
   irMenu("principal");
 }
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
+
+/* ---------- Transferencias: lo que llegó por SMS (Nequi/Daviplata) contra el total de la hoja de papel ---------- */
+let trDia = "hoy", trDatos = null, trCargando = false;
+function trFecha(){
+  const d = new Date(); if(trDia === "ayer") d.setDate(d.getDate() - 1);
+  return d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate());
+}
+function abrirTransf(){ trDatos = null; pintarTransf(); ir("transferencias"); cargarTransf(); }
+async function cargarTransf(hojita){
+  if(trCargando) return;
+  trCargando = true;
+  const msg = $("trEstado"), fecha = trFecha();
+  msg.textContent = hojita !== undefined ? "Guardando…" : "Cargando…";
+  try{
+    const d = await postAdmin(hojita !== undefined ? {accion:"transferencias_cuadre", fecha, hojita} : {accion:"transferencias_datos", fecha});
+    if(d.total === undefined) throw new Error("El servidor todavía no tiene esta función. Hay que publicarlo.");
+    if(fecha === trFecha()){ trDatos = d; pintarTransf(); }
+    msg.textContent = "";
+  }catch(e){ msg.textContent = e.message === "Cancelado" ? "" : "⚠ " + e.message; }
+  finally{ trCargando = false; }
+}
+function pintarTransf(){
+  $("trHoy").setAttribute("aria-pressed", trDia === "hoy");
+  $("trAyer").setAttribute("aria-pressed", trDia === "ayer");
+  const p = $("trPanel"), d = trDatos;
+  if(!d){ p.innerHTML = ""; return; }
+  const pb = d.por_banco || {}, pagos = d.pagos || [], ign = d.ignorados || [];
+  let h = `<div class="bloque"><h3>Llegó por SMS <small>${fechaTxt(d.fecha)}</small></h3>` +
+    ["Nequi", "Daviplata"].concat(Object.keys(pb).filter(b => b !== "Nequi" && b !== "Daviplata")).map(b =>
+      `<div class="fila-dato"><span>${esc(b)}<small style="display:block;opacity:.65">${(n => n + (n === 1 ? " pago" : " pagos"))(pagos.filter(x => x.banco === b).length)}</small></span><b>${plata(pb[b] || 0)}</b></div>`).join("") +
+    `<div class="fila-dato" style="font-size:1.15em"><span>Total que llegó</span><b>${plata(d.total)}</b></div>` +
+    `<p class="nota" style="margin:6px 0 0">${d.ultimo_sms ? "Último SMS recibido: " + fechaHora(d.ultimo_sms) + "." : "Todavía no ha llegado ningún SMS. Revisa MacroDroid en el celular."}</p></div>`;
+  const c = d.cuadre;
+  h += `<div class="bloque"><h3>Hoja de papel</h3>
+    <label class="campo">Total anotado en la hoja<input id="trHojita" type="text" inputmode="numeric" placeholder="0" autocomplete="off" enterkeyhint="done" value="${c ? pesos(c.hojita) : ""}"></label>
+    <button class="ppal" id="btnTrCalcular" style="margin-top:8px;width:100%">Calcular diferencia</button>`;
+  if(c){
+    const dif = d.diferencia;
+    const [color, txt] = dif > 0 ? ["#ff9a86", `No llegaron <b>${plata(dif)}</b>`]
+      : dif < 0 ? ["#ffd23f", `Llegaron <b>${plata(-dif)}</b> más de lo anotado`] : ["#4fd6a8", "✓ Cuadra exacto"];
+    h += `<div style="margin-top:10px;padding:12px;border-radius:10px;border:2px solid ${color};font-size:1.15em;text-align:center">${txt}
+      <small style="display:block;opacity:.75;font-size:.75em;margin-top:4px">Hoja ${plata(c.hojita)} − llegó ${plata(d.total)}${
+        dif > 0 ? " · Revisa en la hoja cuáles no aparecen en la lista de abajo" : ""}</small></div>`;
+  }
+  h += `</div>`;
+  h += `<details class="alerta"${pagos.length && c && d.diferencia ? " open" : ""}><summary><span>Pagos que llegaron</span><span class="num-alerta gris">${pagos.length}</span></summary>` +
+    (pagos.length ? pagos.map(x => `<div class="fila-dato"><span>${esc(x.hora)} · ${esc(x.banco)}${x.quien ? `<small style="display:block;opacity:.65">${esc(x.quien)}</small>` : ""}</span><b>${plata(x.valor)}</b></div>`).join("")
+      : `<p class="nota" style="margin:0">Ninguno este día.</p>`) + `</details>`;
+  if(ign.length) h += `<details class="alerta" style="margin-top:8px"><summary><span>Mensajes que no parecen pagos</span><span class="num-alerta gris">${ign.length}</span></summary>
+    <p class="nota" style="margin:0 0 6px">No se sumaron. Si alguno sí era un pago que te hicieron, avísale a quien mantiene la app para que lo reconozca.</p>` +
+    ign.map(x => `<div class="fila-dato" style="display:block"><small style="opacity:.65">${esc(x.hora)} · ${esc(x.banco)}</small><div style="font-size:.9em">${esc(x.texto)}</div></div>`).join("") + `</details>`;
+  p.innerHTML = h;
+  const inp = $("trHojita");
+  inp.addEventListener("input", () => { const v = inp.value.replace(/\D/g, ""); inp.value = v ? pesos(Number(v)) : ""; });
+  const calc = () => { const v = inp.value.replace(/\D/g, ""); if(!v){ $("trEstado").textContent = "Escribe el total de la hoja"; return; } cargarTransf(v); };
+  $("btnTrCalcular").addEventListener("click", calc);
+  inp.addEventListener("keydown", e => { if(e.key === "Enter") calc(); });
+}
 
 /* ---------- Llamadas de administración (piden la clave una vez por sesión) ---------- */
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -3212,6 +3284,11 @@ $("btnInventario").addEventListener("click", entrar);
 $("btnMenuInv").addEventListener("click", ()=>irMenu("inventario"));
 $("btnMenuCompras").addEventListener("click", ()=>irMenu("compras"));
 $("btnMenuKpis").addEventListener("click", abrirKpis);
+$("btnMenuTransf").addEventListener("click", abrirTransf);
+$("btnVolverTr").addEventListener("click", ()=>irMenu("principal"));
+$("btnTrActualizar").addEventListener("click", ()=>cargarTransf());
+$("trHoy").addEventListener("click", ()=>{ if(trDia !== "hoy"){ trDia = "hoy"; trDatos = null; pintarTransf(); cargarTransf(); } });
+$("trAyer").addEventListener("click", ()=>{ if(trDia !== "ayer"){ trDia = "ayer"; trDatos = null; pintarTransf(); cargarTransf(); } });
 $("btnProveedores").addEventListener("click", abrirProveedores);
 $("btnSalirPrin").addEventListener("click", inicio);
 $("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
