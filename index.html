@@ -553,7 +553,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.45 · 15-nov-2026";
+const VERSION = "v2.4.40 · 13-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1730,7 +1730,7 @@ function bloqueDetalle(det, dia){
     return `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Sin ventas registradas ${dia}${
       dia === "hoy" ? ". Si ya se vendió, toca ↻ para traer las ventas de hoy, o mira <b>Ayer</b>." : "."}</p></div>`;
   const maxC = Math.max(...cats.map(c => c.ventas), 1);
-  let h = htmlPagos(det.por_pago, dia) + `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>` + cats.map(c =>
+  let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>` + cats.map(c =>
     `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
       <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null ? ` · ${c.margen_pct}%` : ""}</b></div>
       <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
@@ -1740,19 +1740,6 @@ function bloqueDetalle(det, dia){
     `<div class="fila-dato"><span>${i + 1}. ${esc(p.nombre)} <small style="opacity:.65">× ${num(p.unidades)}</small></span>
      <b>${plata(p.ventas)}</b></div>`).join("") + `</div>`;
   return h;
-}
-/* Formas de pago del día (lo que se marcó al cobrar en Siigo). Servidor viejo: no trae por_pago y no se muestra. */
-function htmlPagos(pagos, dia){
-  if(!pagos || !pagos.length) return "";
-  const tr = pagos.filter(p => p.transferencia);
-  const total = tr.reduce((s, p) => s + (p.valor || 0), 0), n = tr.reduce((s, p) => s + (p.ventas || 0), 0);
-  return `<div class="bloque"><h3>Formas de pago <small>${dia}</small></h3>
-    <div class="fila-dato" style="font-size:1.1em"><span>💸 Transferencias<small style="display:block;opacity:.65">${n} ${n === 1 ? "venta" : "ventas"}${
-      tr.length > 1 ? " · " + tr.map(p => esc(p.forma)).join(" + ") : ""}</small></span><b>${plata(total)}</b></div>` +
-    pagos.filter(p => !p.transferencia || tr.length > 1).map(p =>
-      `<div class="fila-dato"><span>${p.transferencia ? "· " : ""}${esc(p.forma)}<small style="display:block;opacity:.65">${p.ventas || 0} ${p.ventas === 1 ? "venta" : "ventas"}</small></span><b>${plata(p.valor)}</b></div>`).join("") +
-    `<p class="nota" style="margin:6px 0 0">Según lo que se marcó al cobrar en Siigo. Las devoluciones no se restan aquí.${
-      dia === "hoy" ? " Toca ↻ para traer las ventas más recientes." : ""}</p></div>`;
 }
 /* Ventas por hora: las 3 mejores, y el gráfico del día completo con rango ajustable */
 let horasAbierto = false, horaDesde = 0, horaHasta = 23;
