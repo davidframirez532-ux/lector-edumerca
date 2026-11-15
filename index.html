@@ -1467,6 +1467,7 @@ async function cargarTransf(hojita, obs){
     const d = await postAdmin(hojita !== undefined ? {accion:"transferencias_cuadre", fecha, hojita, obs} : {accion:"transferencias_datos", fecha});
     if(d.total === undefined) throw new Error("El servidor todavía no tiene esta función. Hay que publicarlo.");
     if(fecha === trFecha()){ trDatos = d; pintarTransf(); }
+    if(fecha === trFechaDe(0) && window.trRevisarNuevas) trRevisarNuevas(d);   // los de hoy cuentan como vistos para la 🔔
     msg.textContent = "";
   }catch(e){ msg.textContent = e.message === "Cancelado" ? "" : "⚠ " + e.message; }
   finally{ trCargando = false; }

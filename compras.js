@@ -5,7 +5,7 @@
 "use strict";
 const COMPRAS_VERSION = "compras v67";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
-/* 🎨 Color de la campana de avisos (arriba a la derecha). Cámbialo por el que quieras:
+/* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
 const COLOR_CAMPANA = "#8fc9ff";
 
@@ -179,6 +179,7 @@ document.getElementById("entrada").insertAdjacentHTML("beforebegin", html);
   };
   const fetchOriginal = window.fetch.bind(window);
   window.fetch = function(){
+    if(window.__fetchSinPantalla > 0){ window.__fetchSinPantalla--; return fetchOriginal.apply(window, arguments); }   // consulta de avisos
     window.pantallaOcupada.inicio();
     let p;
     try{ p = fetchOriginal.apply(window, arguments); }
@@ -297,12 +298,13 @@ pintarVersion(); // incluye COMPRAS_VERSION (si se sumara aquí, se borraría al
 /* ✅ cuadra · ⚠ aviso (diferencia de total o IVA mayor a la tolerancia: deja subir) · ❌ bloquea */
 const chk = c => `<div class="fila-dato"><span${c.aviso ? ' style="color:#ffd23f"' : ""}>${c.ok ? "✅" : c.aviso ? "⚠️" : "❌"} ${esc(c.texto)}</span></div>`;
 
-/* ══════════════ SEGUNDO PLANO + CAMPANA 🔔 ══════════════
+/* ══════════════ SEGUNDO PLANO (avisos abajo, en la pastilla ⏳) ══════════════
    Asociar, repartir y leer el PDF se guardan en una fila que corre en segundo plano (uno tras otro, porque el servidor
-   procesa de a uno). La línea cambia al instante en pantalla ("⏳ guardando…") y la 🔔 avisa cuando termina o si falla.
+   procesa de a uno). La línea cambia al instante en pantalla ("⏳ guardando…") y abajo aparece una pastilla:
+   ⏳ mientras guarda · ✓ un momento cuando termina · ❌ si algo falló (se queda hasta que la toques).
    La fila se guarda en el celular: si cierras la app, se reanuda al abrirla. */
 const BG_KEY = "cp_bg_cola", NOTI_KEY = "cp_notis";
-let bgCola = leerJSON(BG_KEY, []), notis = leerJSON(NOTI_KEY, []), bgCorriendo = false, tBgReintento = null;
+let bgCola = leerJSON(BG_KEY, []), notis = leerJSON(NOTI_KEY, []), bgCorriendo = false, tBgReintento = null, bienHasta = 0;
 const guardarBg = () => { try{ localStorage.setItem(BG_KEY, JSON.stringify(bgCola)); }catch(e){} };
 const guardarNotis = () => { try{ localStorage.setItem(NOTI_KEY, JSON.stringify(notis.slice(0, 40))); }catch(e){} };
 const bgPendientesDe = id => bgCola.filter(o => o.factId === id).length;
@@ -314,25 +316,33 @@ const bgPendientesDe = id => bgCola.filter(o => o.factId === id).length;
     .campana svg{width:26px;height:26px;display:block}
     .campana .cn{position:absolute;top:0;right:0;min-width:18px;height:18px;border-radius:9px;background:var(--rojo);color:#fff;
       font:600 .7rem/18px "Barlow",sans-serif;text-align:center;padding:0 4px}
-    .campana .cn.azul{background:var(--azul)}
-    .campana.trabajando{animation:campanita 1.2s ease-in-out infinite}
-    @keyframes campanita{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(6deg)}}`;
+    .campana.nueva{animation:campanita 1.2s ease-in-out 3}
+    @keyframes campanita{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(6deg)}}
+    .procesos{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);z-index:7;
+      border:0;border-radius:999px;padding:9px 16px;font:600 .9rem "Barlow",sans-serif;color:#fff;background:var(--azul);
+      box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .procesos.mal{background:var(--rojo)} .procesos.bien{background:#1f9d6f}`;
   document.head.appendChild(st);
   const b = document.createElement("button");
-  b.className = "campana"; b.id = "campana"; b.setAttribute("aria-label", "Avisos");
+  b.className = "campana"; b.id = "campana"; b.setAttribute("aria-label", "Avisos de transferencias");
   b.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v.7A6.5 6.5 0 0 0 5.5 10.5v4.2L3.8 17a1 1 0 0 0 .8 1.6h14.8a1 1 0 0 0 .8-1.6l-1.7-2.3v-4.2a6.5 6.5 0 0 0-5-6.3v-.7A1.5 1.5 0 0 0 12 2zm-2.6 18a2.7 2.7 0 0 0 5.2 0z"/></svg><span class="cn" hidden></span>`;
   document.body.appendChild(b);
   b.addEventListener("click", abrirAvisos);
+  const p = document.createElement("button");
+  p.className = "procesos"; p.id = "procesos"; p.hidden = true;
+  document.body.appendChild(p);
+  p.addEventListener("click", abrirProcesos);
 })();
-function pintarCampana(){
-  const b = $("campana"); if(!b) return;
-  const n = b.querySelector(".cn");
-  const sinLeer = notis.filter(x => !x.leida).length, enCurso = bgCola.length;
-  b.classList.toggle("trabajando", enCurso > 0);
-  if(sinLeer){ n.hidden = false; n.textContent = sinLeer; n.classList.remove("azul"); }
-  else if(enCurso){ n.hidden = false; n.textContent = enCurso; n.classList.add("azul"); }
-  else n.hidden = true;
-  b.style.display = esAdmin() ? "" : "none";            // solo en modo administración
+function pintarProcesos(){
+  const b = $("procesos"); if(!b) return;
+  const enCurso = bgCola.length, sinLeer = notis.filter(x => !x.leida), malos = sinLeer.filter(x => !x.ok).length;
+  let txt = "", cls = "";
+  if(enCurso) txt = `⏳ Guardando ${enCurso} cambio${enCurso > 1 ? "s" : ""}…` + (bgCorriendo ? "" : " (esperando conexión)");
+  else if(malos){ txt = `❌ ${malos} no se guard${malos > 1 ? "aron" : "ó"} · toca para ver`; cls = "mal"; }
+  else if(sinLeer.length){ txt = "✅ Listo · toca para ver el resultado"; cls = "bien"; }
+  else if(Date.now() < bienHasta){ txt = "✓ Cambios guardados"; cls = "bien"; }
+  b.className = "procesos " + cls; b.textContent = txt;
+  b.hidden = !txt || !esAdmin();
 }
 function buscarFact(id){ return cola ? (cola.facturas || []).concat(cola.notas || []).find(f => f.id === id) : null; }
 function aplicarPatch(f, op){
@@ -351,9 +361,9 @@ function bgEncolar(op){
   if(sel && sel.id === op.factId && sel !== f) aplicarPatch(sel, op);
   bgCola.push(op); guardarBg();
   try{ localStorage.setItem("cp_cola", JSON.stringify(cola)); }catch(e){}
-  $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "⏳ Guardando en segundo plano · te aviso en la 🔔";
+  $("cpDetEstado").style.color = ""; $("cpDetEstado").textContent = "⏳ Guardando en segundo plano · te aviso abajo";
   if($("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; }
-  pintarCola(); pintarNotas(); pintarCampana();
+  pintarCola(); pintarNotas(); pintarProcesos();
   bgProcesar();
 }
 /* La respuesta del servidor trae la factura completa; se le vuelven a poner los cambios que siguen en la fila */
@@ -388,11 +398,14 @@ function notificar(op, d, err){
     texto = `EAN del PDF: ${n} línea${n === 1 ? "" : "s"} asociada${n === 1 ? "" : "s"}` + (n ? " (falta confirmar el factor)" : "");
     detalle = resumenPdf(d);
   }else texto = (op.tipo === "mezcla" ? "Reparto guardado · " : "Asociada · ") + op.texto;
-  notis.unshift({uid: op.uid, ok: !err, texto, detalle, doc: op.doc, factId: op.factId, fecha: new Date().toISOString(), leida: false});
-  guardarNotis(); pintarCampana();
+  // Lo que salió bien sin nada que leer no se queda en la pastilla: muestra "✓ Cambios guardados" un momento
+  const leida = !err && !detalle;
+  if(leida){ bienHasta = Date.now() + 4000; setTimeout(pintarProcesos, 4100); }
+  notis.unshift({uid: op.uid, ok: !err, texto, detalle, doc: op.doc, factId: op.factId, fecha: new Date().toISOString(), leida});
+  guardarNotis(); pintarProcesos();
   if(navigator.vibrate) navigator.vibrate(err ? [80, 60, 80] : 40);
 }
-/* Una petición que nunca responde dejaba la fila (y la campana) girando para siempre: se corta a los 90 s */
+/* Una petición que nunca responde dejaba la fila (y la pastilla ⏳) girando para siempre: se corta a los 90 s */
 const BG_ESPERA_MS = 90000, BG_MAX_REINTENTOS = 6;
 function conLimite(p){
   let t;
@@ -444,14 +457,14 @@ async function bgProcesar(){
     }
   }finally{ bgCorriendo = false; limpiarHuerfanos(); pintarCampana(); if(sel && $("cpDet").classList.contains("activa")){ const sc = $("cpDetPanel").scrollTop; pintarDetalle(); $("cpDetPanel").scrollTop = sc; } }
 }
-function abrirAvisos(){
+function abrirProcesos(){
   const ops = [];
   if(bgCola.length){
     ops.push({t: `⏳ ${bgCola.length} en proceso`, sub: bgCola.map(o => o.texto).slice(0, 3).join(" · ") + (bgCola.length > 3 ? " …" : "") +
       (bgCorriendo ? "" : " · esperando conexión"), fn: () => {}});
     ops.push({t: "🧹 Cancelar lo que está en proceso", sub: "Si se quedó pegado: luego toca ↻ en Por aprobar para ver cómo quedó", fn: () => {
       if(!confirm("¿Cancelar " + bgCola.length + " cambio(s) en proceso? Los que ya llegaron al servidor quedan guardados.")) return;
-      bgCola = []; guardarBg(); clearTimeout(tBgReintento); limpiarHuerfanos(); pintarCampana(); pintarCola(); pintarNotas();
+      bgCola = []; guardarBg(); clearTimeout(tBgReintento); limpiarHuerfanos(); pintarProcesos(); pintarCola(); pintarNotas();
       if(sel && $("cpDet").classList.contains("activa")) pintarDetalle();
     }});
   }
@@ -461,14 +474,74 @@ function abrirAvisos(){
       const f = buscarFact(x.factId);
       if(f){ sel = f; abrirDetalle(); }
     }}));
-  if(notis.length) ops.push({t: "🗑 Borrar avisos", sub: "", fn: () => { notis = []; guardarNotis(); pintarCampana(); }});
-  if(!ops.length) ops.push({t: "Sin avisos", sub: "Aquí te aviso cuando termine algo que corre en segundo plano", fn: () => {}});
-  notis.forEach(x => { x.leida = true; }); guardarNotis(); pintarCampana();
-  elegir("Avisos", ops);
+  if(notis.length) ops.push({t: "🗑 Borrar la lista", sub: "", fn: () => { notis = []; guardarNotis(); pintarProcesos(); }});
+  if(!ops.length) ops.push({t: "No hay nada en proceso", sub: "Aquí ves lo que se guarda en segundo plano en Compras", fn: () => {}});
+  notis.forEach(x => { x.leida = true; }); guardarNotis(); pintarProcesos();
+  elegir("Procesos en segundo plano", ops);
 }
 setTimeout(() => { limpiarHuerfanos(); pintarCampana(); bgProcesar(); }, 1500);             // si quedó algo de antes, se reanuda
 window.addEventListener("online", bgProcesar);
-setInterval(pintarCampana, 5000);                                      // la campana se esconde/aparece con el modo administración
+setInterval(pintarCampana, 5000);                                      // campana y pastilla se esconden/aparecen con el modo administración
+
+/* ══════════════ CAMPANA 🔔: AVISO DE TRANSFERENCIAS ══════════════
+   Cada minuto (con la app abierta y en modo administración) se le pregunta al servidor por los pagos de hoy que
+   llegaron por SMS (Nequi/Daviplata, ver Ventas → Transferencias). Los que no se habían visto se avisan en la 🔔.
+   Con la app cerrada no llega nada: al abrirla avisa de los de hoy que llegaron mientras tanto.
+   La primera vez en un celular solo se toma nota de lo que ya había (para no avisar de golpe todo el día). */
+const TRA_KEY = "tr_avisos", TRV_KEY = "tr_vistos", TR_CADA_MS = 60000;
+let trAvisos = leerJSON(TRA_KEY, []), trRevisando = false;
+const guardarTrAvisos = () => { try{ localStorage.setItem(TRA_KEY, JSON.stringify(trAvisos.slice(0, 40))); }catch(e){} };
+/* Clave de cada pago: banco, hora, valor y quién; si se repite igual (dos pagos iguales el mismo minuto) lleva #2, #3… */
+function clavesTr(pagos){ const n = {}; return pagos.map(x => { const k = [x.banco, x.hora, x.valor, x.quien || ""].join("|"); n[k] = (n[k] || 0) + 1; return k + "#" + n[k]; }); }
+function trRevisarNuevas(d){
+  if(!d || !Array.isArray(d.pagos) || d.fecha !== trFechaDe(0)) return;
+  const claves = clavesTr(d.pagos), vistos = leerJSON(TRV_KEY, null);
+  try{ localStorage.setItem(TRV_KEY, JSON.stringify({fecha: d.fecha, claves})); }catch(e){}
+  if(!vistos) return;                                   // primera vez en este celular: solo se toma nota
+  const antes = new Set(vistos.fecha === d.fecha ? vistos.claves : []);
+  const nuevos = d.pagos.filter((x, i) => !antes.has(claves[i]));          // vienen del más reciente al más antiguo
+  if(!nuevos.length) return;
+  const viendo = $("transferencias").classList.contains("activa"), fecha = new Date().toISOString();
+  const sub = x => (x.quien ? x.quien + " · " : "") + "a las " + x.hora;
+  if(nuevos.length <= 3) nuevos.slice().reverse().forEach(x => trAvisos.unshift({texto: `${plata(x.valor)} por ${x.banco}`, sub: sub(x), fecha, leida: viendo}));
+  else trAvisos.unshift({texto: `${nuevos.length} transferencias · ${plata(nuevos.reduce((t, x) => t + (x.valor || 0), 0))}`,
+    sub: `De las ${nuevos[nuevos.length - 1].hora} a las ${nuevos[0].hora}`, fecha, leida: viendo});
+  guardarTrAvisos(); pintarCampana();
+  if(viendo) return;
+  const b = $("campana"); if(b){ b.classList.remove("nueva"); void b.offsetWidth; b.classList.add("nueva"); }
+  if(navigator.vibrate) navigator.vibrate([60, 80, 60]);
+}
+window.trRevisarNuevas = trRevisarNuevas;
+async function trSondear(){
+  // Sin PIN guardado no se pregunta (no se le pide el PIN a nadie por un aviso)
+  if(trRevisando || trCargando || document.hidden || !esAdmin() || !claveAdmin || !apiUrl()) return;
+  trRevisando = true;
+  try{
+    window.__fetchSinPantalla = 1;                      // esta consulta no mantiene la pantalla encendida
+    trRevisarNuevas(await postAdmin({accion: "transferencias_datos", fecha: trFechaDe(0)}));
+  }catch(e){}
+  finally{ trRevisando = false; window.__fetchSinPantalla = 0; }
+}
+function pintarCampana(){
+  const b = $("campana");
+  if(b){
+    const n = b.querySelector(".cn"), sinLeer = trAvisos.filter(x => !x.leida).length;
+    n.hidden = !sinLeer; n.textContent = sinLeer;
+    b.style.display = esAdmin() ? "" : "none";          // solo en modo administración
+  }
+  pintarProcesos();
+}
+function abrirAvisos(){
+  const ops = trAvisos.map(x => ({t: (x.leida ? "" : "🆕 ") + "💸 " + x.texto, sub: x.sub + " · " + fechaTxt(x.fecha.slice(0, 10)).slice(0, 9), fn: abrirTransf}));
+  if(!ops.length) ops.push({t: "Sin avisos", sub: "Aquí te aviso cuando llegue una transferencia por Nequi o Daviplata (con la app abierta)", fn: () => {}});
+  ops.push({t: "Ver transferencias de hoy", sub: "", fn: abrirTransf});
+  if(trAvisos.length) ops.push({t: "🗑 Borrar avisos", sub: "", fn: () => { trAvisos = []; guardarTrAvisos(); pintarCampana(); }});
+  trAvisos.forEach(x => { x.leida = true; }); guardarTrAvisos(); pintarCampana();
+  elegir("Transferencias que llegaron", ops);
+}
+setInterval(trSondear, TR_CADA_MS);
+setTimeout(trSondear, 4000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) setTimeout(trSondear, 2000); });
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -811,7 +884,7 @@ function pintarDetalle(){
   const ap = $("btnCpAprobar");
   const guardando = bgPendientesDe(f.id);
   ap.disabled = !f.lista || guardando > 0; ap.style.opacity = f.lista && !guardando ? "1" : ".45";
-  ap.textContent = guardando ? `⏳ Guardando ${guardando} cambio${guardando > 1 ? "s" : ""}… te aviso en la 🔔`
+  ap.textContent = guardando ? `⏳ Guardando ${guardando} cambio${guardando > 1 ? "s" : ""}… `
     : !f.lista ? "Resuelve los pendientes" : nota ? "Ya la registré en Siigo" : `Aprobar y subir ${plata(t.total)}`;
 }
 function reemplazar(nueva){
