@@ -284,7 +284,15 @@
     <button class="ppal" id="btnMenuKpis">KPIs del negocio</button>
     <button class="ghost" id="btnMenuInv">Inventario</button>
     <button class="ppal" id="btnMenuCompras">Compras</button>
-    <button class="ghost" id="btnMenuTransf">Transferencias (Nequi y Daviplata)</button>
+    <button class="ghost" id="btnMenuVentas">Ventas</button>
+  </div>
+</section>
+
+<!-- ============ VENTAS ============ -->
+<section class="pantalla" id="ventas">
+  <div class="cabeza"><h2>Ventas</h2><button class="sec" id="btnSalirVentas">Volver</button></div>
+  <div class="menu">
+    <button class="ppal" id="btnMenuTransf">Transferencias (Nequi y Daviplata)</button>
   </div>
 </section>
 
@@ -1443,12 +1451,12 @@ async function entrar(){
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
 
 /* ---------- Transferencias: lo que llegó por SMS (Nequi/Daviplata) contra el total de la hoja de papel ---------- */
-let trDia = "hoy", trDatos = null, trCargando = false;
-function trFecha(){
-  const d = new Date(); if(trDia === "ayer") d.setDate(d.getDate() - 1);
-  return d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate());
-}
-function abrirTransf(){ trDatos = null; pintarTransf(); ir("transferencias"); cargarTransf(); }
+let trDia = "hoy", trDatos = null, trCargando = false;   // trDia: "hoy", "ayer" o una fecha yyyy-mm-dd de la tabla
+function trFechaDe(n){ const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate()); }
+function trFecha(){ return trDia === "hoy" ? trFechaDe(0) : trDia === "ayer" ? trFechaDe(1) : trDia; }
+function trElegir(dia){ if(trFecha() === (dia === "hoy" ? trFechaDe(0) : dia === "ayer" ? trFechaDe(1) : dia)) return;
+  const previo = trDatos; trDia = dia; trDatos = previo ? {dias: previo.dias, fecha: trFecha(), cargando: true} : null; pintarTransf(); cargarTransf(); }
+function abrirTransf(){ trDia = "hoy"; trDatos = null; pintarTransf(); ir("transferencias"); cargarTransf(); }
 async function cargarTransf(hojita){
   if(trCargando) return;
   trCargando = true;
@@ -1461,12 +1469,30 @@ async function cargarTransf(hojita){
     msg.textContent = "";
   }catch(e){ msg.textContent = e.message === "Cancelado" ? "" : "⚠ " + e.message; }
   finally{ trCargando = false; }
+  if(fecha !== trFecha() && hojita === undefined) cargarTransf();   // cambiaron de día mientras cargaba
+}
+/* Últimos 8 días: toca un día para verlo arriba */
+function htmlTrDias(dias){
+  if(!dias || !dias.length) return "";
+  const sel = trFecha(), td = "padding:7px 4px;text-align:right;white-space:nowrap";
+  return `<div class="bloque" style="margin-top:8px"><h3>Últimos ${dias.length} días</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+    <tr style="opacity:.7"><td style="padding:4px">Día</td><td style="${td}">Nequi</td><td style="${td}">Daviplata</td><td style="${td}">Total</td><td style="${td}">Hoja</td></tr>` +
+    dias.map(x => {
+      const dif = x.diferencia, col = dif == null ? "" : dif > 0 ? "#ff9a86" : dif < 0 ? "#ffd23f" : "#4fd6a8";
+      return `<tr data-trdia="${esc(x.fecha)}" style="cursor:pointer;border-top:1px solid rgba(251,250,245,.12)${x.fecha === sel ? ";background:rgba(255,210,63,.18)" : ""}">
+        <td style="padding:7px 4px;white-space:nowrap">${esc(fechaTxt(x.fecha).slice(0, 9))}</td>
+        <td style="${td}">${x.nequi ? pesos(x.nequi) : "—"}</td><td style="${td}">${x.daviplata ? pesos(x.daviplata) : "—"}</td>
+        <td style="${td};font-weight:700">${pesos(x.total || 0)}</td>
+        <td style="${td};color:${col}">${dif == null ? "—" : dif === 0 ? "✓" : (dif > 0 ? "faltan " : "+") + pesos(Math.abs(dif))}</td></tr>`;
+    }).join("") + `</table><p class="nota" style="margin:6px 0 0">Hoja: lo que no llegó según el total anotado ese día. Toca un día para verlo.</p></div>`;
 }
 function pintarTransf(){
-  $("trHoy").setAttribute("aria-pressed", trDia === "hoy");
-  $("trAyer").setAttribute("aria-pressed", trDia === "ayer");
+  $("trHoy").setAttribute("aria-pressed", trFecha() === trFechaDe(0));
+  $("trAyer").setAttribute("aria-pressed", trFecha() === trFechaDe(1));
   const p = $("trPanel"), d = trDatos;
   if(!d){ p.innerHTML = ""; return; }
+  if(d.cargando){ p.innerHTML = htmlTrDias(d.dias); return; }
   const pb = d.por_banco || {}, pagos = d.pagos || [], ign = d.ignorados || [];
   let h = `<div class="bloque"><h3>Llegó por SMS <small>${fechaTxt(d.fecha)}</small></h3>` +
     ["Nequi", "Daviplata"].concat(Object.keys(pb).filter(b => b !== "Nequi" && b !== "Daviplata")).map(b =>
@@ -1489,11 +1515,12 @@ function pintarTransf(){
   h += `<details class="alerta"${pagos.length && c && d.diferencia ? " open" : ""}><summary><span>Pagos que llegaron</span><span class="num-alerta gris">${pagos.length}</span></summary>` +
     (pagos.length ? pagos.map(x => `<div class="fila-dato"><span>${esc(x.hora)} · ${esc(x.banco)}${x.quien ? `<small style="display:block;opacity:.65">${esc(x.quien)}</small>` : ""}</span><b>${plata(x.valor)}</b></div>`).join("")
       : `<p class="nota" style="margin:0">Ninguno este día.</p>`) + `</details>`;
+  h += htmlTrDias(d.dias);
   if(ign.length) h += `<details class="alerta" style="margin-top:8px"><summary><span>Mensajes que no parecen pagos</span><span class="num-alerta gris">${ign.length}</span></summary>
     <p class="nota" style="margin:0 0 6px">No se sumaron. Si alguno sí era un pago que te hicieron, avísale a quien mantiene la app para que lo reconozca.</p>` +
     ign.map(x => `<div class="fila-dato" style="display:block"><small style="opacity:.65">${esc(x.hora)} · ${esc(x.banco)}</small><div style="font-size:.9em">${esc(x.texto)}</div></div>`).join("") + `</details>`;
   p.innerHTML = h;
-  const inp = $("trHojita");
+  const inp = $("trHojita"); if(!inp) return;
   inp.addEventListener("input", () => { const v = inp.value.replace(/\D/g, ""); inp.value = v ? pesos(Number(v)) : ""; });
   const calc = () => { const v = inp.value.replace(/\D/g, ""); if(!v){ $("trEstado").textContent = "Escribe el total de la hoja"; return; } cargarTransf(v); };
   $("btnTrCalcular").addEventListener("click", calc);
@@ -3284,11 +3311,14 @@ $("btnInventario").addEventListener("click", entrar);
 $("btnMenuInv").addEventListener("click", ()=>irMenu("inventario"));
 $("btnMenuCompras").addEventListener("click", ()=>irMenu("compras"));
 $("btnMenuKpis").addEventListener("click", abrirKpis);
+$("btnMenuVentas").addEventListener("click", ()=>irMenu("ventas"));
+$("btnSalirVentas").addEventListener("click", ()=>irMenu("principal"));
 $("btnMenuTransf").addEventListener("click", abrirTransf);
-$("btnVolverTr").addEventListener("click", ()=>irMenu("principal"));
+$("btnVolverTr").addEventListener("click", ()=>irMenu("ventas"));
 $("btnTrActualizar").addEventListener("click", ()=>cargarTransf());
-$("trHoy").addEventListener("click", ()=>{ if(trDia !== "hoy"){ trDia = "hoy"; trDatos = null; pintarTransf(); cargarTransf(); } });
-$("trAyer").addEventListener("click", ()=>{ if(trDia !== "ayer"){ trDia = "ayer"; trDatos = null; pintarTransf(); cargarTransf(); } });
+$("trHoy").addEventListener("click", ()=>trElegir("hoy"));
+$("trAyer").addEventListener("click", ()=>trElegir("ayer"));
+$("trPanel").addEventListener("click", e => { const f = e.target.closest("[data-trdia]"); if(f) trElegir(f.dataset.trdia); });
 $("btnProveedores").addEventListener("click", abrirProveedores);
 $("btnSalirPrin").addEventListener("click", inicio);
 $("btnSalirInv").addEventListener("click", ()=>irMenu("principal"));
