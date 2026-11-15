@@ -485,31 +485,55 @@ setInterval(pintarCampana, 5000);                                      // campan
 
 /* ══════════════ CAMPANA 🔔: AVISO DE TRANSFERENCIAS ══════════════
    Cada minuto (con la app abierta y en modo administración) se le pregunta al servidor por los pagos de hoy que
-   llegaron por SMS (Nequi/Daviplata, ver Ventas → Transferencias). Los que no se habían visto se avisan en la 🔔.
+   llegaron por SMS (Nequi/Daviplata, ver Ventas → Transferencias). Si hay alguno nuevo: suena, vibra y la 🔔 lo muestra.
+   La 🔔 guarda el registro de las últimas 5 transferencias; el número rojo es cuántas llegaron sin que las vieras.
    Con la app cerrada no llega nada: al abrirla avisa de los de hoy que llegaron mientras tanto.
    La primera vez en un celular solo se toma nota de lo que ya había (para no avisar de golpe todo el día). */
-const TRA_KEY = "tr_avisos", TRV_KEY = "tr_vistos", TR_CADA_MS = 60000;
-let trAvisos = leerJSON(TRA_KEY, []), trRevisando = false;
-const guardarTrAvisos = () => { try{ localStorage.setItem(TRA_KEY, JSON.stringify(trAvisos.slice(0, 40))); }catch(e){} };
+const TRA_KEY = "tr_ultimas", TRN_KEY = "tr_sin_ver", TRV_KEY = "tr_vistos", TR_CADA_MS = 60000, TR_REGISTRO = 5;
+let trUltimas = leerJSON(TRA_KEY, []), trSinVer = Number(leerJSON(TRN_KEY, 0)) || 0, trRevisando = false;
+const guardarTrUltimas = () => { try{ localStorage.setItem(TRA_KEY, JSON.stringify(trUltimas.slice(0, TR_REGISTRO)));
+  localStorage.setItem(TRN_KEY, JSON.stringify(trSinVer)); }catch(e){} };
 /* Clave de cada pago: banco, hora, valor y quién; si se repite igual (dos pagos iguales el mismo minuto) lleva #2, #3… */
 function clavesTr(pagos){ const n = {}; return pagos.map(x => { const k = [x.banco, x.hora, x.valor, x.quien || ""].join("|"); n[k] = (n[k] || 0) + 1; return k + "#" + n[k]; }); }
+/* Sonido de aviso (dos tonos cortos), hecho por el navegador: no necesita archivo. El celular solo deja sonar
+   después de que alguien toque la pantalla una vez desde que se abrió la app; en silencio no suena. */
+let trAudio = null;
+function trSonido(){
+  try{
+    const C = window.AudioContext || window.webkitAudioContext; if(!C) return;
+    trAudio = trAudio || new C();
+    if(trAudio.state === "suspended") trAudio.resume();
+    const t0 = trAudio.currentTime + .02;
+    [[880, 0], [1320, .18]].forEach(([hz, d]) => {
+      const o = trAudio.createOscillator(), g = trAudio.createGain();
+      o.type = "sine"; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t0 + d); g.gain.exponentialRampToValueAtTime(0.35, t0 + d + .02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + .16);
+      o.connect(g).connect(trAudio.destination); o.start(t0 + d); o.stop(t0 + d + .18);
+    });
+  }catch(e){}
+}
+document.addEventListener("pointerdown", () => {           // deja el sonido listo con el primer toque
+  try{ const C = window.AudioContext || window.webkitAudioContext; if(C && !trAudio) trAudio = new C(); if(trAudio && trAudio.state === "suspended") trAudio.resume(); }catch(e){}
+}, {passive: true});
 function trRevisarNuevas(d){
   if(!d || !Array.isArray(d.pagos) || d.fecha !== trFechaDe(0)) return;
+  if($("transferencias").classList.contains("activa") && trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }  // ya las está viendo
   const claves = clavesTr(d.pagos), vistos = leerJSON(TRV_KEY, null);
   try{ localStorage.setItem(TRV_KEY, JSON.stringify({fecha: d.fecha, claves})); }catch(e){}
   if(!vistos) return;                                   // primera vez en este celular: solo se toma nota
   const antes = new Set(vistos.fecha === d.fecha ? vistos.claves : []);
   const nuevos = d.pagos.filter((x, i) => !antes.has(claves[i]));          // vienen del más reciente al más antiguo
   if(!nuevos.length) return;
-  const viendo = $("transferencias").classList.contains("activa"), fecha = new Date().toISOString();
-  const sub = x => (x.quien ? x.quien + " · " : "") + "a las " + x.hora;
-  if(nuevos.length <= 3) nuevos.slice().reverse().forEach(x => trAvisos.unshift({texto: `${plata(x.valor)} por ${x.banco}`, sub: sub(x), fecha, leida: viendo}));
-  else trAvisos.unshift({texto: `${nuevos.length} transferencias · ${plata(nuevos.reduce((t, x) => t + (x.valor || 0), 0))}`,
-    sub: `De las ${nuevos[nuevos.length - 1].hora} a las ${nuevos[0].hora}`, fecha, leida: viendo});
-  guardarTrAvisos(); pintarCampana();
+  const viendo = $("transferencias").classList.contains("activa");
+  trUltimas = nuevos.map(x => ({fecha: d.fecha, hora: x.hora, banco: x.banco, valor: x.valor, quien: x.quien || ""}))
+    .concat(trUltimas).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora)).slice(0, TR_REGISTRO);
+  if(!viendo) trSinVer += nuevos.length;
+  guardarTrUltimas(); pintarCampana();
   if(viendo) return;
   const b = $("campana"); if(b){ b.classList.remove("nueva"); void b.offsetWidth; b.classList.add("nueva"); }
-  if(navigator.vibrate) navigator.vibrate([60, 80, 60]);
+  trSonido();
+  if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 window.trRevisarNuevas = trRevisarNuevas;
 async function trSondear(){
@@ -525,19 +549,21 @@ async function trSondear(){
 function pintarCampana(){
   const b = $("campana");
   if(b){
-    const n = b.querySelector(".cn"), sinLeer = trAvisos.filter(x => !x.leida).length;
-    n.hidden = !sinLeer; n.textContent = sinLeer;
+    const n = b.querySelector(".cn");
+    n.hidden = !trSinVer; n.textContent = trSinVer > 99 ? "99+" : trSinVer;
     b.style.display = esAdmin() ? "" : "none";          // solo en modo administración
   }
   pintarProcesos();
 }
 function abrirAvisos(){
-  const ops = trAvisos.map(x => ({t: (x.leida ? "" : "🆕 ") + "💸 " + x.texto, sub: x.sub + " · " + fechaTxt(x.fecha.slice(0, 10)).slice(0, 9), fn: abrirTransf}));
-  if(!ops.length) ops.push({t: "Sin avisos", sub: "Aquí te aviso cuando llegue una transferencia por Nequi o Daviplata (con la app abierta)", fn: () => {}});
-  ops.push({t: "Ver transferencias de hoy", sub: "", fn: abrirTransf});
-  if(trAvisos.length) ops.push({t: "🗑 Borrar avisos", sub: "", fn: () => { trAvisos = []; guardarTrAvisos(); pintarCampana(); }});
-  trAvisos.forEach(x => { x.leida = true; }); guardarTrAvisos(); pintarCampana();
-  elegir("Transferencias que llegaron", ops);
+  const hoy = trFechaDe(0), nuevas = trSinVer;
+  const ops = trUltimas.map((x, i) => ({t: (i < nuevas ? "🆕 " : "") + "💸 " + plata(x.valor) + " por " + x.banco,
+    sub: (x.quien ? x.quien + " · " : "") + (x.fecha === hoy ? "hoy" : fechaTxt(x.fecha).slice(0, 9)) + " a las " + x.hora, fn: abrirTransf}));
+  if(!ops.length) ops.push({t: "Todavía no hay transferencias", sub: "Aquí quedan las últimas 5 que lleguen por Nequi o Daviplata (con la app abierta)", fn: () => {}});
+  if(nuevas > TR_REGISTRO) ops.unshift({t: `Llegaron ${nuevas} nuevas`, sub: "Aquí ves las últimas 5. Toca para verlas todas", fn: abrirTransf});
+  ops.push({t: "Ver todas las de hoy", sub: "Ventas → Transferencias", fn: abrirTransf});
+  trSinVer = 0; guardarTrUltimas(); pintarCampana();
+  elegir("Últimas transferencias", ops);
 }
 setInterval(trSondear, TR_CADA_MS);
 setTimeout(trSondear, 4000);
