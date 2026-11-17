@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v74";
+const COMPRAS_VERSION = "compras v75";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -490,6 +490,7 @@ setInterval(pintarCampana, 5000);                                      // campan
    Con la app cerrada no llega nada: al abrirla avisa de los de hoy que llegaron mientras tanto.
    La primera vez en un celular solo se toma nota de lo que ya había (para no avisar de golpe todo el día). */
 const TRA_KEY = "tr_ultimas", TRN_KEY = "tr_sin_ver", TRV_KEY = "tr_vistos", TR_CADA_MS = 60000, TR_REGISTRO = 5;
+const ALE_CADA_S = 10;   /* cada cuántos segundos revisa el PC con la alerta (o la pantalla de alerta abierta); los demás, cada minuto */
 let trUltimas = leerJSON(TRA_KEY, []), trSinVer = Number(leerJSON(TRN_KEY, 0)) || 0, trRevisando = false;
 const guardarTrUltimas = () => { try{ localStorage.setItem(TRA_KEY, JSON.stringify(trUltimas.slice(0, TR_REGISTRO)));
   localStorage.setItem(TRN_KEY, JSON.stringify(trSinVer)); }catch(e){} };
@@ -543,7 +544,7 @@ window.trRevisarNuevas = trRevisarNuevas;
 let trUltSondeo = 0;
 async function trSondear(forzar){
   // Sin PIN guardado no se pregunta (no se le pide el PIN a nadie por un aviso)
-  const rapido = alertaOn() || enPantalla("trAlerta");     // alerta activada o pantalla de alerta: cada 30 s y aunque esté minimizada
+  const rapido = alertaOn() || enPantalla("trAlerta");     // alerta activada o pantalla de alerta: cada 10 s (ALE_CADA_S) y aunque esté minimizada
   if(trRevisando || trCargando || (document.hidden && !alertaOn()) || !apiUrl()) return;
   if(!forzar && !rapido && Date.now() - trUltSondeo < TR_CADA_MS - 5000) return;
   if(!esAdmin() || !claveAdmin){ alertaEnPausa(); return; }
@@ -576,7 +577,7 @@ function abrirAvisos(){
 }
 /* ══════════════ ALERTA TRANSFERENCIAS (para el PC donde se registra) ══════════════
    Botón EDUMERCA POS → "Alerta transferencias": abre una pantalla para dejar abierta, con la última transferencia en grande
-   y abajo todas las de hoy. Se actualiza sola cada 30 segundos y no se devuelve sola al inicio.
+   y abajo todas las de hoy. Se actualiza sola cada 10 segundos y no se devuelve sola al inicio.
    Con ⚙ se activa la VENTANITA de Windows en ESE computador (se guarda en él): aunque la app esté minimizada o detrás de
    otro programa, al llegar una transferencia sale la ventanita (abajo a la derecha) con el valor, el banco y quién.
    Dura 1 minuto, o hasta que la cierren, o hasta que llegue otra (la nueva reemplaza a la anterior).
@@ -685,7 +686,9 @@ function pintarAle(destacar){
       <div class="av">${esc(plata(x.valor))}</div>
       ${x.quien ? `<div class="aq">${esc(x.quien)}</div>` : ""}<div class="ah">Hoy a las ${esc(x.hora)}</div></div>`;
   }
-  if(d) h += `<button class="ghost" id="btnAleTotalizar" style="flex:none;width:100%">Totalizar</button>` + htmlAleTotal(d);
+  /* Totalizar va abajo de la lista; con el historial completo desplegado (+) sube para no quedar al fondo */
+  const tot = d ? `<button class="ghost" id="btnAleTotalizar" style="flex:none;width:100%">Totalizar</button>` + htmlAleTotal(d) : "";
+  if(aleTodas && pagos.length > 5) h += tot;
   if(pagos.length){
     /* En el PC caben unas 6: se ven las últimas 5; con + sale el historial completo de hoy y con − se vuelve a ocultar */
     const MAX = 5, hayMas = pagos.length > MAX, ver = hayMas && !aleTodas ? pagos.slice(0, MAX) : pagos;
@@ -699,13 +702,14 @@ function pintarAle(destacar){
   }else{
     h += `<div class="ale-grande vacia"><div class="ab">${d ? "Hoy" : ""}</div><div class="aq" style="margin:10px 0">${d ? "Todavía no ha llegado ninguna transferencia" : "Cargando…"}</div></div>`;
   }
+  if(!(aleTodas && pagos.length > 5)) h += tot;
   $("alePanel").innerHTML = h;
   const act = $("btnAleActivar"); if(act) act.addEventListener("click", activarAlerta);
-  const tot = $("btnAleTotalizar"); if(tot) tot.addEventListener("click", totalizarAle);
+  const bt = $("btnAleTotalizar"); if(bt) bt.addEventListener("click", totalizarAle);
   const td = $("btnAleTodas"); if(td) td.addEventListener("click", () => { aleTodas = !aleTodas; pintarAle(); });
   const oc = $("btnAleOcultar"); if(oc) oc.addEventListener("click", () => { aleTotal = false; pintarAle(); });
   $("aleEstado").textContent = aleError ? "⚠ " + aleError :
-    aleHora ? "Se revisa sola cada 30 segundos · última revisión " + aleHora.toTimeString().slice(0, 5) : "";
+    aleHora ? `Se revisa sola cada ${ALE_CADA_S} segundos · última revisión ` + aleHora.toTimeString().slice(0, 5) : "";
 }
 /* ---------- Totalizar: lo mismo que "Guardar y calcular diferencia" de EDUMERCA POS → Transferencias (mismo dato en el servidor) ---------- */
 function htmlAleTotal(d){
@@ -780,7 +784,7 @@ pintarBotonAlerta();
 if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if(e.data === "abrirTransf" && esAdmin()) alertaOn() ? abrirAlerta() : abrirTransf(); });
 setInterval(() => { if(enPantalla("trAlerta") && aleHora) pintarAle(); }, 60000);   // si cambia el día, la pantalla se limpia
 
-setInterval(trSondear, 30000);            // cada 30 s en modo alerta; si no, cada minuto (lo controla trSondear)
+setInterval(trSondear, ALE_CADA_S * 1000);   // cada 10 s en modo alerta; si no, cada minuto (lo controla trSondear)
 setTimeout(trSondear, 4000);
 if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);
 /* Después de poner el PIN (botón de entrar en index.html): en el PC con la alerta activada vuelve a esta pantalla */
