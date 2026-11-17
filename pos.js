@@ -75,7 +75,7 @@ window.posCodigo = function(v){
   v = String(v || "").trim(); if(!v) return;
   const it = buscar(v);
   if(it) return agregar(it);
-  estado(`⚠ El código ${v} no está en el catálogo. Búscalo por nombre o agrégalo con "+ Suelto".`, true);
+  estado(`⚠ El código ${v} no está en el catálogo. Búscalo por nombre o agrégalo con el botón +.`, true);
   if(navigator.vibrate) navigator.vibrate([100, 60, 100]);
 };
 function resultados(q){
@@ -95,7 +95,7 @@ function pintar(){
   if(q){
     const r = resultados(q);
     p.innerHTML = r.length ? r.map((x, i) => `<button class="pos-res" data-r="${i}"><span>${esc(x.n)}<small>${esc(x.c || x.b || "")}</small></span><b>${plata(x.p)}</b></button>`).join("")
-      : `<div class="vacio">No hay productos con "${esc(q)}". Si no está en el catálogo, agrégalo con "+ Suelto".</div>`;
+      : `<div class="vacio">No hay productos con "${esc(q)}". Si no está en el catálogo, agrégalo con el botón +.</div>`;
     p._res = r;
   }else if(!cuenta.lineas.length){
     p.innerHTML = `<div class="vacio">Escanea un producto con el lector o con 📷, o escribe el nombre arriba.<br><br>
@@ -189,17 +189,17 @@ async function bajar(tipo){
 function abrirPos(){
   clearTimeout(tLista);
   vista = "cuenta"; verFecha = hoy(); estado(pend.length ? `⏳ ${pend.length} cuenta${pend.length > 1 ? "s" : ""} por subir a Drive` : "");
-  $("posBuscar").parentElement.style.display = "";
+  $("posBuscar").parentElement.style.display = "flex";
   ir("pos"); pintar();
   enviar(); cargarDia(hoy());
 }
 $("btnPos").addEventListener("click", abrirPos);
 $("btnVolverPos").addEventListener("click", () => {
-  if(vista === "cuentas"){ vista = "cuenta"; $("posBuscar").parentElement.style.display = ""; estado(""); return pintar(); }
+  if(vista === "cuentas"){ vista = "cuenta"; $("posBuscar").parentElement.style.display = "flex"; estado(""); return pintar(); }
   irMenu("ventas");
 });
 $("btnPosCuentas").addEventListener("click", () => {
-  if(vista === "cuentas"){ vista = "cuenta"; $("posBuscar").parentElement.style.display = ""; estado(""); return pintar(); }
+  if(vista === "cuentas"){ vista = "cuenta"; $("posBuscar").parentElement.style.display = "flex"; estado(""); return pintar(); }
   vista = "cuentas"; verFecha = hoy(); estado(""); pintar(); cargarDia(verFecha); enviar();
 });
 $("btnPosCamara").addEventListener("click", () => abrirCamara("pos"));
@@ -213,7 +213,19 @@ $("btnPosSuelto").addEventListener("click", async () => {
   const l = cuenta.lineas[marcada], q = Number(String(f.q).replace(",", "."));
   if(l && q > 0 && q !== 1){ l.q = q; guardarCuenta(); pintar(); }
 });
-$("posBuscar").addEventListener("input", () => { marcada = -1; pintar(); });
+/* Si lo escrito (o pegado) es exactamente un código de barras del catálogo, se agrega solo, sin dar Enter.
+   Se espera un momento sin teclear para no confundir un código de 8 dígitos con el comienzo de uno de 13. */
+let tExacto = null;
+$("posBuscar").addEventListener("input", e => {
+  marcada = -1; pintar();
+  clearTimeout(tExacto);
+  const v = e.target.value.trim();
+  if(/^\d{8,14}$/.test(v)) tExacto = setTimeout(() => {
+    if($("posBuscar").value.trim() !== v) return;
+    const it = catalogo.get(v.replace(/^0+/, ""));
+    if(it) agregar(it);
+  }, 700);
+});
 $("posBuscar").addEventListener("keydown", e => {
   if(e.key !== "Enter") return;
   e.preventDefault();

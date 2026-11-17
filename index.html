@@ -325,11 +325,11 @@
   <div class="cabeza"><h2>Registrar</h2>
     <button class="sec" id="btnPosCuentas" style="padding:8px 12px">Cuentas</button>
     <button class="sec" id="btnVolverPos">Volver</button></div>
-  <div style="display:flex;gap:8px;flex:none">
+  <div style="display:flex;gap:8px;flex:none;width:100%">
     <input id="posBuscar" type="search" placeholder="Escanea o escribe el nombre…" autocomplete="off" enterkeyhint="search"
       style="flex:1;min-width:0;font:500 1.05rem 'Barlow',sans-serif;padding:12px 14px;border-radius:10px;border:0;background:var(--papel);color:var(--tinta)">
     <button class="sec" id="btnPosCamara" aria-label="Escanear con la cámara" style="font-size:1.2rem;padding:8px 14px">📷</button>
-    <button class="sec" id="btnPosSuelto" aria-label="Agregar producto suelto" style="padding:8px 12px">+ Suelto</button>
+    <button class="sec" id="btnPosSuelto" aria-label="Agregar un producto que no está en el catálogo" title="Agregar un producto que no está en el catálogo" style="font-size:1.5rem;padding:4px 16px">+</button>
   </div>
   <p id="posEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
   <div class="panel" id="posPanel"></div>
@@ -602,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.95 · 17-nov-2026";
+const VERSION = "v2.5.00 · 17-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
