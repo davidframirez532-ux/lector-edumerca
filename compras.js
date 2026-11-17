@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v70";
+const COMPRAS_VERSION = "compras v71";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -579,17 +579,17 @@ function abrirAvisos(){
    y abajo todas las de hoy. Se actualiza sola cada 30 segundos y no se devuelve sola al inicio.
    Con ⚙ se activa la VENTANITA de Windows en ESE computador (se guarda en él): aunque la app esté minimizada o detrás de
    otro programa, al llegar una transferencia sale la ventanita (abajo a la derecha) con el valor, el banco y quién.
-   Dura 4 minutos, o hasta que la cierren, o hasta que llegue otra (la nueva reemplaza a la anterior).
+   Dura 1 minuto, o hasta que la cierren, o hasta que llegue otra (la nueva reemplaza a la anterior).
    Windows por su cuenta quita las ventanitas normales a los ~5 segundos: por eso se piden "fijas" (requireInteraction)
-   y es la app la que la cierra a los 4 minutos.
+   y es la app la que la cierra al minuto.
    Condiciones: el navegador (o la app instalada) debe quedar abierto, aunque sea minimizado; el PIN se pide una vez al día
    (si cambia el día sin PIN, avisa una vez que la alerta quedó en pausa). */
-const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_MS = 4 * 60 * 1000, ALE_TAG = "tr-alerta";
+const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_MS = 60 * 1000, ALE_TAG = "tr-alerta";
 let aleDatos = null, aleHora = null, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
 const alertaOn = () => leer(ALE_KEY) === "1";
 const enPantalla = id => { const p = $(id); return !!p && p.classList.contains("activa"); };
 const notifOk = () => "Notification" in window && Notification.permission === "granted";
-/* Una sola ventanita a la vez: la nueva reemplaza a la anterior y el reloj de 4 minutos vuelve a empezar */
+/* Una sola ventanita a la vez: la nueva reemplaza a la anterior y el reloj de 1 minuto vuelve a empezar */
 function notificar(titulo, cuerpo){
   if(!notifOk()) return;
   const op = {body: cuerpo, tag: ALE_TAG, icon: "icono-192.png", badge: "icono-192.png", requireInteraction: true, renotify: true};
@@ -642,11 +642,18 @@ function alertaEnPausa(){                               // cambió el día y no 
 /* ---------- Pantalla ---------- */
 (function(){
   const st = document.createElement("style");
-  st.textContent = `.ale-grande{background:#1f9d6f;color:#fff;border-radius:18px;padding:22px 18px;text-align:center;flex:none}
-    .ale-grande .ab{font:600 1rem "Barlow",sans-serif;opacity:.9;text-transform:uppercase;letter-spacing:.06em}
-    .ale-grande .av{font:800 clamp(3rem,13vw,5.5rem)/1.05 "Barlow Condensed",sans-serif;margin:6px 0}
-    .ale-grande .aq{font:600 clamp(1.1rem,4vw,1.6rem) "Barlow",sans-serif}
-    .ale-grande .ah{font:500 1rem "Barlow",sans-serif;opacity:.85;margin-top:4px}
+  /* Los tamaños crecen con la pantalla (también en el monitor vertical del PC): ancho y alto, el que sea menor */
+  st.textContent = `.ale-grande{background:#1f9d6f;color:#fff;border-radius:18px;padding:clamp(22px,4vh,64px) 18px;text-align:center;flex:none}
+    .ale-grande .ab{font:600 clamp(1rem,min(3.2vw,2.2vh),1.8rem) "Barlow",sans-serif;opacity:.9;text-transform:uppercase;letter-spacing:.06em}
+    .ale-grande .av{font:800 clamp(3rem,min(17vw,11vh),11rem)/1.05 "Barlow Condensed",sans-serif;margin:6px 0}
+    .ale-grande .aq{font:600 clamp(1.1rem,min(5.5vw,3.6vh),2.8rem) "Barlow",sans-serif}
+    .ale-grande .ah{font:500 clamp(1rem,min(3.4vw,2.3vh),1.8rem) "Barlow",sans-serif;opacity:.85;margin-top:4px}
+    @media (min-width:700px){
+      #alePanel .bloque{padding:20px 24px}
+      #alePanel .bloque h3{font-size:clamp(1.3rem,2.4vh,2.2rem)}
+      #alePanel .bloque h3 small{font-size:clamp(.8rem,1.7vh,1.4rem)}
+      #alePanel .fila-dato{font-size:clamp(1rem,2.1vh,1.7rem);padding:clamp(8px,1.2vh,16px) 8px}
+    }
     .ale-grande.vacia{background:var(--verde2)}
     .ale-grande.nueva{animation:aleBrillo 1s ease-in-out 4}
     @keyframes aleBrillo{50%{background:#2fd393;transform:scale(1.02)}}
@@ -708,9 +715,9 @@ $("btnAlertaTr").addEventListener("click", abrirAlerta);
 $("btnVolverAle").addEventListener("click", () => irMenu("ventas"));
 $("btnAleOpciones").addEventListener("click", () => {
   if(!alertaOn()) return elegir("Ventanita de Windows", [
-    {t: "Activar en este computador", sub: "Al llegar una transferencia sale una ventanita 4 minutos, aunque la app esté minimizada", fn: activarAlerta}]);
+    {t: "Activar en este computador", sub: "Al llegar una transferencia sale una ventanita por 1 minuto, aunque la app esté minimizada", fn: activarAlerta}]);
   elegir("Ventanita de Windows (activada)", [
-    {t: "Probar", sub: "Muestra una ventanita de ejemplo (dura 4 minutos o hasta que la cierres)", fn: () => {
+    {t: "Probar", sub: "Muestra una ventanita de ejemplo (dura 1 minuto o hasta que la cierres)", fn: () => {
       if(!notifOk()) return activarAlerta();
       notificar("💸 Llegó $50.000 por Nequi", "Ejemplo · a las " + new Date().toTimeString().slice(0, 5)); }},
     {t: "Apagar en este computador", sub: "Deja de mostrar la ventanita (esta pantalla y la 🔔 siguen funcionando)", fn: () => { guardar(ALE_KEY, ""); pintarBotonAlerta(); pintarAle(); }}]);
