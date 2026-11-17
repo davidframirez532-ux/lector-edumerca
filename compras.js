@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v71";
+const COMPRAS_VERSION = "compras v72";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -585,7 +585,7 @@ function abrirAvisos(){
    Condiciones: el navegador (o la app instalada) debe quedar abierto, aunque sea minimizado; el PIN se pide una vez al día
    (si cambia el día sin PIN, avisa una vez que la alerta quedó en pausa). */
 const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_MS = 60 * 1000, ALE_TAG = "tr-alerta";
-let aleDatos = null, aleHora = null, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
+let aleDatos = null, aleHora = null, aleTotal = false, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
 const alertaOn = () => leer(ALE_KEY) === "1";
 const enPantalla = id => { const p = $(id); return !!p && p.classList.contains("activa"); };
 const notifOk = () => "Notification" in window && Notification.permission === "granted";
@@ -664,6 +664,7 @@ function alertaEnPausa(){                               // cambió el día y no 
 })();
 function abrirAlerta(){
   clearTimeout(tLista);
+  aleTotal = false;                                      // el total solo se ve después de tocar Totalizar
   ir("trAlerta"); pintarAle();
   if(trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }
   trSondear(true);
@@ -682,8 +683,10 @@ function pintarAle(destacar){
     h += `<div class="ale-grande${destacar ? " nueva" : ""}"><div class="ab">Última · ${esc(x.banco)}</div>
       <div class="av">${esc(plata(x.valor))}</div>
       ${x.quien ? `<div class="aq">${esc(x.quien)}</div>` : ""}<div class="ah">Hoy a las ${esc(x.hora)}</div></div>`;
-    const total = pagos.reduce((t, y) => t + (Number(y.valor) || 0), 0);
-    h += `<div class="bloque"><h3>Todas las de hoy <small>${pagos.length} · ${plata(total)}</small></h3>` +
+  }
+  if(d) h += `<button class="ghost" id="btnAleTotalizar" style="flex:none;width:100%">Totalizar</button>` + htmlAleTotal(d);
+  if(pagos.length){
+    h += `<div class="bloque"><h3>Todas las de hoy <small>${pagos.length} ${pagos.length === 1 ? "transferencia" : "transferencias"}</small></h3>` +
       pagos.map((y, i) => `<div class="fila-dato ale-fila${aleNuevas.has(claves[i]) ? " nueva" : ""}"><span>${esc(y.hora)} · ${esc(y.banco)}` +
         (y.quien ? `<small style="display:block;opacity:.65">${esc(y.quien)}</small>` : "") + `</span><b>${plata(y.valor)}</b></div>`).join("") + `</div>`;
   }else{
@@ -691,8 +694,51 @@ function pintarAle(destacar){
   }
   $("alePanel").innerHTML = h;
   const act = $("btnAleActivar"); if(act) act.addEventListener("click", activarAlerta);
+  const tot = $("btnAleTotalizar"); if(tot) tot.addEventListener("click", totalizarAle);
+  const oc = $("btnAleOcultar"); if(oc) oc.addEventListener("click", () => { aleTotal = false; pintarAle(); });
   $("aleEstado").textContent = aleError ? "⚠ " + aleError :
     aleHora ? "Se revisa sola cada 30 segundos · última revisión " + aleHora.toTimeString().slice(0, 5) : "";
+}
+/* ---------- Totalizar: lo mismo que "Guardar y calcular diferencia" de Ventas → Transferencias (mismo dato en el servidor) ---------- */
+function htmlAleTotal(d){
+  if(!aleTotal) return "";
+  const c = d.cuadre, dif = d.diferencia;
+  let h = `<div class="bloque"><h3>Total de hoy <small><a href="#" id="btnAleOcultar" style="color:inherit">✕ ocultar</a></small></h3>
+    <div class="fila-dato"><span>Total que llegó</span><b>${plata(d.total)}</b></div>`;
+  if(c && c.hojita != null){
+    const [color, txt] = dif > 0 ? ["#ff9a86", `No llegaron <b>${plata(dif)}</b>`]
+      : dif < 0 ? ["#ffd23f", `Llegaron <b>${plata(-dif)}</b> más de lo anotado`] : ["#4fd6a8", "✓ Cuadra exacto"];
+    h += `<div class="fila-dato"><span>Total de la hoja</span><b>${plata(c.hojita)}</b></div>
+      <div style="margin-top:10px;padding:12px;border-radius:10px;border:2px solid ${color};font-size:clamp(1.15rem,2.6vh,2.2rem);text-align:center">${txt}
+      <small style="display:block;opacity:.75;font-size:.55em;margin-top:4px">Hoja ${plata(c.hojita)} − llegó ${plata(d.total)}${
+        dif > 0 ? " · Revisa en la hoja cuáles no aparecen en la lista de abajo" : ""}</small></div>`;
+  }
+  if(c && c.obs) h += `<p style="margin:10px 0 0;padding:10px 12px;border-radius:10px;background:rgba(255,210,63,.12)">📝 ${esc(c.obs)}</p>`;
+  return h + `</div>`;
+}
+async function totalizarAle(){
+  const d = aleDatos, c = d && d.cuadre;
+  const formato = () => { const i = $("fc_hoja"); if(i) i.oninput = () => { const v = i.value.replace(/\D/g, ""); i.value = v ? pesos(Number(v)) : ""; }; };
+  setTimeout(formato, 0);
+  const f = await pedirForm("Totalizar transferencias de hoy", [
+    {id: "hoja", label: "Total anotado en la hoja", inputmode: "numeric", placeholder: "0", valor: c && c.hojita != null ? pesos(c.hojita) : ""},
+    {id: "obs", label: "Observación (opcional)", placeholder: "Ej.: un pago de $20.000 era de otra cosa", valor: c ? c.obs || "" : ""}],
+    "Guardar y calcular diferencia");
+  if(!f) return;
+  const hojita = f.hoja.replace(/\D/g, ""), obs = f.obs.trim();
+  if(!hojita && !obs && !(c && c.obs)) return alert("Escribe el total de la hoja o una observación.");
+  const fecha = trFechaDe(0);
+  $("aleEstado").textContent = "Guardando…";
+  while(trCargando || trRevisando) await new Promise(r => setTimeout(r, 300));
+  trCargando = true;
+  try{
+    const r = await postAdmin({accion: "transferencias_cuadre", fecha, hojita, obs});
+    if(r.total === undefined) throw new Error("El servidor todavía no tiene esta función. Hay que publicarlo.");
+    aleTotal = true; aleError = "";
+    trRevisarNuevas(r);
+    pintarAle();
+  }catch(e){ aleError = e.message === "Cancelado" ? "" : e.message; pintarAle(); }
+  finally{ trCargando = false; }
 }
 async function activarAlerta(){
   if(!("Notification" in window)) return alert("Este navegador no puede mostrar avisos. Usa Chrome o Edge en el computador.");
