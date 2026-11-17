@@ -786,7 +786,17 @@ pintarBotonAlerta();
 if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if(e.data === "abrirTransf" && esAdmin()) alertaOn() ? abrirAlerta() : abrirTransf(); });
 setInterval(() => { if(enPantalla("trAlerta") && aleHora) pintarAle(); }, 60000);   // si cambia el día, la pantalla se limpia
 
-setInterval(trSondear, ALE_CADA_S * 1000);   // cada 5 s en modo alerta; si no, cada minuto (lo controla trSondear)
+/* Reloj de la revisión. Con la app minimizada o tapada más de 5 minutos, Chrome y Edge frenan los relojes normales
+   a una vez por minuto (y el aviso llegaba hasta 1 minuto tarde). El reloj de un "worker" (un hilo aparte) no lo frenan
+   así: él marca cada 5 s y la app revisa. Si el navegador no deja crear el worker, queda el reloj normal. */
+(function(){
+  try{
+    const url = URL.createObjectURL(new Blob([`setInterval(() => postMessage(1), ${ALE_CADA_S * 1000});`], {type: "text/javascript"}));
+    const w = new Worker(url);
+    w.onmessage = () => trSondear();
+    w.onerror = () => { w.terminate(); setInterval(trSondear, ALE_CADA_S * 1000); };
+  }catch(e){ setInterval(trSondear, ALE_CADA_S * 1000); }
+})();   // cada 5 s en modo alerta; si no, cada minuto (lo controla trSondear)
 setTimeout(trSondear, 4000);
 if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);
 /* Después de poner el PIN (botón de entrar en index.html): en el PC con la alerta activada vuelve a esta pantalla */
