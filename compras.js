@@ -776,7 +776,18 @@ setInterval(trSondear, 30000);            // cada 30 s en modo alerta; si no, ca
 setTimeout(trSondear, 4000);
 if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);
 /* Después de poner el PIN (botón de entrar en index.html): en el PC con la alerta activada vuelve a esta pantalla */
-window.abrirAlertaSiPC = () => { if(!alertaOn()) return false; abrirAlerta(); return true; };   // en el PC con alerta, la app abre directo en esta pantalla
+window.abrirAlertaSiPC = () => { if(!alertaOn() || !esAdmin()) return false; abrirAlerta(); return true; };
+/* En el PC con la alerta activada: si nadie toca la app por 90 s, vuelve sola a esta pantalla desde CUALQUIER otra,
+   menos desde Registrar (ahí se queda aunque pase el tiempo). No interrumpe una ventana abierta (PIN, formulario, opciones). */
+let aleToque = Date.now();
+["pointerdown", "keydown", "wheel", "input", "touchstart", "scroll"].forEach(ev =>
+  document.addEventListener(ev, () => { aleToque = Date.now(); }, {capture: true, passive: true}));
+setInterval(() => {
+  if(!alertaOn() || !esAdmin() || enPantalla("trAlerta") || enPantalla("pos")) return;
+  if(Date.now() - aleToque < SEGUNDOS_LISTA * 1000) return;
+  if(document.querySelector(".hoja:not([hidden])") || escaner) return;
+  abrirAlerta();
+}, 5000);   // en el PC con alerta, la app abre directo en esta pantalla
 document.addEventListener("visibilitychange", () => { if(!document.hidden) setTimeout(() => trSondear(true), 2000); });
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
