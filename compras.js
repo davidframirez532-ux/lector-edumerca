@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v73";
+const COMPRAS_VERSION = "compras v74";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -522,7 +522,7 @@ function trRevisarNuevas(d){
   if($("transferencias").classList.contains("activa") && trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }  // ya las está viendo
   const claves = clavesTr(d.pagos), vistos = leerJSON(TRV_KEY, null);
   try{ localStorage.setItem(TRV_KEY, JSON.stringify({fecha: d.fecha, claves})); }catch(e){}
-  if(!vistos) return;                                   // primera vez en este celular: solo se toma nota
+  if(!vistos){ pintarAle(); return; }                   // primera vez en este celular: solo se toma nota
   const antes = new Set(vistos.fecha === d.fecha ? vistos.claves : []);
   const nuevos = d.pagos.filter((x, i) => !antes.has(claves[i]));          // vienen del más reciente al más antiguo
   if(!nuevos.length){ pintarAle(); return; }
@@ -585,7 +585,7 @@ function abrirAvisos(){
    Condiciones: el navegador (o la app instalada) debe quedar abierto, aunque sea minimizado; el PIN se pide una vez al día
    (si cambia el día sin PIN, avisa una vez que la alerta quedó en pausa). */
 const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_MS = 60 * 1000, ALE_TAG = "tr-alerta";
-let aleDatos = null, aleHora = null, aleTotal = false, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
+let aleDatos = null, aleHora = null, aleTotal = false, aleTodas = false, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
 const alertaOn = () => leer(ALE_KEY) === "1";
 const enPantalla = id => { const p = $(id); return !!p && p.classList.contains("activa"); };
 const notifOk = () => "Notification" in window && Notification.permission === "granted";
@@ -665,6 +665,7 @@ function alertaEnPausa(){                               // cambió el día y no 
 function abrirAlerta(){
   clearTimeout(tLista);
   aleTotal = false;                                      // el total solo se ve después de tocar Totalizar
+  aleTodas = false;                                      // el historial completo solo se ve después de tocar +
   ir("trAlerta"); pintarAle();
   if(trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }
   trSondear(true);
@@ -686,8 +687,14 @@ function pintarAle(destacar){
   }
   if(d) h += `<button class="ghost" id="btnAleTotalizar" style="flex:none;width:100%">Totalizar</button>` + htmlAleTotal(d);
   if(pagos.length){
-    h += `<div class="bloque"><h3>Todas las de hoy <small>${pagos.length} ${pagos.length === 1 ? "transferencia" : "transferencias"}</small></h3>` +
-      pagos.map((y, i) => `<div class="fila-dato ale-fila${aleNuevas.has(claves[i]) ? " nueva" : ""}"><span>${esc(y.hora)} · ${esc(y.banco)}` +
+    /* En el PC caben unas 6: se ven las últimas 5; con + sale el historial completo de hoy y con − se vuelve a ocultar */
+    const MAX = 5, hayMas = pagos.length > MAX, ver = hayMas && !aleTodas ? pagos.slice(0, MAX) : pagos;
+    h += `<div class="bloque"><h3 style="display:flex;align-items:center;gap:10px">` +
+      `<span style="flex:1">${hayMas && !aleTodas ? "Últimas 5 de hoy" : "Todas las de hoy"} <small>${pagos.length} ${pagos.length === 1 ? "transferencia" : "transferencias"}</small></span>` +
+      (hayMas ? `<button class="sec" id="btnAleTodas" aria-label="${aleTodas ? "Ocultar el historial" : "Ver todas las de hoy"}" ` +
+        `title="${aleTodas ? "Ocultar el historial" : "Ver todas las de hoy"}" style="flex:none;font-size:1.6rem;line-height:1;padding:4px 16px">${aleTodas ? "−" : "+"}</button>` : "") +
+      `</h3>` +
+      ver.map((y, i) => `<div class="fila-dato ale-fila${aleNuevas.has(claves[i]) ? " nueva" : ""}"><span>${esc(y.hora)} · ${esc(y.banco)}` +
         (y.quien ? `<small style="display:block;opacity:.65">${esc(y.quien)}</small>` : "") + `</span><b>${plata(y.valor)}</b></div>`).join("") + `</div>`;
   }else{
     h += `<div class="ale-grande vacia"><div class="ab">${d ? "Hoy" : ""}</div><div class="aq" style="margin:10px 0">${d ? "Todavía no ha llegado ninguna transferencia" : "Cargando…"}</div></div>`;
@@ -695,6 +702,7 @@ function pintarAle(destacar){
   $("alePanel").innerHTML = h;
   const act = $("btnAleActivar"); if(act) act.addEventListener("click", activarAlerta);
   const tot = $("btnAleTotalizar"); if(tot) tot.addEventListener("click", totalizarAle);
+  const td = $("btnAleTodas"); if(td) td.addEventListener("click", () => { aleTodas = !aleTodas; pintarAle(); });
   const oc = $("btnAleOcultar"); if(oc) oc.addEventListener("click", () => { aleTotal = false; pintarAle(); });
   $("aleEstado").textContent = aleError ? "⚠ " + aleError :
     aleHora ? "Se revisa sola cada 30 segundos · última revisión " + aleHora.toTimeString().slice(0, 5) : "";
@@ -783,8 +791,9 @@ let aleToque = Date.now();
 ["pointerdown", "keydown", "wheel", "input", "touchstart", "scroll"].forEach(ev =>
   document.addEventListener(ev, () => { aleToque = Date.now(); }, {capture: true, passive: true}));
 setInterval(() => {
-  if(!alertaOn() || !esAdmin() || enPantalla("trAlerta") || enPantalla("pos")) return;
   if(Date.now() - aleToque < SEGUNDOS_LISTA * 1000) return;
+  if(enPantalla("trAlerta") && aleTodas){ aleTodas = false; pintarAle(); return; }   // sin tocarla: vuelve a las últimas 5
+  if(!alertaOn() || !esAdmin() || enPantalla("trAlerta") || enPantalla("pos")) return;
   if(document.querySelector(".hoja:not([hidden])") || escaner) return;
   abrirAlerta();
 }, 5000);   // en el PC con alerta, la app abre directo en esta pantalla
