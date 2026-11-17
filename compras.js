@@ -485,7 +485,7 @@ setInterval(pintarCampana, 5000);                                      // campan
 
 /* ══════════════ CAMPANA 🔔: AVISO DE TRANSFERENCIAS ══════════════
    Cada minuto (con la app abierta y en modo administración) se le pregunta al servidor por los pagos de hoy que
-   llegaron por SMS (Nequi/Daviplata, ver Ventas → Transferencias). Si hay alguno nuevo: suena, vibra y la 🔔 lo muestra.
+   llegaron por SMS (Nequi/Daviplata, ver EDUMERCA POS → Transferencias). Si hay alguno nuevo: suena, vibra y la 🔔 lo muestra.
    La 🔔 guarda el registro de las últimas 5 transferencias; el número rojo es cuántas llegaron sin que las vieras.
    Con la app cerrada no llega nada: al abrirla avisa de los de hoy que llegaron mientras tanto.
    La primera vez en un celular solo se toma nota de lo que ya había (para no avisar de golpe todo el día). */
@@ -570,12 +570,12 @@ function abrirAvisos(){
     sub: (x.quien ? x.quien + " · " : "") + (x.fecha === hoy ? "hoy" : fechaTxt(x.fecha).slice(0, 9)) + " a las " + x.hora, fn: abrirTransf}));
   if(!ops.length) ops.push({t: "Todavía no hay transferencias", sub: "Aquí quedan las últimas 5 que lleguen por Nequi o Daviplata (con la app abierta)", fn: () => {}});
   if(nuevas > TR_REGISTRO) ops.unshift({t: `Llegaron ${nuevas} nuevas`, sub: "Aquí ves las últimas 5. Toca para verlas todas", fn: abrirTransf});
-  ops.push({t: "Ver todas las de hoy", sub: "Ventas → Transferencias", fn: abrirTransf});
+  ops.push({t: "Ver todas las de hoy", sub: "EDUMERCA POS → Transferencias", fn: abrirTransf});
   trSinVer = 0; guardarTrUltimas(); pintarCampana();
   elegir("Últimas transferencias", ops);
 }
 /* ══════════════ ALERTA TRANSFERENCIAS (para el PC donde se registra) ══════════════
-   Botón Ventas → "Alerta transferencias": abre una pantalla para dejar abierta, con la última transferencia en grande
+   Botón EDUMERCA POS → "Alerta transferencias": abre una pantalla para dejar abierta, con la última transferencia en grande
    y abajo todas las de hoy. Se actualiza sola cada 30 segundos y no se devuelve sola al inicio.
    Con ⚙ se activa la VENTANITA de Windows en ESE computador (se guarda en él): aunque la app esté minimizada o detrás de
    otro programa, al llegar una transferencia sale la ventanita (abajo a la derecha) con el valor, el banco y quién.
@@ -699,7 +699,7 @@ function pintarAle(destacar){
   $("aleEstado").textContent = aleError ? "⚠ " + aleError :
     aleHora ? "Se revisa sola cada 30 segundos · última revisión " + aleHora.toTimeString().slice(0, 5) : "";
 }
-/* ---------- Totalizar: lo mismo que "Guardar y calcular diferencia" de Ventas → Transferencias (mismo dato en el servidor) ---------- */
+/* ---------- Totalizar: lo mismo que "Guardar y calcular diferencia" de EDUMERCA POS → Transferencias (mismo dato en el servidor) ---------- */
 function htmlAleTotal(d){
   if(!aleTotal) return "";
   const c = d.cuadre, dif = d.diferencia;

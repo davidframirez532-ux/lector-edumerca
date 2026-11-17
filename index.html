@@ -284,16 +284,17 @@
     <button class="ppal" id="btnMenuKpis">KPIs del negocio</button>
     <button class="ghost" id="btnMenuInv">Inventario</button>
     <button class="ppal" id="btnMenuCompras">Compras</button>
-    <button class="ghost" id="btnMenuVentas">Ventas</button>
+    <button class="ghost" id="btnMenuVentas">EDUMERCA POS</button>
   </div>
 </section>
 
 <!-- ============ VENTAS ============ -->
 <section class="pantalla" id="ventas">
-  <div class="cabeza"><h2>Ventas</h2><button class="sec" id="btnSalirVentas">Volver</button></div>
+  <div class="cabeza"><h2>EDUMERCA POS</h2><button class="sec" id="btnSalirVentas">Volver</button></div>
   <div class="menu">
     <button class="ppal" id="btnMenuTransf">Transferencias</button>
     <button class="ghost" id="btnAlertaTr">Alerta transferencias</button>
+    <button class="ghost" id="btnPos">Registrar</button>
   </div>
 </section>
 
@@ -317,6 +318,22 @@
     <button class="sec" id="btnVolverAle">Volver</button></div>
   <p id="aleEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
   <div class="panel" id="alePanel"></div>
+</section>
+
+<!-- ============ REGISTRAR (POS de respaldo cuando Siigo no funciona; lo maneja pos.js) ============ -->
+<section class="pantalla" id="pos">
+  <div class="cabeza"><h2>Registrar</h2>
+    <button class="sec" id="btnPosCuentas" style="padding:8px 12px">Cuentas</button>
+    <button class="sec" id="btnVolverPos">Volver</button></div>
+  <div style="display:flex;gap:8px;flex:none">
+    <input id="posBuscar" type="search" placeholder="Escanea o escribe el nombre…" autocomplete="off" enterkeyhint="search"
+      style="flex:1;min-width:0;font:500 1.05rem 'Barlow',sans-serif;padding:12px 14px;border-radius:10px;border:0;background:var(--papel);color:var(--tinta)">
+    <button class="sec" id="btnPosCamara" aria-label="Escanear con la cámara" style="font-size:1.2rem;padding:8px 14px">📷</button>
+    <button class="sec" id="btnPosSuelto" aria-label="Agregar producto suelto" style="padding:8px 12px">+ Suelto</button>
+  </div>
+  <p id="posEstado" style="margin:0;font-size:.85rem;opacity:.85;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="posPanel"></div>
+  <div id="posPie" style="flex:none"></div>
 </section>
 
 <!-- ============ INVENTARIO ============ -->
@@ -585,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.90 · 17-nov-2026";
+const VERSION = "v2.4.95 · 17-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -795,7 +812,7 @@ async function abrirCamara(modo){
   modoCamara = modo || "precio";
   clearTimeout(tResultado); clearTimeout(tLista);
   $("tituloEscaneo").textContent = modoCamara === "campo" ? "Escanea el código de barras" : modoCamara === "conteo" ? "Conteo · escanea el producto"
-    : modoCamara === "desarme" ? "Desarme · escanea el producto" : "Escanea el producto";
+    : modoCamara === "desarme" ? "Desarme · escanea el producto" : modoCamara === "pos" ? "Registrar · escanea el producto" : "Escanea el producto";
   $("btnDigitarEsc").hidden = modoCamara !== "conteo" && modoCamara !== "desarme";
   ir("escaneo");
   let quedan = SEGUNDOS_CAMARA;
@@ -826,6 +843,7 @@ async function abrirCamara(modo){
         if(navigator.vibrate) navigator.vibrate(80);
         const m = modoCamara;
         await cerrarCamara();
+        if(m === "pos"){ ir("pos"); if(window.posCodigo) posCodigo(codigo); return; }
         if(m === "conteo") pedirCantidad(codigo); else if(m === "lista") buscarEnLista(codigo);
         else if(m === "desarme") desRecibirCodigo(codigo); else if(m === "campo") volverDeEscaneoCampo(codigo); else mostrar(codigo);
       }, ()=>{});
@@ -1001,7 +1019,7 @@ function tocarLista(){
   clearTimeout(tLista);
   const act = document.querySelector(".pantalla.activa");
   // durante el conteo físico la app NO vuelve sola al inicio
-  if(act && ["conteo","conteoItem","ajustar","desarmes","desarmeForm","trAlerta"].includes(act.id)) return;   // ni en la alerta de transferencias
+  if(act && ["conteo","conteoItem","ajustar","desarmes","desarmeForm","trAlerta","pos"].includes(act.id)) return;   // ni en la alerta de transferencias
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
 }
 
@@ -2957,6 +2975,7 @@ function volverDeCamara(){
   else if(modoCamara === "desarme") ir("desarmeForm");
   else if(modoCamara === "conteo") abrirConteo();
   else if(modoCamara === "lista") abrirLista(false);
+  else if(modoCamara === "pos") ir("pos");
   else inicio();
 }
 function buscarEnLista(codigo){
@@ -3479,6 +3498,7 @@ entrada.addEventListener("keydown", async e=>{
   const enDesarme = $("desarmeForm").classList.contains("activa") || (escaner && modoCamara === "desarme");
   const enDesarmes = $("desarmes").classList.contains("activa");
   if(escaner) await cerrarCamara();
+  if($("pos").classList.contains("activa") && window.posCodigo) return posCodigo(v);   // Registrar (pos.js)
   if(enDesarme) desRecibirCodigo(v);
   else if(enDesarmes){ nuevoDesForm("desarme"); desRecibirCodigo(v); }
   else if(enConteo) pedirCantidad(v); else mostrar(v);
@@ -3968,10 +3988,12 @@ descargarCatalogo();
 setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 </script>
 <script>
-  /* Carga siempre la versión más reciente de compras.js */
+  /* Carga siempre la versión más reciente de compras.js y pos.js (Registrar) */
   (function(){
-    var s = document.createElement("script");
-    s.src = "compras.js?t=" + Date.now();
-    document.body.appendChild(s);
+    ["compras.js", "pos.js"].forEach(function(f){
+      var s = document.createElement("script");
+      s.src = f + "?t=" + Date.now(); s.async = false;
+      document.body.appendChild(s);
+    });
   })();
 </script>

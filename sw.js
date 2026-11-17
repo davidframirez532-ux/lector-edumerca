@@ -1,6 +1,6 @@
 // Service worker: permite instalar la app y abrirla aunque no haya internet.
 // Los precios NO se guardan aquí (los maneja la página con su copia local).
-const CACHE = "lector-edumerca-v60";
+const CACHE = "lector-edumerca-v61";
 const ARCHIVOS = ["./", "./index.html", "./manifest.webmanifest", "./icono-192.png", "./icono-512.png"];
 
 self.addEventListener("install", e => {
@@ -15,12 +15,13 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return; // Apps Script, fuentes, librería: directo a internet
   // Primero internet (así siempre tomas la versión nueva del HTML); si no hay, la copia guardada
+  // compras.js?t=… y pos.js?t=… se guardan sin el ?t= (una sola copia de cada uno, que sirve sin internet)
+  const clave = url.search && /\.js$/.test(url.pathname) ? url.origin + url.pathname : e.request;
   e.respondWith(
     fetch(e.request).then(r => {
-      const copia = r.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copia));
+      if (r.ok) { const copia = r.clone(); caches.open(CACHE).then(c => c.put(clave, copia)); }
       return r;
-    }).catch(() => caches.match(e.request))
+    }).catch(() => caches.match(clave))
   );
 });
 

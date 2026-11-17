@@ -5,6 +5,7 @@ App web instalable (PWA) de **Minimercado Edumerca**, publicada con GitHub Pages
 
 - `index.html`: casi toda la app (lector de precios, conteo, proveedores, abastos, KPIs, desarmes…).
 - `compras.js`: facturas por aprobar y documento soporte (se carga después de `index.html` y usa sus funciones).
+- `pos.js`: EDUMERCA POS → Registrar (caja de respaldo cuando Siigo no funciona; servidor en `17 pos.gs`). Se carga después de `compras.js`.
 - `sw.js`: service worker. Subir `CACHE` cuando cambie algo para que los celulares bajen la versión nueva.
 
 El servidor es Google Apps Script y su código está en el repo **privado** `davidframirez532-ux/apps-script-edumerca`
