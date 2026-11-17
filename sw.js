@@ -23,3 +23,12 @@ self.addEventListener("fetch", e => {
     }).catch(() => caches.match(e.request))
   );
 });
+
+// Tocar el aviso de una transferencia (celulares): trae la app al frente y abre Transferencias
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({type: "window", includeUncontrolled: true}).then(cs => {
+    if (cs.length) { cs[0].postMessage("abrirTransf"); return cs[0].focus(); }
+    return self.clients.openWindow("./");
+  }));
+});
