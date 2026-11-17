@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v72";
+const COMPRAS_VERSION = "compras v73";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -774,7 +774,9 @@ setInterval(() => { if(enPantalla("trAlerta") && aleHora) pintarAle(); }, 60000)
 
 setInterval(trSondear, 30000);            // cada 30 s en modo alerta; si no, cada minuto (lo controla trSondear)
 setTimeout(trSondear, 4000);
-if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);   // en el PC con alerta, la app abre directo en esta pantalla
+if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);
+/* Después de poner el PIN (botón de entrar en index.html): en el PC con la alerta activada vuelve a esta pantalla */
+window.abrirAlertaSiPC = () => { if(!alertaOn()) return false; abrirAlerta(); return true; };   // en el PC con alerta, la app abre directo en esta pantalla
 document.addEventListener("visibilitychange", () => { if(!document.hidden) setTimeout(() => trSondear(true), 2000); });
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */

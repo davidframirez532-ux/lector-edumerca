@@ -1474,7 +1474,8 @@ async function entrar(){
   guardar("clave_admin", claveAdmin);
   guardar("admin", diaHoy());
   pedirQuien(false);
-  irMenu("principal");
+  // En el PC con la alerta de transferencias activada, después del PIN vuelve a esa pantalla (no al menú)
+  if(!(window.abrirAlertaSiPC && window.abrirAlertaSiPC())) irMenu("principal");
 }
 function irMenu(id){ clearTimeout(tLista); ir(id); tocarLista(); }
 
