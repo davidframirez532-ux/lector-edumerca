@@ -3,7 +3,7 @@
    $, ir, irMenu, postAdmin, elegir, pedirForm, esc, plata, num, fechaTxt, normal, productos. */
 (function(){
 "use strict";
-const COMPRAS_VERSION = "compras v69";
+const COMPRAS_VERSION = "compras v70";
 const SERVIDOR_MINIMO = 56;   /* versión de 15_compras.gs que necesita esta app */
 /* 🎨 Color de la campana de avisos de transferencias (arriba a la derecha). Cámbialo por el que quieras:
    "#8fc9ff" azul claro (el de la app) · "#3b82f6" azul · "#ffffff" blanco · "#ffd23f" amarillo · "#4fd6a8" verde */
@@ -518,34 +518,41 @@ document.addEventListener("pointerdown", () => {           // deja el sonido lis
 }, {passive: true});
 function trRevisarNuevas(d){
   if(!d || !Array.isArray(d.pagos) || d.fecha !== trFechaDe(0)) return;
+  aleDatos = d; aleHora = new Date();
   if($("transferencias").classList.contains("activa") && trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }  // ya las está viendo
   const claves = clavesTr(d.pagos), vistos = leerJSON(TRV_KEY, null);
   try{ localStorage.setItem(TRV_KEY, JSON.stringify({fecha: d.fecha, claves})); }catch(e){}
   if(!vistos) return;                                   // primera vez en este celular: solo se toma nota
   const antes = new Set(vistos.fecha === d.fecha ? vistos.claves : []);
   const nuevos = d.pagos.filter((x, i) => !antes.has(claves[i]));          // vienen del más reciente al más antiguo
-  if(!nuevos.length) return;
-  const viendo = $("transferencias").classList.contains("activa") && !document.hidden;
+  if(!nuevos.length){ pintarAle(); return; }
+  aleNuevas = new Set(nuevos.map(x => claves[d.pagos.indexOf(x)]));
+  pintarAle(true);
+  const viendo = (enPantalla("transferencias") || enPantalla("trAlerta")) && !document.hidden;
   trUltimas = nuevos.map(x => ({fecha: d.fecha, hora: x.hora, banco: x.banco, valor: x.valor, quien: x.quien || ""}))
     .concat(trUltimas).sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora)).slice(0, TR_REGISTRO);
   if(!viendo) trSinVer += nuevos.length;
   guardarTrUltimas(); pintarCampana();
+  alertaTr(nuevos);
   if(viendo) return;
-  alertaTr(nuevos, d.fecha);
   const b = $("campana"); if(b){ b.classList.remove("nueva"); void b.offsetWidth; b.classList.add("nueva"); }
   trSonido();
   if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
 }
 window.trRevisarNuevas = trRevisarNuevas;
-async function trSondear(){
+let trUltSondeo = 0;
+async function trSondear(forzar){
   // Sin PIN guardado no se pregunta (no se le pide el PIN a nadie por un aviso)
+  const rapido = alertaOn() || enPantalla("trAlerta");     // alerta activada o pantalla de alerta: cada 30 s y aunque esté minimizada
   if(trRevisando || trCargando || (document.hidden && !alertaOn()) || !apiUrl()) return;
+  if(!forzar && !rapido && Date.now() - trUltSondeo < TR_CADA_MS - 5000) return;
   if(!esAdmin() || !claveAdmin){ alertaEnPausa(); return; }
-  trRevisando = true;
+  trRevisando = true; trUltSondeo = Date.now();
   try{
     window.__fetchSinPantalla = 1;                      // esta consulta no mantiene la pantalla encendida
     trRevisarNuevas(await postAdmin({accion: "transferencias_datos", fecha: trFechaDe(0)}));
-  }catch(e){}
+    aleError = "";
+  }catch(e){ aleError = e.message; pintarAle(); }
   finally{ trRevisando = false; window.__fetchSinPantalla = 0; }
 }
 function pintarCampana(){
@@ -568,43 +575,46 @@ function abrirAvisos(){
   elegir("Últimas transferencias", ops);
 }
 /* ══════════════ ALERTA TRANSFERENCIAS (para el PC donde se registra) ══════════════
-   Botón en Ventas → "Alerta transferencias". Se activa en ESE computador (se guarda en él):
-   la app sigue preguntando aunque esté minimizada o detrás de otro programa, y cuando llega una transferencia
-   sale una ventanita de Windows (abajo a la derecha) con el valor, el banco y quién, que se cierra sola al tiempo elegido
-   (15 segundos si no se elige otro; o "hasta que la toque"). Si la app está a la vista, además sale un aviso grande igual de largo.
-   Windows por su cuenta quita las ventanitas normales a los ~5 segundos (y con la animación se ven aún menos); por eso se
-   piden "fijas" (requireInteraction) y es la app la que las cierra al tiempo elegido.
-   Tocar la ventanita trae la app al frente y abre Transferencias.
+   Botón Ventas → "Alerta transferencias": abre una pantalla para dejar abierta, con la última transferencia en grande
+   y abajo todas las de hoy. Se actualiza sola cada 30 segundos y no se devuelve sola al inicio.
+   Con ⚙ se activa la VENTANITA de Windows en ESE computador (se guarda en él): aunque la app esté minimizada o detrás de
+   otro programa, al llegar una transferencia sale la ventanita (abajo a la derecha) con el valor, el banco y quién.
+   Dura 4 minutos, o hasta que la cierren, o hasta que llegue otra (la nueva reemplaza a la anterior).
+   Windows por su cuenta quita las ventanitas normales a los ~5 segundos: por eso se piden "fijas" (requireInteraction)
+   y es la app la que la cierra a los 4 minutos.
    Condiciones: el navegador (o la app instalada) debe quedar abierto, aunque sea minimizado; el PIN se pide una vez al día
    (si cambia el día sin PIN, avisa una vez que la alerta quedó en pausa). */
-const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_SEG_KEY = "tr_alerta_seg";
-const ALE_OPCIONES = [10, 15, 30, 60, 0];                // 0 = hasta que la toque
-const aleSeg = () => { const v = Number(leer(ALE_SEG_KEY)); return ALE_OPCIONES.includes(v) && leer(ALE_SEG_KEY) !== null ? v : 15; };
-const aleTxt = s => s ? s + " segundos" : "hasta que la toque";
+const ALE_KEY = "tr_alerta", ALE_PAUSA_KEY = "tr_alerta_pausa", ALE_MS = 4 * 60 * 1000, ALE_TAG = "tr-alerta";
+let aleDatos = null, aleHora = null, aleError = "", aleNuevas = new Set(), aleNoti = null, aleTimer = null;
 const alertaOn = () => leer(ALE_KEY) === "1";
+const enPantalla = id => { const p = $(id); return !!p && p.classList.contains("activa"); };
 const notifOk = () => "Notification" in window && Notification.permission === "granted";
-function notificar(titulo, cuerpo, tag){
+/* Una sola ventanita a la vez: la nueva reemplaza a la anterior y el reloj de 4 minutos vuelve a empezar */
+function notificar(titulo, cuerpo){
   if(!notifOk()) return;
-  const op = {body: cuerpo, tag, icon: "icono-192.png", badge: "icono-192.png", requireInteraction: true, renotify: true};
-  const ms = aleSeg() * 1000;
+  const op = {body: cuerpo, tag: ALE_TAG, icon: "icono-192.png", badge: "icono-192.png", requireInteraction: true, renotify: true};
+  clearTimeout(aleTimer);
   try{
-    const n = new Notification(titulo, op);
-    n.onclick = () => { try{ window.focus(); }catch(e){} n.close(); if(esAdmin()) abrirTransf(); };
-    if(ms) setTimeout(() => n.close(), ms);
+    if(aleNoti){ try{ aleNoti.close(); }catch(e){} }
+    const n = aleNoti = new Notification(titulo, op);
+    n.onclick = () => { try{ window.focus(); }catch(e){} n.close(); if(esAdmin()) abrirAlerta(); };
+    n.onclose = () => { if(aleNoti === n) aleNoti = null; };
+    aleTimer = setTimeout(() => n.close(), ALE_MS);
   }catch(e){                                             // celulares: solo se puede por el service worker
     if(!navigator.serviceWorker) return;
     navigator.serviceWorker.ready.then(r => r.showNotification(titulo, op)
-      .then(() => { if(ms) setTimeout(() => r.getNotifications({tag}).then(l => l.forEach(x => x.close())), ms); })).catch(() => {});
+      .then(() => { aleTimer = setTimeout(() => r.getNotifications({tag: ALE_TAG}).then(l => l.forEach(x => x.close())), ALE_MS); })).catch(() => {});
   }
 }
-function alertaTr(nuevos, fecha){
-  if(!alertaOn()) return;
-  const lista = nuevos.slice(0, 3);                      // si llegan muchas de golpe: las 3 más recientes y un resumen
-  lista.forEach((x, i) => notificar("💸 Llegó " + plata(x.valor) + " por " + x.banco,
-    (x.quien ? x.quien + " · " : "") + "a las " + x.hora, "tr-" + fecha + "-" + x.hora + "-" + x.valor + "-" + i));
-  if(nuevos.length > 3) notificar(`Llegaron ${nuevos.length} transferencias`, "Toca para verlas todas", "tr-resumen");
-  if(!document.hidden) cartelTr(nuevos);
+const quienHora = x => (x.quien ? x.quien + " · " : "") + "a las " + x.hora;
+function alertaTr(nuevos){                               // nuevos[0] es la más reciente
+  if(!alertaOn() || !nuevos.length) return;
+  const x = nuevos[0];
+  notificar("💸 Llegó " + plata(x.valor) + " por " + x.banco,
+    quienHora(x) + (nuevos.length > 1 ? ` · y ${nuevos.length - 1} más` : ""));
+  if(!document.hidden && !enPantalla("trAlerta")) cartelTr(nuevos);
 }
+/* Aviso verde grande dentro de la app (si está a la vista en otra pantalla). Tocarlo abre la pantalla de alerta. */
 function cartelTr(nuevos){
   let c = $("alertaCartel");
   if(!c){
@@ -612,58 +622,107 @@ function cartelTr(nuevos){
     c.style.cssText = "position:fixed;left:50%;top:22%;transform:translateX(-50%);z-index:50;background:#1f9d6f;color:#fff;" +
       "border-radius:18px;padding:22px 30px;box-shadow:0 10px 40px rgba(0,0,0,.5);text-align:center;cursor:pointer;" +
       "font:700 1.6rem 'Barlow',sans-serif;max-width:calc(100% - 32px)";
-    c.addEventListener("click", () => { c.hidden = true; abrirTransf(); });
+    c.addEventListener("click", () => { c.hidden = true; abrirAlerta(); });
     document.body.appendChild(c);
   }
   const x = nuevos[0];
   c.innerHTML = `💸 Llegó ${esc(plata(x.valor))} por ${esc(x.banco)}` +
-    `<div style="font-weight:500;font-size:1rem;margin-top:6px">${esc((x.quien ? x.quien + " · " : "") + "a las " + x.hora)}` +
-    (nuevos.length > 1 ? ` · y ${nuevos.length - 1} más` : "") + `</div>`;
+    `<div style="font-weight:500;font-size:1rem;margin-top:6px">${esc(quienHora(x))}` +
+    (nuevos.length > 1 ? ` · y ${nuevos.length - 1} más` : "") + `</div><div style="font-weight:500;font-size:.8rem;opacity:.8;margin-top:8px">Toca para ver todas</div>`;
   c.hidden = false;
-  clearTimeout(cartelTr.t); if(aleSeg()) cartelTr.t = setTimeout(() => { c.hidden = true; }, aleSeg() * 1000);
+  clearTimeout(cartelTr.t); cartelTr.t = setTimeout(() => { c.hidden = true; }, ALE_MS);
 }
 function alertaEnPausa(){                               // cambió el día y no hay PIN: avisa una sola vez
+  if(enPantalla("trAlerta")){ aleError = "Hay que volver a poner el PIN (cambió el día)"; pintarAle(); }
   if(!alertaOn() || leer(ALE_PAUSA_KEY) === diaHoy()) return;
   guardar(ALE_PAUSA_KEY, diaHoy());
-  notificar("Alerta de transferencias en pausa", "Abre la app y pon el PIN para que siga avisando", "tr-pausa");
+  notificar("Alerta de transferencias en pausa", "Abre la app y pon el PIN para que siga avisando");
+}
+
+/* ---------- Pantalla ---------- */
+(function(){
+  const st = document.createElement("style");
+  st.textContent = `.ale-grande{background:#1f9d6f;color:#fff;border-radius:18px;padding:22px 18px;text-align:center;flex:none}
+    .ale-grande .ab{font:600 1rem "Barlow",sans-serif;opacity:.9;text-transform:uppercase;letter-spacing:.06em}
+    .ale-grande .av{font:800 clamp(3rem,13vw,5.5rem)/1.05 "Barlow Condensed",sans-serif;margin:6px 0}
+    .ale-grande .aq{font:600 clamp(1.1rem,4vw,1.6rem) "Barlow",sans-serif}
+    .ale-grande .ah{font:500 1rem "Barlow",sans-serif;opacity:.85;margin-top:4px}
+    .ale-grande.vacia{background:var(--verde2)}
+    .ale-grande.nueva{animation:aleBrillo 1s ease-in-out 4}
+    @keyframes aleBrillo{50%{background:#2fd393;transform:scale(1.02)}}
+    .ale-fila.nueva{background:rgba(47,211,147,.18);border-radius:8px;padding-left:8px;padding-right:8px}
+    .ale-aviso{display:flex;gap:10px;align-items:center;justify-content:space-between;background:rgba(224,90,69,.18);
+      border:1px solid var(--rojo);border-radius:12px;padding:10px 12px;font-size:.9rem;flex:none}`;
+  document.head.appendChild(st);
+})();
+function abrirAlerta(){
+  clearTimeout(tLista);
+  ir("trAlerta"); pintarAle();
+  if(trSinVer){ trSinVer = 0; guardarTrUltimas(); pintarCampana(); }
+  trSondear(true);
+}
+function pintarAle(destacar){
+  if(!enPantalla("trAlerta")) return;
+  const d = aleDatos && aleDatos.fecha === trFechaDe(0) ? aleDatos : null, pagos = d ? d.pagos : [];
+  const claves = clavesTr(pagos);
+  let h = "";
+  if(!alertaOn() || (alertaOn() && "Notification" in window && Notification.permission !== "granted"))
+    h += `<div class="ale-aviso"><span>${alertaOn() ? "El navegador no deja mostrar la ventanita de Windows." :
+      "La ventanita de Windows está apagada en este computador: solo verás las transferencias aquí."}</span>
+      <button class="ppal" id="btnAleActivar" style="flex:none;padding:8px 14px">Activar</button></div>`;
+  if(pagos.length){
+    const x = pagos[0];
+    h += `<div class="ale-grande${destacar ? " nueva" : ""}"><div class="ab">Última · ${esc(x.banco)}</div>
+      <div class="av">${esc(plata(x.valor))}</div>
+      ${x.quien ? `<div class="aq">${esc(x.quien)}</div>` : ""}<div class="ah">Hoy a las ${esc(x.hora)}</div></div>`;
+    const total = pagos.reduce((t, y) => t + (Number(y.valor) || 0), 0);
+    h += `<div class="bloque"><h3>Todas las de hoy <small>${pagos.length} · ${plata(total)}</small></h3>` +
+      pagos.map((y, i) => `<div class="fila-dato ale-fila${aleNuevas.has(claves[i]) ? " nueva" : ""}"><span>${esc(y.hora)} · ${esc(y.banco)}` +
+        (y.quien ? `<small style="display:block;opacity:.65">${esc(y.quien)}</small>` : "") + `</span><b>${plata(y.valor)}</b></div>`).join("") + `</div>`;
+  }else{
+    h += `<div class="ale-grande vacia"><div class="ab">${d ? "Hoy" : ""}</div><div class="aq" style="margin:10px 0">${d ? "Todavía no ha llegado ninguna transferencia" : "Cargando…"}</div></div>`;
+  }
+  $("alePanel").innerHTML = h;
+  const act = $("btnAleActivar"); if(act) act.addEventListener("click", activarAlerta);
+  $("aleEstado").textContent = aleError ? "⚠ " + aleError :
+    aleHora ? "Se revisa sola cada 30 segundos · última revisión " + aleHora.toTimeString().slice(0, 5) : "";
+}
+async function activarAlerta(){
+  if(!("Notification" in window)) return alert("Este navegador no puede mostrar avisos. Usa Chrome o Edge en el computador.");
+  if(Notification.permission === "denied")
+    return alert("El navegador tiene bloqueados los avisos de esta app.\n\nToca el candado 🔒 al lado de la dirección (arriba) → Notificaciones → Permitir, y vuelve a intentarlo.");
+  if(Notification.permission !== "granted"){
+    alert("Ahora el navegador te va a preguntar si esta app puede mostrar notificaciones: toca «Permitir».");
+    if(await Notification.requestPermission() !== "granted") return alert("Sin ese permiso no se puede avisar. Vuelve a intentarlo y toca «Permitir».");
+  }
+  guardar(ALE_KEY, "1"); guardar(ALE_PAUSA_KEY, ""); pintarBotonAlerta(); pintarAle();
+  notificar("✅ Alerta de transferencias activada", "Así se verá cuando llegue una. Deja la app abierta (puedes minimizarla).");
+  setTimeout(() => trSondear(true), 1000);
 }
 function pintarBotonAlerta(){
   const b = $("btnAlertaTr"); if(!b) return;
   b.textContent = "Alerta transferencias" + (alertaOn() ? " ✓" : "");
   b.className = alertaOn() ? "ppal" : "ghost";
 }
-async function activarAlerta(){
-  if(!("Notification" in window)) return alert("Este navegador no puede mostrar avisos. Usa Chrome o Edge en el computador.");
-  if(Notification.permission === "denied")
-    return alert("El navegador tiene bloqueados los avisos de esta app.\n\nToca el candado 🔒 al lado de la dirección (arriba) → Notificaciones → Permitir, y vuelve a tocar el botón.");
-  if(Notification.permission !== "granted"){
-    alert("Ahora el navegador te va a preguntar si esta app puede mostrar notificaciones: toca «Permitir».");
-    if(await Notification.requestPermission() !== "granted") return alert("Sin ese permiso no se puede avisar. Vuelve a intentarlo y toca «Permitir».");
-  }
-  guardar(ALE_KEY, "1"); guardar(ALE_PAUSA_KEY, ""); pintarBotonAlerta();
-  notificar("✅ Alerta de transferencias activada", "Así se verá cuando llegue una. Deja la app abierta (puedes minimizarla).", "tr-prueba");
-  setTimeout(trSondear, 1000);
-}
-$("btnAlertaTr").addEventListener("click", () => {
-  if(!alertaOn()) return elegir("Alerta transferencias", [
-    {t: "Activar en este computador", sub: "Cuando llegue una transferencia sale una ventanita (15 segundos), aunque la app esté minimizada", fn: activarAlerta},
-    {t: "¿Cómo funciona?", sub: "Deja la app abierta (minimizada o detrás de otro programa). Si la cierras, no avisa.", fn: () => {}}]);
-  elegir("Alerta transferencias (activada)", [
-    {t: "Probar", sub: "Muestra una ventanita de ejemplo (" + aleTxt(aleSeg()) + ")", fn: () => {
+$("btnAlertaTr").addEventListener("click", abrirAlerta);
+$("btnVolverAle").addEventListener("click", () => irMenu("ventas"));
+$("btnAleOpciones").addEventListener("click", () => {
+  if(!alertaOn()) return elegir("Ventanita de Windows", [
+    {t: "Activar en este computador", sub: "Al llegar una transferencia sale una ventanita 4 minutos, aunque la app esté minimizada", fn: activarAlerta}]);
+  elegir("Ventanita de Windows (activada)", [
+    {t: "Probar", sub: "Muestra una ventanita de ejemplo (dura 4 minutos o hasta que la cierres)", fn: () => {
       if(!notifOk()) return activarAlerta();
-      notificar("💸 Llegó $50.000 por Nequi", "Ejemplo · a las " + new Date().toTimeString().slice(0, 5), "tr-prueba");
-      cartelTr([{valor: 50000, banco: "Nequi", quien: "Ejemplo", hora: new Date().toTimeString().slice(0, 5)}]); }},
-    {t: "Cuánto dura la ventanita: " + aleTxt(aleSeg()), sub: "Toca para cambiarlo", fn: () => elegir("¿Cuánto dura la ventanita?",
-      ALE_OPCIONES.map(v => ({t: (v === aleSeg() ? "✓ " : "") + aleTxt(v)[0].toUpperCase() + aleTxt(v).slice(1),
-        sub: v ? "" : "Se queda hasta que la toques o la cierres", fn: () => guardar(ALE_SEG_KEY, String(v))})))},
-    {t: "Apagar en este computador", sub: "Deja de mostrar la ventanita (la 🔔 sigue funcionando)", fn: () => { guardar(ALE_KEY, ""); pintarBotonAlerta(); }}]);
+      notificar("💸 Llegó $50.000 por Nequi", "Ejemplo · a las " + new Date().toTimeString().slice(0, 5)); }},
+    {t: "Apagar en este computador", sub: "Deja de mostrar la ventanita (esta pantalla y la 🔔 siguen funcionando)", fn: () => { guardar(ALE_KEY, ""); pintarBotonAlerta(); pintarAle(); }}]);
 });
 pintarBotonAlerta();
-if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if(e.data === "abrirTransf" && esAdmin()) abrirTransf(); });
+if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if(e.data === "abrirTransf" && esAdmin()) alertaOn() ? abrirAlerta() : abrirTransf(); });
+setInterval(() => { if(enPantalla("trAlerta") && aleHora) pintarAle(); }, 60000);   // si cambia el día, la pantalla se limpia
 
-setInterval(trSondear, TR_CADA_MS);
+setInterval(trSondear, 30000);            // cada 30 s en modo alerta; si no, cada minuto (lo controla trSondear)
 setTimeout(trSondear, 4000);
-document.addEventListener("visibilitychange", () => { if(!document.hidden) setTimeout(trSondear, 2000); });
+if(alertaOn()) setTimeout(() => esAdmin() && abrirAlerta(), 2500);   // en el PC con alerta, la app abre directo en esta pantalla
+document.addEventListener("visibilitychange", () => { if(!document.hidden) setTimeout(() => trSondear(true), 2000); });
 
 /* ══════════════ FILTROS COMUNES: mes, proveedor y orden ══════════════ */
 const MESES_L = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];

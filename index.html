@@ -310,6 +310,15 @@
   <div class="panel" id="trPanel"></div>
 </section>
 
+<!-- ============ ALERTA TRANSFERENCIAS (pantalla para dejar abierta en el PC) ============ -->
+<section class="pantalla" id="trAlerta">
+  <div class="cabeza"><h2 style="font-size:1.4rem">Alerta transferencias</h2>
+    <button class="sec" id="btnAleOpciones" aria-label="Opciones de la alerta" style="font-size:1.2rem;padding:8px 14px">⚙</button>
+    <button class="sec" id="btnVolverAle">Volver</button></div>
+  <p id="aleEstado" style="margin:0;font-size:.85rem;opacity:.8;text-align:center;min-height:1.2em"></p>
+  <div class="panel" id="alePanel"></div>
+</section>
+
 <!-- ============ INVENTARIO ============ -->
 <section class="pantalla" id="inventario">
   <div class="cabeza"><h2>Inventario</h2><button class="sec" id="btnSalirInv">Volver</button></div>
@@ -576,7 +585,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.4.75 · 17-nov-2026";
+const VERSION = "v2.4.80 · 17-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -992,7 +1001,7 @@ function tocarLista(){
   clearTimeout(tLista);
   const act = document.querySelector(".pantalla.activa");
   // durante el conteo físico la app NO vuelve sola al inicio
-  if(act && ["conteo","conteoItem","ajustar","desarmes","desarmeForm"].includes(act.id)) return;
+  if(act && ["conteo","conteoItem","ajustar","desarmes","desarmeForm","trAlerta"].includes(act.id)) return;   // ni en la alerta de transferencias
   tLista = setTimeout(inicio, SEGUNDOS_LISTA*1000);
 }
 
