@@ -21,7 +21,7 @@ const cant = q => String(Math.round(q * 1000) / 1000).replace(".", ",");
 let cuenta = leerJSON(ACT_KEY, null) || nueva();
 let pend = leerJSON(PEND_KEY, []);                 // cuentas guardadas que todavía no llegan a Drive
 let dias = leerJSON(DIA_KEY, {});                  // lo último que dijo el servidor de cada día: {fecha: {cuentas, total, n}}
-let vista = "cuenta", verFecha = hoy(), enviando = false, servidorViejo = false, marcada = -1, facturando = false;
+let vista = "cuenta", verFecha = hoy(), enviando = false, servidorViejo = false, marcada = -1, facturando = false, tipoFac = "soporte";   // documento soporte por defecto
 const guardarCuenta = () => { try{ localStorage.setItem(ACT_KEY, JSON.stringify(cuenta)); }catch(e){} };
 const guardarPend = () => { try{ localStorage.setItem(PEND_KEY, JSON.stringify(pend)); }catch(e){} };
 const guardarDias = () => { try{ const ks = Object.keys(dias).sort().slice(-10), o = {}; ks.forEach(k => o[k] = dias[k]);
@@ -146,7 +146,9 @@ function pintarCuentas(){
   $("posPanel").innerHTML = h;
   const porFacturar = (d ? d.cuentas : []).filter(c => !c.anulada && !c.factura);
   const tot = porFacturar.reduce((t, c) => t + (c.total || 0), 0);
-  $("posPie").innerHTML = `<button class="pos-fac" id="btnPosFacturar" ${facturando || !porFacturar.length ? "disabled" : ""}>${
+  $("posPie").innerHTML = `<div class="seg">${[["soporte", "Documento soporte"], ["electronica", "Factura electrónica"]].map(([v, t]) =>
+      `<button data-tipofac="${v}" aria-pressed="${tipoFac === v}">${t}</button>`).join("")}</div>
+    <button class="pos-fac" id="btnPosFacturar" ${facturando || !porFacturar.length ? "disabled" : ""}>${
     facturando ? "CREANDO FACTURA EN SIIGO…" : "CREAR FACTURA EN SIIGO"}<small>${
     facturando ? "No cierres la app" : porFacturar.length ? `${porFacturar.length} ${porFacturar.length === 1 ? "cuenta" : "cuentas"} por facturar · ${plata(tot)}`
       : d && d.cuentas.length ? "Todas las cuentas de este día ya están facturadas" : "No hay cuentas por facturar"}</small></button>`;
@@ -216,10 +218,7 @@ async function facturar(ids){
   const cuentas = (d ? d.cuentas : []).filter(c => !c.anulada && !c.factura && (!ids || ids.includes(c.id)));
   if(!cuentas.length) return estado("No hay cuentas por facturar este día.", true);
   const sinSubir = pend.filter(x => x.fecha === fecha).length;
-  const tipo = await preguntar("¿Qué documento creo en Siigo?", [
-    {t: "Factura electrónica", sub: "Se envía a la DIAN" + (fecha !== hoy() ? " · queda con fecha de hoy (la DIAN no deja fechas pasadas)" : ""), v: "electronica"},
-    {t: "Documento soporte", sub: "No electrónico: queda en Siigo y no se envía a la DIAN", v: "soporte"}]);
-  if(!tipo) return;
+  const tipo = tipoFac;   // se escoge arriba del botón; por defecto Documento soporte
   let modo = "una";
   if(!ids && cuentas.length > 1){
     modo = await preguntar(`¿Cómo subo las ${cuentas.length} cuentas?`, [
@@ -231,7 +230,8 @@ async function facturar(ids){
   const cuantas = modo === "todas" || cuentas.length === 1 ? `1 ${nombre}` : `${cuentas.length} ${tipo === "electronica" ? "facturas electrónicas" : "documentos soporte"}`;
   if(!confirm(`Se va a crear en Siigo: ${cuantas}\n` +
     (cuentas.length === 1 ? `Cuenta ${cuentas[0].numero} · ${plata(cuentas[0].total)}` : `Cuentas ${cuentas.map(c => c.numero).join(", ")} · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`) +
-    (tipo === "electronica" ? "\n\nLa factura electrónica se envía a la DIAN: después no se puede borrar, solo anular con nota crédito." : "") +
+    (tipo === "electronica" ? "\n\nLa factura electrónica se envía a la DIAN: después no se puede borrar, solo anular con nota crédito." +
+      (fecha !== hoy() ? " Queda con fecha de hoy (la DIAN no deja fechas pasadas)." : "") : "") +
     (sinSubir ? `\n\nOjo: ${sinSubir} ${sinSubir === 1 ? "cuenta de este día todavía no sube" : "cuentas de este día todavía no suben"} a Drive y no ${sinSubir === 1 ? "entra" : "entran"}.` : "") +
     "\n\n¿Crear?")) return;
   facturando = true; pintar();
@@ -272,7 +272,7 @@ $("btnVolverPos").addEventListener("click", () => {
 });
 $("btnPosCuentas").addEventListener("click", () => {
   if(vista === "cuentas"){ vista = "cuenta"; $("posBuscar").parentElement.style.display = "flex"; estado(""); return pintar(); }
-  vista = "cuentas"; verFecha = hoy(); estado(""); pintar(); cargarDia(verFecha); enviar();
+  vista = "cuentas"; verFecha = hoy(); tipoFac = "soporte"; estado(""); pintar(); cargarDia(verFecha); enviar();
 });
 $("btnPosCamara").addEventListener("click", () => abrirCamara("pos"));
 $("btnPosSuelto").addEventListener("click", async () => {
@@ -349,6 +349,7 @@ $("posPanel").addEventListener("click", async e => {
 $("posPie").addEventListener("click", e => {
   const t = e.target.closest("button"); if(!t) return;
   if(t.id === "btnPosFacturar") return facturar(null);
+  if(t.dataset.tipofac){ tipoFac = t.dataset.tipofac; return pintar(); }
   if(t.dataset.pago){ cuenta.pago = t.dataset.pago; guardarCuenta(); return pintar(); }
   if(t.id === "btnPosVaciar"){
     if(cuenta.lineas.length && !confirm("¿Vaciar esta cuenta? Se borran los productos escaneados.")) return;
