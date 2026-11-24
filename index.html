@@ -1758,6 +1758,27 @@ function margenNecesario(k){
   return Math.round(u.costos_fijos_mes / ventaMes * 1000) / 10;
 }
 const pctTxt = v => v.toLocaleString("es-CO", {minimumFractionDigits:1, maximumFractionDigits:1}) + "%";
+/* Tablita: con cada margen, cuánto hay que vender al día (con IVA) para cubrir los fijos */
+function tablaMargenVenta(u, k, actual, necesario){
+  const m = k.mes || {}, a = m.actual || {};
+  if(!a.ventas || !a.ventas_sin_iva || !m.dias_mes || !u.venta_diaria_actual) return "";
+  const fijoDia = u.costos_fijos_mes / m.dias_mes * (a.ventas / a.ventas_sin_iva);
+  let ms = [actual];
+  if(actual < necesario){
+    for(let x = Math.floor(actual) + 1; x < necesario - 0.4 && ms.length < 4; x++) ms.push(x);
+    ms.push(necesario);
+  }else ms.push(necesario);
+  ms = [...new Set(ms)].sort((x, y) => x - y);
+  const filas = ms.map(x => {
+    const v = fijoDia / (x / 100), mas = (v / u.venta_diaria_actual - 1) * 100;
+    const marca = x === actual ? " <small style=\"opacity:.7\">(hoy)</small>" : "";
+    return `<div class="fila-dato"><span>${pctTxt(x)}${marca}</span><b>${plata(Math.round(v / 1000) * 1000)}
+      <small style="display:block;font-weight:400;opacity:.75">${mas > 0.5 ? Math.round(mas) + "% más de lo que vendes" : "ya lo vendes"}</small></b></div>`;
+  }).join("");
+  return `<div style="background:var(--verde);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;font-size:.78rem;opacity:.8"><span>Si tu margen es…</span><span>necesitas vender al día (con IVA)</span></div>
+    ${filas}</div>`;
+}
 function bloqueUtilidad(u, k){
   let h = `<div class="bloque"><h3>Utilidad del mes <button class="sec chico" id="btnFijos">Costos fijos</button></h3>`;
   if(!u || u.error){
@@ -1785,6 +1806,7 @@ function bloqueUtilidad(u, k){
       <p style="margin:6px 0 10px;font-weight:600">${alcanza
         ? `✓ Cubres los costos fijos y te sobran ${pctTxt(dif).replace("%", "")} puntos de margen.`
         : `Te faltan ${pctTxt(dif).replace("%", "")} puntos de margen para cubrir los costos fijos.`}</p>`;
+      h += tablaMargenVenta(u, k, actual, necesario);
     }
     h += `<div class="grilla">
       ${dato("Utilidad a la fecha" + est, plata(u.utilidad_a_la_fecha))}
