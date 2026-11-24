@@ -128,15 +128,19 @@ function pintarCuentas(){
     <input type="date" id="posFecha" value="${verFecha}" max="${hoy()}" style="font:500 1rem 'Barlow',sans-serif;padding:8px;border-radius:8px;border:0"></div>`;
   if(deEste.length) h += `<div class="ale-aviso" style="margin-bottom:10px"><span>⏳ ${deEste.length} ${deEste.length === 1 ? "cuenta guardada en este equipo todavía no sube" : "cuentas guardadas en este equipo todavía no suben"} a Drive${
     servidorViejo ? " (el servidor todavía no tiene Registrar)" : ""}.</span><button class="ppal" id="btnPosReintentar" style="flex:none;padding:8px 12px">Subir</button></div>`;
+  const sinStock = [...new Set((d ? d.cuentas : []).filter(c => stockMal(c.factura)).map(c => c.factura.nombre))];
+  if(sinStock.length) h += `<div class="ale-aviso" style="margin-bottom:10px"><span>⚠ El stock NO bajó en Siigo con ${sinStock.length === 1 ? "la factura" : "las facturas"} ${esc(sinStock.join(", "))}.
+    Ábrela${sinStock.length > 1 ? "s" : ""} en Siigo → Editar → Guardar, y en la cuenta toca "Revisar stock otra vez".</span></div>`;
   h += `<div class="bloque"><h3>Cuentas ${verFecha === hoy() ? "de hoy" : "del " + esc(fechaTxt(verFecha))} <small>${d ? d.n + " · " + plata(d.total) : "…"}</small></h3>`;
   h += deEste.slice().reverse().map(c => `<details class="pos-cta"><summary><span>⏳ Sin subir · ${esc(c.hora)} · ${esc(c.pago)}</span><span>${plata(totalDe(c))}</span></summary>
     <div class="det">${c.lineas.map(l => `${cant(l.q)} x ${esc(l.n)} = ${plata(sub(l))}`).join("<br>")}</div></details>`).join("");
   h += lista.length ? lista.map(c => `<details class="pos-cta${c.anulada ? " anulada" : ""}"><summary><span>Cuenta ${c.numero}: ${esc(c.hora)} · ${esc(c.pago)}${c.anulada ? " · ANULADA" : ""}${
-      c.factura ? ` · <span class="fac">✓ ${esc(c.factura.nombre)}</span>` : ""}</span><span>${plata(c.total)}</span></summary>
+      c.factura ? ` · <span class="fac">✓ ${esc(c.factura.nombre)}</span>${stockMal(c.factura) ? ` <span style="color:#ff9a86">⚠ stock</span>` : ""}` : ""}</span><span>${plata(c.total)}</span></summary>
     <div class="det">${c.lineas.map(l => `${cant(l.q)} x ${esc(l.n)}${l.c ? ` <span style="opacity:.6">[${esc(l.c)}]</span>` : ""} = ${plata(sub(l))}`).join("<br>")}
     ${c.quien ? `<br><span style="opacity:.6">Registró: ${esc(c.quien)}</span>` : ""}
     ${c.factura ? `<br><span class="fac">Facturada en Siigo: ${c.factura.url ? `<a href="${esc(c.factura.url)}" target="_blank" rel="noopener">${esc(c.factura.nombre)}</a>` : esc(c.factura.nombre)} · ${
-      c.factura.tipo === "electronica" ? "factura electrónica" : "documento soporte"}</span>` : ""}
+      c.factura.tipo === "electronica" ? "factura electrónica" : "documento soporte"}</span>${stockHtml(c.factura)}${
+      stockMal(c.factura) ? `<br><button class="chip" data-stock="${esc(c.id)}" style="margin-top:8px;text-transform:none">Revisar stock otra vez</button>` : ""}` : ""}
     ${c.anulada || c.factura ? "" : `<br><button class="chip" data-facturar="${esc(c.id)}" data-num="${c.numero}" style="margin-top:8px;text-transform:none">Factura solo de esta cuenta</button>
       <button class="chip" data-anular="${esc(c.id)}" data-num="${c.numero}" style="margin-top:8px;text-transform:none">Anular cuenta ${c.numero}</button>`}</div></details>`).join("")
     : (deEste.length ? "" : `<p class="nota" style="margin:0">${d ? "No hay cuentas registradas este día." : "Cargando…"}</p>`);
@@ -206,6 +210,27 @@ async function bajar(tipo){
 }
 
 /* ---------- Facturas en Siigo ---------- */
+/* Stock de la factura: el servidor lo lee en Siigo justo antes y unos segundos después de crearla */
+function stockHtml(f){
+  const st = f.stock;
+  if(!st) return "";                              // facturas de antes de revisar stock
+  if(st.ok === null || st.ok === undefined) return `<br><span style="opacity:.7">Stock: sin productos con control de inventario para revisar</span>`;
+  const det = (st.productos || []).filter(p => p.antes !== null && p.antes !== undefined)
+    .map(p => `${p.bajo ? "✓" : "✗"} ${esc(p.nombre || p.codigo)}: ${cant(p.antes)} → ${p.ahora === null || p.ahora === undefined ? "?" : cant(p.ahora)}`).join("<br>");
+  return st.ok ? `<br><span class="fac">✓ El stock bajó en Siigo</span><br><span style="opacity:.75">${det}</span>`
+    : `<br><span style="color:#ff9a86;font-weight:600">⚠ El stock NO bajó en Siigo.</span> Ábrela en Siigo → Editar → Guardar y toca "Revisar stock otra vez".
+      <br><span style="opacity:.75">${det}</span>`;
+}
+function stockMal(f){ return f && f.stock && f.stock.ok === false; }
+async function revisarStock(id){
+  estado("Revisando el stock en Siigo…");
+  try{
+    const r = await postAdmin({accion: "pos_stock", fecha: verFecha, id});
+    recibirDia(r);
+    estado(r.stock && r.stock.ok ? `✓ ${r.factura}: el stock ya bajó en Siigo` : `⚠ ${r.factura}: el stock todavía no baja. Guárdala en Siigo (Editar → Guardar).`, !(r.stock && r.stock.ok));
+  }catch(e){ estado("⚠ " + (/desconocida/i.test(e.message) ? "El servidor todavía no tiene Revisar stock." : e.message), true); }
+  pintar();
+}
 function preguntar(titulo, opciones){
   return new Promise(res => {
     elegir(titulo, opciones.map(o => ({t: o.t, sub: o.sub, fn: () => res(o.v)})));
@@ -249,10 +274,16 @@ async function facturar(ids){
       creadas.push(...(r.creadas || [])); errores.push(...(r.errores || []));
     }while(r.faltan > 0 && ++vueltas < 20);
     const txt = creadas.length ? `✓ ${creadas.length === 1 ? "Creada " + creadas[0].nombre + " · " + plata(creadas[0].total) : creadas.length + " facturas creadas en Siigo"}` : "";
+    const malas = creadas.filter(c => stockMal(c));
+    if(malas.length) alert(`⚠ OJO: el stock NO bajó en Siigo con ${malas.map(c => c.nombre).join(", ")}.\n\n` +
+      malas.map(c => c.nombre + ":\n" + (c.stock.productos || []).filter(p => p.antes !== null && p.antes !== undefined)
+        .map(p => `  ${p.nombre || p.codigo}: tenía ${cant(p.antes)}, vendió ${cant(p.vendido)}, quedó ${p.ahora === null || p.ahora === undefined ? "?" : cant(p.ahora)}`).join("\n")).join("\n\n") +
+      "\n\nÁbrela en Siigo → Editar → Guardar y después toca \"Revisar stock otra vez\" en la cuenta.");
+    else if(creadas.some(c => c.stock && c.stock.ok)) estado(txt + " · ✓ el stock bajó en Siigo");
     if(errores.length){
       estado((txt ? txt + " · " : "") + `⚠ ${errores.length} con problema`, true);
       alert((txt ? txt + "\n\n" : "") + "No se pudieron crear:\n\n" + errores.map(x => `Cuenta${x.cuentas.length > 1 ? "s" : ""} ${x.cuentas.join(", ")}: ${x.error}`).join("\n\n"));
-    }else estado(txt + " · registro en Drive (FACTURAS DE VENTA / CREADAS)");
+    }else if(!creadas.some(c => c.stock && c.stock.ok) || malas.length) estado(txt + (malas.length ? " · ⚠ revisar stock" : " · registro en Drive (FACTURAS DE VENTA / CREADAS)"), !!malas.length);
   }catch(e){ estado("⚠ " + e.message, true); }
   finally{ facturando = false; pintar(); }
 }
@@ -338,6 +369,7 @@ $("posPanel").addEventListener("click", async e => {
   }
   if(d.bajar) return bajar(d.bajar);
   if(d.facturar) return facturar([d.facturar]);
+  if(d.stock) return revisarStock(d.stock);
   if(d.anular){
     if(!confirm(`¿Anular la cuenta ${d.num}?\n\nSigue apareciendo en el archivo, marcada como ANULADA (no subir a Siigo).`)) return;
     try{ recibirDia(await postAdmin({accion: "pos_anular", fecha: verFecha, id: d.anular})); estado(`Cuenta ${d.num} anulada`); pintar(); }
