@@ -1,8 +1,9 @@
 /* pos.js — EDUMERCA POS → Registrar: caja de respaldo para cuando Siigo no funciona (17_pos.gs en el servidor).
    Se escanean los productos (lector USB/Bluetooth, cámara 📷 o buscando por nombre), la app totaliza y
-   "Guardar cuenta" la sube a Drive: EDUMERCA/EDUMERCA POS/Cuentas AAAA-MM-DD.txt (Cuenta 1:, Cuenta 2:, …).
-   Después se suben a Siigo a mano. En "Cuentas" se ven las del día, se anulan y se descargan en TXT o PDF
-   (el archivo también queda en Drive).
+   "Guardar cuenta" la sube a Drive: EDUMERCA/EDUMERCA POS/CUENTAS/Cuentas AAAA-MM-DD.txt (Cuenta 1:, Cuenta 2:, …).
+   En "Cuentas" se ven las del día, se anulan y se descargan en TXT o PDF (el archivo también queda en Drive), y el
+   botón grande "CREAR FACTURA EN SIIGO" las sube a Siigo: factura electrónica o documento soporte (no electrónico),
+   una factura por cuenta o todas en una sola. El registro queda en EDUMERCA/EDUMERCA POS/FACTURAS DE VENTA/CREADAS.
    Nada se pierde sin internet: la cuenta en curso y las guardadas que no han subido quedan en este equipo
    y se suben solas cuando vuelve la conexión.
    Se carga después de index.html y usa sus funciones: $, ir, irMenu, postAdmin, plata, pesos, esc, normal, buscar,
@@ -20,7 +21,7 @@ const cant = q => String(Math.round(q * 1000) / 1000).replace(".", ",");
 let cuenta = leerJSON(ACT_KEY, null) || nueva();
 let pend = leerJSON(PEND_KEY, []);                 // cuentas guardadas que todavía no llegan a Drive
 let dias = leerJSON(DIA_KEY, {});                  // lo último que dijo el servidor de cada día: {fecha: {cuentas, total, n}}
-let vista = "cuenta", verFecha = hoy(), enviando = false, servidorViejo = false, marcada = -1;
+let vista = "cuenta", verFecha = hoy(), enviando = false, servidorViejo = false, marcada = -1, facturando = false;
 const guardarCuenta = () => { try{ localStorage.setItem(ACT_KEY, JSON.stringify(cuenta)); }catch(e){} };
 const guardarPend = () => { try{ localStorage.setItem(PEND_KEY, JSON.stringify(pend)); }catch(e){} };
 const guardarDias = () => { try{ const ks = Object.keys(dias).sort().slice(-10), o = {}; ks.forEach(k => o[k] = dias[k]);
@@ -53,7 +54,13 @@ function estado(t, mal){ const e = $("posEstado"); e.textContent = t || ""; e.st
     .pos-cta.anulada{opacity:.5}
     .pos-cta summary{display:flex;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;font-weight:600}
     .pos-cta summary::-webkit-details-marker{display:none}
-    .pos-cta .det{font-size:.88rem;opacity:.85;margin:6px 0 0 10px}`;
+    .pos-cta .det{font-size:.88rem;opacity:.85;margin:6px 0 0 10px}
+    .pos-cta .fac{color:#2fd393;font-weight:600}
+    .pos-cta .fac a{color:inherit}
+    .pos-fac{width:100%;min-height:64px;margin-top:10px;border:0;border-radius:14px;background:var(--amarillo);color:var(--verde);
+      font:800 1.35rem/1.1 "Barlow Condensed",sans-serif;letter-spacing:.02em;cursor:pointer}
+    .pos-fac small{display:block;font:500 .85rem "Barlow",sans-serif;opacity:.75;margin-top:2px;letter-spacing:0}
+    .pos-fac:disabled{opacity:.45;cursor:default}`;
   document.head.appendChild(st);
 })();
 
@@ -99,7 +106,8 @@ function pintar(){
     p._res = r;
   }else if(!cuenta.lineas.length){
     p.innerHTML = `<div class="vacio">Escanea un producto con el lector o con 📷, o escribe el nombre arriba.<br><br>
-      Al terminar toca <b>Guardar cuenta</b>: queda en Drive (EDUMERCA / EDUMERCA POS) para subirla después a Siigo.</div>`;
+      Al terminar toca <b>Guardar cuenta</b>: queda en Drive (EDUMERCA / EDUMERCA POS / CUENTAS). Después, en <b>Cuentas</b>,
+      el botón <b>Crear factura en Siigo</b> la sube a Siigo.</div>`;
   }else{
     p.innerHTML = cuenta.lineas.map((l, i) => `<div class="pos-l${i === marcada ? " pos-nueva" : ""}" data-i="${i}">
       <div class="pn">${esc(l.n)}<small>${l.c ? esc(l.c) + " · " : ""}<button data-precio="${i}" title="Cambiar precio">${plata(l.p)} c/u</button></small></div>
@@ -123,15 +131,25 @@ function pintarCuentas(){
   h += `<div class="bloque"><h3>Cuentas ${verFecha === hoy() ? "de hoy" : "del " + esc(fechaTxt(verFecha))} <small>${d ? d.n + " · " + plata(d.total) : "…"}</small></h3>`;
   h += deEste.slice().reverse().map(c => `<details class="pos-cta"><summary><span>⏳ Sin subir · ${esc(c.hora)} · ${esc(c.pago)}</span><span>${plata(totalDe(c))}</span></summary>
     <div class="det">${c.lineas.map(l => `${cant(l.q)} x ${esc(l.n)} = ${plata(sub(l))}`).join("<br>")}</div></details>`).join("");
-  h += lista.length ? lista.map(c => `<details class="pos-cta${c.anulada ? " anulada" : ""}"><summary><span>Cuenta ${c.numero}: ${esc(c.hora)} · ${esc(c.pago)}${c.anulada ? " · ANULADA" : ""}</span><span>${plata(c.total)}</span></summary>
+  h += lista.length ? lista.map(c => `<details class="pos-cta${c.anulada ? " anulada" : ""}"><summary><span>Cuenta ${c.numero}: ${esc(c.hora)} · ${esc(c.pago)}${c.anulada ? " · ANULADA" : ""}${
+      c.factura ? ` · <span class="fac">✓ ${esc(c.factura.nombre)}</span>` : ""}</span><span>${plata(c.total)}</span></summary>
     <div class="det">${c.lineas.map(l => `${cant(l.q)} x ${esc(l.n)}${l.c ? ` <span style="opacity:.6">[${esc(l.c)}]</span>` : ""} = ${plata(sub(l))}`).join("<br>")}
     ${c.quien ? `<br><span style="opacity:.6">Registró: ${esc(c.quien)}</span>` : ""}
-    ${c.anulada ? "" : `<br><button class="chip" data-anular="${esc(c.id)}" data-num="${c.numero}" style="margin-top:8px;text-transform:none">Anular cuenta ${c.numero}</button>`}</div></details>`).join("")
+    ${c.factura ? `<br><span class="fac">Facturada en Siigo: ${c.factura.url ? `<a href="${esc(c.factura.url)}" target="_blank" rel="noopener">${esc(c.factura.nombre)}</a>` : esc(c.factura.nombre)} · ${
+      c.factura.tipo === "electronica" ? "factura electrónica" : "documento soporte"}</span>` : ""}
+    ${c.anulada || c.factura ? "" : `<br><button class="chip" data-facturar="${esc(c.id)}" data-num="${c.numero}" style="margin-top:8px;text-transform:none">Factura solo de esta cuenta</button>
+      <button class="chip" data-anular="${esc(c.id)}" data-num="${c.numero}" style="margin-top:8px;text-transform:none">Anular cuenta ${c.numero}</button>`}</div></details>`).join("")
     : (deEste.length ? "" : `<p class="nota" style="margin:0">${d ? "No hay cuentas registradas este día." : "Cargando…"}</p>`);
   h += `</div><div class="pos-fila"><button class="ghost" data-bajar="txt">Descargar TXT</button><button class="ghost" data-bajar="pdf">Descargar PDF</button></div>
-    <p class="nota">Todo queda en Drive: EDUMERCA / EDUMERCA POS / Cuentas ${esc(verFecha)}.txt (y el PDF cuando lo descargas).</p>`;
+    <p class="nota">Todo queda en Drive: EDUMERCA / EDUMERCA POS / CUENTAS / Cuentas ${esc(verFecha)}.txt (y el PDF cuando lo descargas).
+    Las facturas creadas quedan en EDUMERCA / EDUMERCA POS / FACTURAS DE VENTA / CREADAS.</p>`;
   $("posPanel").innerHTML = h;
-  $("posPie").innerHTML = "";
+  const porFacturar = (d ? d.cuentas : []).filter(c => !c.anulada && !c.factura);
+  const tot = porFacturar.reduce((t, c) => t + (c.total || 0), 0);
+  $("posPie").innerHTML = `<button class="pos-fac" id="btnPosFacturar" ${facturando || !porFacturar.length ? "disabled" : ""}>${
+    facturando ? "CREANDO FACTURA EN SIIGO…" : "CREAR FACTURA EN SIIGO"}<small>${
+    facturando ? "No cierres la app" : porFacturar.length ? `${porFacturar.length} ${porFacturar.length === 1 ? "cuenta" : "cuentas"} por facturar · ${plata(tot)}`
+      : d && d.cuentas.length ? "Todas las cuentas de este día ya están facturadas" : "No hay cuentas por facturar"}</small></button>`;
   $("posFecha").addEventListener("change", e => { if(e.target.value){ verFecha = e.target.value; pintar(); cargarDia(verFecha); } });
 }
 
@@ -183,6 +201,60 @@ async function bajar(tipo){
     estado("✓ Descargado · también quedó en Drive (EDUMERCA / EDUMERCA POS)");
     pintar();
   }catch(e){ estado("⚠ " + e.message, true); }
+}
+
+/* ---------- Facturas en Siigo ---------- */
+function preguntar(titulo, opciones){
+  return new Promise(res => {
+    elegir(titulo, opciones.map(o => ({t: o.t, sub: o.sub, fn: () => res(o.v)})));
+    const h = $("hoja"), mirar = setInterval(() => { if(h.hidden){ clearInterval(mirar); setTimeout(() => res(null), 0); } }, 300);
+  });
+}
+async function facturar(ids){
+  if(facturando) return;
+  const fecha = verFecha, d = dias[fecha];
+  const cuentas = (d ? d.cuentas : []).filter(c => !c.anulada && !c.factura && (!ids || ids.includes(c.id)));
+  if(!cuentas.length) return estado("No hay cuentas por facturar este día.", true);
+  const sinSubir = pend.filter(x => x.fecha === fecha).length;
+  const tipo = await preguntar("¿Qué documento creo en Siigo?", [
+    {t: "Factura electrónica", sub: "Se envía a la DIAN" + (fecha !== hoy() ? " · queda con fecha de hoy (la DIAN no deja fechas pasadas)" : ""), v: "electronica"},
+    {t: "Documento soporte", sub: "No electrónico: queda en Siigo y no se envía a la DIAN", v: "soporte"}]);
+  if(!tipo) return;
+  let modo = "una";
+  if(!ids && cuentas.length > 1){
+    modo = await preguntar(`¿Cómo subo las ${cuentas.length} cuentas?`, [
+      {t: "Una por una", sub: `Una factura por cada cuenta (${cuentas.length} facturas)`, v: "una"},
+      {t: "Todas en una sola factura", sub: `Una factura con todas las cuentas · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`, v: "todas"}]);
+    if(!modo) return;
+  }
+  const nombre = tipo === "electronica" ? "factura electrónica" : "documento soporte";
+  const cuantas = modo === "todas" || cuentas.length === 1 ? `1 ${nombre}` : `${cuentas.length} ${tipo === "electronica" ? "facturas electrónicas" : "documentos soporte"}`;
+  if(!confirm(`Se va a crear en Siigo: ${cuantas}\n` +
+    (cuentas.length === 1 ? `Cuenta ${cuentas[0].numero} · ${plata(cuentas[0].total)}` : `Cuentas ${cuentas.map(c => c.numero).join(", ")} · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`) +
+    (tipo === "electronica" ? "\n\nLa factura electrónica se envía a la DIAN: después no se puede borrar, solo anular con nota crédito." : "") +
+    (sinSubir ? `\n\nOjo: ${sinSubir} ${sinSubir === 1 ? "cuenta de este día todavía no sube" : "cuentas de este día todavía no suben"} a Drive y no ${sinSubir === 1 ? "entra" : "entran"}.` : "") +
+    "\n\n¿Crear?")) return;
+  facturando = true; pintar();
+  const creadas = [], errores = [];
+  try{
+    let r, vueltas = 0;
+    do{
+      estado(`Creando ${cuantas} en Siigo…` + (creadas.length ? ` (${creadas.length} lista${creadas.length > 1 ? "s" : ""})` : ""));
+      try{ r = await postAdmin({accion: "pos_facturar", fecha, tipo, modo, ids: ids || cuentas.map(c => c.id)}); }
+      catch(e){
+        if(/desconocida/i.test(e.message)) throw new Error("El servidor todavía no tiene Crear factura en Siigo. Hay que publicarlo.");
+        throw e;
+      }
+      recibirDia(r);
+      creadas.push(...(r.creadas || [])); errores.push(...(r.errores || []));
+    }while(r.faltan > 0 && ++vueltas < 20);
+    const txt = creadas.length ? `✓ ${creadas.length === 1 ? "Creada " + creadas[0].nombre + " · " + plata(creadas[0].total) : creadas.length + " facturas creadas en Siigo"}` : "";
+    if(errores.length){
+      estado((txt ? txt + " · " : "") + `⚠ ${errores.length} con problema`, true);
+      alert((txt ? txt + "\n\n" : "") + "No se pudieron crear:\n\n" + errores.map(x => `Cuenta${x.cuentas.length > 1 ? "s" : ""} ${x.cuentas.join(", ")}: ${x.error}`).join("\n\n"));
+    }else estado(txt + " · registro en Drive (FACTURAS DE VENTA / CREADAS)");
+  }catch(e){ estado("⚠ " + e.message, true); }
+  finally{ facturando = false; pintar(); }
 }
 
 /* ---------- Pantalla ---------- */
@@ -265,6 +337,7 @@ $("posPanel").addEventListener("click", async e => {
     l.p = p; guardarCuenta(); return pintar();
   }
   if(d.bajar) return bajar(d.bajar);
+  if(d.facturar) return facturar([d.facturar]);
   if(d.anular){
     if(!confirm(`¿Anular la cuenta ${d.num}?\n\nSigue apareciendo en el archivo, marcada como ANULADA (no subir a Siigo).`)) return;
     try{ recibirDia(await postAdmin({accion: "pos_anular", fecha: verFecha, id: d.anular})); estado(`Cuenta ${d.num} anulada`); pintar(); }
@@ -275,6 +348,7 @@ $("posPanel").addEventListener("click", async e => {
 });
 $("posPie").addEventListener("click", e => {
   const t = e.target.closest("button"); if(!t) return;
+  if(t.id === "btnPosFacturar") return facturar(null);
   if(t.dataset.pago){ cuenta.pago = t.dataset.pago; guardarCuenta(); return pintar(); }
   if(t.id === "btnPosVaciar"){
     if(cuenta.lineas.length && !confirm("¿Vaciar esta cuenta? Se borran los productos escaneados.")) return;
