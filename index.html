@@ -602,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.5.25 · 17-nov-2026";
+const VERSION = "v2.5.30 · 24-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1683,10 +1683,10 @@ function pintarKpis(){
   h += bloqueComparacion("Mes a la fecha", k.mes, "vs. mismo corte del mes pasado");
   h += bloqueTendencia(k.tendencia_30d);
   h += bloqueTopVentas(k.reposicion);
-  h += bloqueUtilidad(k.utilidad);
+  h += bloqueUtilidad(k.utilidad, k);
   h += `<div class="bloque" id="bloqueHist">${htmlHistorial(k.historial)}</div>`;
   h += bloqueAlertas(k);
-  h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer");
+  h += bloqueDetalle(det, diaKpi === "hoy" ? "hoy" : "ayer", margenNecesario(k));
   h += `<p class="nota" style="text-align:center">Calculado ${esc(fechaHora(k.generado))}</p>`;
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
@@ -1749,7 +1749,16 @@ function bloqueTendencia(t){
     <p class="nota" id="tendDia" style="text-align:center;font-weight:600">Toca una barra para ver la venta de ese día</p>
     <p class="nota">Mejor día: ${fechaTxt(mejor.fecha)} con ${plata(mejor.ventas)} · domingos en azul</p></div>`;
 }
-function bloqueUtilidad(u){
+/* Margen que necesita el negocio para cubrir los costos fijos del mes, en % de la venta sin IVA
+   (la misma base del margen por categoría). Se proyecta la venta del mes al ritmo actual. */
+function margenNecesario(k){
+  const u = k.utilidad || {}, m = k.mes || {}, a = m.actual || {};
+  if(!u.costos_fijos_mes || !a.ventas_sin_iva || !a.dias_con_datos || !m.dias_mes) return null;
+  const ventaMes = a.ventas_sin_iva / a.dias_con_datos * m.dias_mes;
+  return Math.round(u.costos_fijos_mes / ventaMes * 1000) / 10;
+}
+const pctTxt = v => v.toLocaleString("es-CO", {minimumFractionDigits:1, maximumFractionDigits:1}) + "%";
+function bloqueUtilidad(u, k){
   let h = `<div class="bloque"><h3>Utilidad del mes <button class="sec chico" id="btnFijos">Costos fijos</button></h3>`;
   if(!u || u.error){
     h += `<p class="nota" style="margin:0">${esc((u && u.error) || "Sin datos todavía.")}</p>`;
@@ -1757,14 +1766,44 @@ function bloqueUtilidad(u){
     h += `<div class="grilla">${dato("Costos fijos / mes", plata(u.costos_fijos_mes))}${dato("Fijos a la fecha", plata(u.fijos_a_la_fecha))}</div>
       <p class="nota">El margen y la utilidad aparecen cuando registres facturas de compra en Siigo.</p>`;
   }else{
+    const a = ((k.mes || {}).actual) || {};
+    const actual = a.margen_pct, necesario = margenNecesario(k);
+    const cob = u.cobertura_costos_pct ?? a.cobertura_costos_pct ?? 0;
+    const est = cob < 80 ? " (estimado)" : "";
+    if(actual != null && necesario != null){
+      const alcanza = actual >= necesario, dif = Math.abs(actual - necesario);
+      const tope = Math.max(25, necesario * 1.35, actual * 1.15);
+      const color = alcanza ? "#4fd6a8" : "var(--rojo)";
+      h += `<div class="grilla">
+        ${dato("Tu margen" + est, `<span style="color:${color}">${pctTxt(actual)}</span>`, "sobre la venta sin IVA")}
+        ${dato("Margen que necesitas", pctTxt(necesario), "para cubrir los costos fijos")}
+      </div>
+      <div style="position:relative;height:14px;border-radius:7px;background:var(--verde);margin:12px 0 4px;overflow:hidden" aria-hidden="true">
+        <div style="height:100%;width:${Math.min(100, actual / tope * 100).toFixed(1)}%;background:${color};border-radius:7px"></div>
+        <div style="position:absolute;top:0;bottom:0;left:${(necesario / tope * 100).toFixed(1)}%;width:3px;background:var(--papel)"></div>
+      </div>
+      <p style="margin:6px 0 10px;font-weight:600">${alcanza
+        ? `✓ Cubres los costos fijos y te sobran ${pctTxt(dif).replace("%", "")} puntos de margen.`
+        : `Te faltan ${pctTxt(dif).replace("%", "")} puntos de margen para cubrir los costos fijos.`}</p>`;
+    }
     h += `<div class="grilla">
-      ${dato("Utilidad a la fecha", plata(u.utilidad_a_la_fecha))}
-      ${dato("Proyección del mes", plata(u.proyeccion_utilidad_mes))}
-      ${dato("Margen bruto del mes", plata(u.margen_bruto_mes))}
+      ${dato("Utilidad a la fecha" + est, plata(u.utilidad_a_la_fecha))}
+      ${dato("Proyección del mes" + est, plata(u.proyeccion_utilidad_mes))}
+      ${dato("Margen bruto del mes" + est, plata(u.margen_bruto_mes))}
       ${dato("Costos fijos / mes", plata(u.costos_fijos_mes))}
       ${dato("Venta mínima diaria", plata(u.punto_equilibrio_diario), "para cubrir fijos (con IVA)")}
       ${dato("Venta diaria actual", plata(u.venta_diaria_actual))}
-    </div>${u.nota ? `<p class="nota">⚠ ${esc(u.nota)}</p>` : ""}`;
+    </div>
+    <div style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;font-size:.85rem"><span>Costos conocidos</span><b>${Math.round(cob)}% de la venta</b></div>
+      <div style="position:relative;height:10px;border-radius:5px;background:var(--verde);margin-top:4px;overflow:hidden" aria-hidden="true">
+        <div style="height:100%;width:${Math.min(100, cob)}%;background:${cob >= 80 ? "#4fd6a8" : "#f59e0b"};border-radius:5px"></div>
+        <div style="position:absolute;top:0;bottom:0;left:80%;width:2px;background:var(--papel)"></div>
+      </div>
+      <p class="nota">${cob >= 80 ? "Con más del 80% de la venta con costo, el margen es confiable."
+        : `⚠ Este margen todavía no es seguro: solo se conoce el costo del ${Math.round(cob)}% de lo vendido (confiable desde el 80%, la rayita).
+           Aprueba las facturas pendientes y sube documentos soporte de las compras sin factura para completarlo.`}</p>
+    </div>`;
   }
   return h + "</div>";
 }
@@ -1868,15 +1907,17 @@ function bloqueAlertas(k){
   }
   return h + "</div>";
 }
-function bloqueDetalle(det, dia){
+function bloqueDetalle(det, dia, necesario){
   const cats = det.por_categoria || [], top = det.top_productos || [], horas = det.por_hora || [];
   if(!cats.length && !top.length)
     return `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Sin ventas registradas ${dia}${
       dia === "hoy" ? ". Si ya se vendió, toca ↻ para traer las ventas de hoy, o mira <b>Ayer</b>." : "."}</p></div>`;
   const maxC = Math.max(...cats.map(c => c.ventas), 1);
-  let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>` + cats.map(c =>
+  let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>${necesario != null
+    ? `<p class="nota" style="margin:0 0 6px">En rojo, las categorías con margen por debajo del ${pctTxt(necesario)} que necesitas para cubrir los costos fijos.</p>` : ""}` + cats.map(c =>
     `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
-      <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null ? ` · ${c.margen_pct}%` : ""}</b></div>
+      <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null
+        ? ` · <span style="color:${necesario != null && c.margen_pct < necesario ? "var(--rojo)" : "inherit"}">${c.margen_pct}%</span>` : ""}</b></div>
       <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
   h += horas.length ? `<div class="bloque" id="bloqueHoras">${htmlHoras(horas, dia)}</div>`
     : `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Las ventas de este día no traen la hora. Toca ↻ para recalcular.</p></div>`;
