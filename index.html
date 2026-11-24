@@ -602,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.5.30 · 24-nov-2026";
+const VERSION = "v2.5.35 · 24-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -1677,7 +1677,7 @@ function pintarKpis(){
       ${dato("Margen bruto", d.margen == null ? "—" : plata(d.margen),
              d.margen_pct == null ? "sin costos de compra aún" : d.margen_pct + "% · cubre " + d.cobertura_costos_pct + "% de la venta")}
     </div>
-    ${d.devoluciones ? `<p class="nota">Devoluciones: ${plata(d.devoluciones)}</p>` : ""}</div>`;
+    ${d.devoluciones ? `<p class="nota">Devoluciones: ${plata(d.devoluciones)}</p>` : ""}${bloqueMetaDia(k, d)}</div>`;
   h += bloqueUtilidadBruta(k);
   h += bloqueComparacion("Últimos 7 días", k.semana, "vs. 7 días anteriores");
   h += bloqueComparacion("Mes a la fecha", k.mes, "vs. mismo corte del mes pasado");
@@ -1691,6 +1691,26 @@ function pintarKpis(){
   p.innerHTML = h;
   const bf = $("btnFijos"); if(bf) bf.addEventListener("click", abrirFijos);
   activarTendencia();
+}
+/* Meta de venta del día = venta mínima diaria para cubrir los costos fijos (07 utilidad.gs) */
+function metaDiaria(k){ return ((k || {}).utilidad || {}).punto_equilibrio_diario || null; }
+function bloqueMetaDia(k, d){
+  const meta = metaDiaria(k); if(!meta) return "";
+  const v = d.ventas || 0, pct = v / meta * 100, falta = meta - v;
+  const a = ((k.mes || {}).actual) || {};
+  const tkDia = a.dias_con_datos ? a.transacciones / a.dias_con_datos : 0, tkProm = a.ticket_promedio || 0;
+  const color = pct >= 100 ? "#4fd6a8" : "#f59e0b";
+  let txt;
+  if(pct >= 100) txt = `✓ ${d.parcial ? "Ya pasaste" : "Pasó"} la meta por ${plata(v - meta)}.`;
+  else txt = `${d.parcial ? "Te faltan" : "Faltaron"} ${plata(falta)}${tkProm ? ` · unos ${num(Math.ceil(falta / tkProm))} tickets más de ${plata(tkProm)}` : ""}.`;
+  return `<div style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between;gap:8px;font-size:.9rem"><span>Meta del día</span><b>${plata(v)} de ${plata(meta)}</b></div>
+    <div style="height:12px;border-radius:6px;background:var(--verde);margin-top:4px;overflow:hidden" aria-hidden="true">
+      <div style="height:100%;width:${Math.min(100, pct).toFixed(1)}%;background:${color};border-radius:6px"></div></div>
+    <p style="margin:6px 0 0;font-weight:600">${txt}</p>
+    ${tkDia && tkProm ? `<p class="nota">Para llegar a la meta un día normal: <b>${num(Math.ceil(meta / tkProm))} tickets</b> con el ticket promedio del mes (${plata(tkProm)}),
+      o un <b>ticket promedio de ${plata(Math.round(meta / tkDia / 100) * 100)}</b> con los ${num(Math.round(tkDia))} tickets diarios del mes.</p>` : ""}
+    <p class="nota">La meta es la venta mínima diaria para cubrir los costos fijos (con IVA).</p></div>`;
 }
 /* Utilidad bruta = ventas sin IVA − costo de lo vendido (antes de gastos fijos) */
 function bloqueUtilidadBruta(k){
@@ -1742,12 +1762,16 @@ function bloqueTendencia(t){
       <rect data-i="${i}" x="${(i*bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" fill="transparent" style="cursor:pointer"></rect>`;
   }).join("");
   tendencia30 = t;
+  const meta = metaDiaria(kpis), sobre = meta ? t.filter(x => (x.ventas || 0) >= meta).length : 0;
+  const yMeta = meta && meta <= max ? (H - meta / max * (H - 4)).toFixed(1) : null;
+  const lineaMeta = yMeta ? `<line x1="0" x2="${W}" y1="${yMeta}" y2="${yMeta}" stroke="#4fd6a8" stroke-width="1.5" stroke-dasharray="4 3" pointer-events="none"></line>` : "";
   const prom = t.reduce((s, x) => s + (x.ventas || 0), 0) / t.length;
   const mejor = t.reduce((a, x) => (x.ventas || 0) > (a.ventas || 0) ? x : a, t[0]);
   return `<div class="bloque"><h3>Ventas 30 días <small>promedio ${plata(prom)}/día</small></h3>
-    <svg id="svgTend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:90px">${barras}</svg>
+    <svg id="svgTend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:90px">${barras}${lineaMeta}</svg>
     <p class="nota" id="tendDia" style="text-align:center;font-weight:600">Toca una barra para ver la venta de ese día</p>
-    <p class="nota">Mejor día: ${fechaTxt(mejor.fecha)} con ${plata(mejor.ventas)} · domingos en azul</p></div>`;
+    <p class="nota">Mejor día: ${fechaTxt(mejor.fecha)} con ${plata(mejor.ventas)} · domingos en azul</p>
+    ${meta ? `<p class="nota">Línea verde: meta de ${plata(meta)} al día${yMeta ? "" : " (más alta que todos los días)"}. <b>${sobre} de ${t.length} días</b> la pasaron.</p>` : ""}</div>`;
 }
 /* Margen que necesita el negocio para cubrir los costos fijos del mes, en % de la venta sin IVA
    (la misma base del margen por categoría). Se proyecta la venta del mes al ritmo actual. */
@@ -1936,10 +1960,10 @@ function bloqueDetalle(det, dia, necesario){
       dia === "hoy" ? ". Si ya se vendió, toca ↻ para traer las ventas de hoy, o mira <b>Ayer</b>." : "."}</p></div>`;
   const maxC = Math.max(...cats.map(c => c.ventas), 1);
   let h = `<div class="bloque"><h3>Por categoría <small>${dia}</small></h3>${necesario != null
-    ? `<p class="nota" style="margin:0 0 6px">En rojo, las categorías con margen por debajo del ${pctTxt(necesario)} que necesitas para cubrir los costos fijos.</p>` : ""}` + cats.map(c =>
+    ? `<p class="nota" style="margin:0 0 6px">"Deja" es la ganancia de lo vendido que tiene costo registrado (sin IVA). En rojo, el margen por debajo del ${pctTxt(necesario)} que necesitas en promedio.</p>` : ""}` + cats.map(c =>
     `<div class="fila-dato" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px">
-      <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}${c.margen_pct != null
-        ? ` · <span style="color:${necesario != null && c.margen_pct < necesario ? "var(--rojo)" : "inherit"}">${c.margen_pct}%</span>` : ""}</b></div>
+      <span>${esc(c.categoria)}</span><b>${plata(c.ventas)}</b></div>
+      <small style="opacity:.85">${c.margen != null ? `deja ${plata(c.margen)} · margen <span style="font-weight:700;color:${necesario != null && c.margen_pct < necesario ? "var(--rojo)" : "inherit"}">${c.margen_pct}%</span>` : "sin costo registrado"}</small>
       <div class="barra-h" style="width:${Math.max(2, c.ventas / maxC * 100)}%"></div></div>`).join("") + `</div>`;
   h += horas.length ? `<div class="bloque" id="bloqueHoras">${htmlHoras(horas, dia)}</div>`
     : `<div class="bloque"><h3>Ventas por hora <small>${dia}</small></h3><p class="nota" style="margin:0">Las ventas de este día no traen la hora. Toca ↻ para recalcular.</p></div>`;
@@ -1986,6 +2010,13 @@ function htmlHoras(horas, dia){
 
 /* Historial: cómo han ido las semanas y los meses (sale del registro diario en Drive) */
 let histVista = "meses";
+function metaHist(x){
+  const meta = metaDiaria(kpis); if(!meta || !x.venta_diaria_prom) return "";
+  const d = (x.venta_diaria_prom / meta - 1) * 100;
+  return `<small style="display:block;font-weight:600;color:${d >= 0 ? "#4fd6a8" : "#f59e0b"}">${d >= 0
+    ? `✓ sobre la meta: ${plata(x.venta_diaria_prom)}/día`
+    : `${Math.round(-d)}% bajo la meta: ${plata(x.venta_diaria_prom)}/día`}</small>`;
+}
 function htmlHistorial(hst){
   const filas = ((hst || {})[histVista] || []);
   const etiqueta = x => histVista === "meses"
@@ -2000,8 +2031,8 @@ function htmlHistorial(hst){
       <div style="display:flex;justify-content:space-between;gap:8px"><span>${etiqueta(x)}${x.parcial ? ' <small style="opacity:.6">(en curso)</small>' : ""}</span>
         <b>${plata(x.ventas)}</b></div>
       <div class="barra-h" style="width:${Math.max(2, x.ventas / maxV * 100)}%"></div>
-      <small style="opacity:.75">utilidad bruta ${x.margen ? plata(x.margen) + (x.margen_pct != null ? " (" + x.margen_pct + "%)" : "") : "—"} · ${num(x.transacciones)} tickets${x.ticket_promedio ? " · prom. " + plata(x.ticket_promedio) : ""}</small></div>`).join("");
-  return h + `<p class="nota">Guardado día a día en EDUMERCA / Kpis / historico_kpis.</p>`;
+      ${metaHist(x)}<small style="opacity:.75">utilidad bruta ${x.margen ? plata(x.margen) + (x.margen_pct != null ? " (" + x.margen_pct + "%)" : "") : "—"} · ${num(x.transacciones)} tickets${x.ticket_promedio ? " · prom. " + plata(x.ticket_promedio) : ""}</small></div>`).join("");
+  return h + `<p class="nota">${metaDiaria(kpis) ? `La meta es vender en promedio ${plata(metaDiaria(kpis))} al día (lo que hoy se necesita para cubrir los costos fijos). ` : ""}Guardado día a día en EDUMERCA / Kpis / historico_kpis.</p>`;
 }
 
 /* Más vendidos: semana / mes / 3 meses, top 5 / 10 / 20, por unidades o por plata */
