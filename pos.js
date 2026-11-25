@@ -252,22 +252,14 @@ async function facturar(ids){
       {t: "Una por una", sub: `Una factura por cada cuenta (${cuentas.length} facturas)`, v: "una"},
       {t: "Todas en una sola factura", sub: `Una factura con todas las cuentas · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`, v: "todas"}]);
     if(!modo) return;
-    // Todas en una, pero hay de Efectivo y de Transferencia: que escoja cómo
-    const pagos = {};
-    cuentas.forEach(c => pagos[c.pago] = (pagos[c.pago] || 0) + c.total);
-    if(modo === "todas" && Object.keys(pagos).length > 1){
-      const det = Object.keys(pagos).map(p => `${p} ${plata(pagos[p])}`).join(" · ");
-      modo = await preguntar("Hay cuentas en efectivo y en transferencia", [
-        {t: "Una sola factura con los dos pagos", sub: det, v: "todas"},
-        {t: "Una factura por cada forma de pago", sub: Object.keys(pagos).map(p => `1 de ${p}: ${plata(pagos[p])}`).join(" · "), v: "porpago"}]);
-      if(!modo) return;
-    }
   }
   const nombre = tipo === "electronica" ? "factura electrónica" : "documento soporte";
   const nFact = modo === "todas" || cuentas.length === 1 ? 1 : modo === "porpago" ? new Set(cuentas.map(c => c.pago)).size : cuentas.length;
   const cuantas = nFact === 1 ? `1 ${nombre}` : `${nFact} ${tipo === "electronica" ? "facturas electrónicas" : "documentos soporte"}`;
   if(!confirm(`Se va a crear en Siigo: ${cuantas}\n` +
     (cuentas.length === 1 ? `Cuenta ${cuentas[0].numero} · ${plata(cuentas[0].total)}` : `Cuentas ${cuentas.map(c => c.numero).join(", ")} · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`) +
+    (cuentas.some(c => c.pago !== "Efectivo") ? `\n\nEn Siigo todo queda como EFECTIVO. Lo pagado por transferencia (${
+      plata(cuentas.filter(c => c.pago !== "Efectivo").reduce((t, c) => t + c.total, 0))}) queda anotado en Drive.` : "") +
     (tipo === "electronica" ? "\n\nLa factura electrónica se envía a la DIAN: después no se puede borrar, solo anular con nota crédito." +
       (fecha !== hoy() ? " Queda con fecha de hoy (la DIAN no deja fechas pasadas)." : "") : "") +
     (sinSubir ? `\n\nOjo: ${sinSubir} ${sinSubir === 1 ? "cuenta de este día todavía no sube" : "cuentas de este día todavía no suben"} a Drive y no ${sinSubir === 1 ? "entra" : "entran"}.` : "") +
