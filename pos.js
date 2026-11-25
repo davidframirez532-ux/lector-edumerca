@@ -151,7 +151,7 @@ function pintarCuentas(){
   const porFacturar = (d ? d.cuentas : []).filter(c => !c.anulada && !c.factura);
   const tot = porFacturar.reduce((t, c) => t + (c.total || 0), 0);
   $("posPie").innerHTML = `<div class="seg">${[["soporte", "Documento soporte"], ["electronica", "Factura electrónica"]].map(([v, t]) =>
-      `<button data-tipofac="${v}" aria-pressed="${tipoFac === v}">${t}</button>`).join("")}</div>
+      `<button data-tipofac="${v}" aria-pressed="${tipoFac === v}"${v === "electronica" ? ' style="opacity:.45"' : ""}>${t}${v === "electronica" ? " <small>(no disponible)</small>" : ""}</button>`).join("")}</div>
     <button class="pos-fac" id="btnPosFacturar" ${facturando || !porFacturar.length ? "disabled" : ""}>${
     facturando ? "CREANDO FACTURA EN SIIGO…" : "CREAR FACTURA EN SIIGO"}<small>${
     facturando ? "No cierres la app" : porFacturar.length ? `${porFacturar.length} ${porFacturar.length === 1 ? "cuenta" : "cuentas"} por facturar · ${plata(tot)}`
@@ -252,9 +252,20 @@ async function facturar(ids){
       {t: "Una por una", sub: `Una factura por cada cuenta (${cuentas.length} facturas)`, v: "una"},
       {t: "Todas en una sola factura", sub: `Una factura con todas las cuentas · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`, v: "todas"}]);
     if(!modo) return;
+    // Todas en una, pero hay de Efectivo y de Transferencia: que escoja cómo
+    const pagos = {};
+    cuentas.forEach(c => pagos[c.pago] = (pagos[c.pago] || 0) + c.total);
+    if(modo === "todas" && Object.keys(pagos).length > 1){
+      const det = Object.keys(pagos).map(p => `${p} ${plata(pagos[p])}`).join(" · ");
+      modo = await preguntar("Hay cuentas en efectivo y en transferencia", [
+        {t: "Una sola factura con los dos pagos", sub: det, v: "todas"},
+        {t: "Una factura por cada forma de pago", sub: Object.keys(pagos).map(p => `1 de ${p}: ${plata(pagos[p])}`).join(" · "), v: "porpago"}]);
+      if(!modo) return;
+    }
   }
   const nombre = tipo === "electronica" ? "factura electrónica" : "documento soporte";
-  const cuantas = modo === "todas" || cuentas.length === 1 ? `1 ${nombre}` : `${cuentas.length} ${tipo === "electronica" ? "facturas electrónicas" : "documentos soporte"}`;
+  const nFact = modo === "todas" || cuentas.length === 1 ? 1 : modo === "porpago" ? new Set(cuentas.map(c => c.pago)).size : cuentas.length;
+  const cuantas = nFact === 1 ? `1 ${nombre}` : `${nFact} ${tipo === "electronica" ? "facturas electrónicas" : "documentos soporte"}`;
   if(!confirm(`Se va a crear en Siigo: ${cuantas}\n` +
     (cuentas.length === 1 ? `Cuenta ${cuentas[0].numero} · ${plata(cuentas[0].total)}` : `Cuentas ${cuentas.map(c => c.numero).join(", ")} · ${plata(cuentas.reduce((t, c) => t + c.total, 0))}`) +
     (tipo === "electronica" ? "\n\nLa factura electrónica se envía a la DIAN: después no se puede borrar, solo anular con nota crédito." +
@@ -383,6 +394,11 @@ $("posPanel").addEventListener("click", async e => {
 $("posPie").addEventListener("click", e => {
   const t = e.target.closest("button"); if(!t) return;
   if(t.id === "btnPosFacturar") return facturar(null);
+  if(t.dataset.tipofac === "electronica"){
+    // En Siigo no hay un tipo de factura de venta electrónica activo (posDiagnosticoFacturas, 17 pos.gs)
+    alert("La factura electrónica no está disponible.\n\nEn Siigo no hay un tipo de factura de venta electrónica activo. Por ahora usa Documento soporte.");
+    return;
+  }
   if(t.dataset.tipofac){ tipoFac = t.dataset.tipofac; return pintar(); }
   if(t.dataset.pago){ cuenta.pago = t.dataset.pago; guardarCuenta(); return pintar(); }
   if(t.id === "btnPosVaciar"){
