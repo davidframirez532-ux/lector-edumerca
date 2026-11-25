@@ -2011,7 +2011,7 @@ function htmlHoras(horas, dia){
 /* Historial: cómo han ido las semanas y los meses (sale del registro diario en Drive) */
 let histVista = "meses";
 const MESES_CORTO = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-let histMes = null, histAnio = null;   // filtro de semanas (null = mes y año actuales)
+let histMes = null, histAnio = null, histAnioMes = null;   // filtro de semanas (null = mes y año actuales)
 function metaHist(x){
   const meta = metaDiaria(kpis); if(!meta || !x.venta_diaria_prom) return "";
   const d = (x.venta_diaria_prom / meta - 1) * 100;
@@ -2046,6 +2046,15 @@ function htmlHistorial(hst){
     h += `<div class="seg" style="background:var(--verde);margin-bottom:10px">${meses.map(m =>
       `<button data-histf="mes" data-v="${m}" aria-pressed="${m === mes}">${NOMBRES[m - 1]}</button>`).join("")}</div>`;
     filas = filas.filter(x => mesDe(x) === sel);
+  }
+  if(histVista === "meses" && filas.length){
+    // Meses: botones de año (solo años con datos), por defecto el año actual o el más reciente
+    const anios = [...new Set(filas.map(x => Number(x.periodo.slice(0, 4))))].sort((p, q) => q - p);
+    const pedido = histAnioMes ?? new Date().getFullYear();
+    const anio = anios.includes(pedido) ? pedido : anios[0];
+    h += `<div class="seg" style="background:var(--verde);margin-bottom:10px">${anios.slice().reverse().map(y =>
+      `<button data-histf="aniomes" data-v="${y}" aria-pressed="${y === anio}">${y}</button>`).join("")}</div>`;
+    filas = filas.filter(x => Number(x.periodo.slice(0, 4)) === anio);
   }
   if(!filas.length) return h + `<p class="nota" style="margin:0">Todavía no hay historial.</p>`;
   const maxV = Math.max(...filas.map(x => x.ventas), 1);
@@ -3450,6 +3459,7 @@ $("kpiPanel").addEventListener("click", e => {
   const b = e.target.closest("button[data-histf]"); if(!b || !kpis) return;
   if(b.dataset.histf === "mes") histMes = Number(b.dataset.v);
   if(b.dataset.histf === "anio"){ histAnio = Number(b.dataset.v); histMes = null; }
+  if(b.dataset.histf === "aniomes") histAnioMes = Number(b.dataset.v);
   $("bloqueHist").innerHTML = htmlHistorial(kpis.historial);
 });
 $("kpiPanel").addEventListener("change", e => {
