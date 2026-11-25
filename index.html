@@ -602,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.5.80 · 25-nov-2026";
+const VERSION = "v2.5.85 · 25-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -2028,11 +2028,9 @@ function htmlHistorial(hst){
     <button data-hist="semanas" aria-pressed="${histVista === "semanas"}">Semanas</button>
     <button data-hist="meses" aria-pressed="${histVista === "meses"}">Meses</button></div>`;
   if(histVista === "semanas" && filas.length){
-    // Solo se pueden elegir meses que tengan semanas guardadas (una semana cuenta en los meses que toca)
-    const clave = (y, m) => y * 100 + m;
-    const disp = new Set();
-    filas.forEach(x => [x.periodo, x.hasta || sumarDiasISO(x.periodo, 6)].forEach(f =>
-      disp.add(clave(Number(f.slice(0, 4)), Number(f.slice(5, 7))))));
+    // Solo se pueden elegir meses que tengan semanas guardadas; cada semana cuenta en el mes en que empieza (su lunes)
+    const clave = (y, m) => y * 100 + m, mesDe = x => clave(Number(x.periodo.slice(0, 4)), Number(x.periodo.slice(5, 7)));
+    const disp = new Set(filas.map(mesDe));
     const lista = [...disp].sort((p, q) => q - p);
     const hoy = new Date();
     let sel = clave(histAnio ?? hoy.getFullYear(), histMes ?? hoy.getMonth() + 1);
@@ -2042,13 +2040,12 @@ function htmlHistorial(hst){
     const anio = Math.floor(sel / 100), mes = sel % 100;
     const anios = [...new Set(lista.map(c => Math.floor(c / 100)))];
     const meses = lista.filter(c => Math.floor(c / 100) === anio).map(c => c % 100).sort((p, q) => p - q);
-    h += `<div style="display:flex;gap:8px;margin-bottom:8px">
-      <select data-histf="mes" aria-label="Mes" style="flex:1">${meses.map(m =>
-        `<option value="${m}"${m === mes ? " selected" : ""}>${MESES_CORTO[m - 1][0].toUpperCase() + MESES_CORTO[m - 1].slice(1)}</option>`).join("")}</select>
-      <select data-histf="anio" aria-label="Año" style="flex:1">${anios.map(y =>
-        `<option value="${y}"${y === anio ? " selected" : ""}>${y}</option>`).join("")}</select></div>`;
-    const ini = `${anio}-${String(mes).padStart(2, "0")}-01`, fin = `${anio}-${String(mes).padStart(2, "0")}-31`;
-    filas = filas.filter(x => x.periodo <= fin && (x.hasta || sumarDiasISO(x.periodo, 6)) >= ini);
+    const NOMBRES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    if(anios.length > 1) h += `<div class="seg" style="background:var(--verde);margin-bottom:6px">${anios.map(y =>
+      `<button data-histf="anio" data-v="${y}" aria-pressed="${y === anio}">${y}</button>`).join("")}</div>`;
+    h += `<div class="seg" style="background:var(--verde);margin-bottom:10px">${meses.map(m =>
+      `<button data-histf="mes" data-v="${m}" aria-pressed="${m === mes}">${NOMBRES[m - 1]}</button>`).join("")}</div>`;
+    filas = filas.filter(x => mesDe(x) === sel);
   }
   if(!filas.length) return h + `<p class="nota" style="margin:0">Todavía no hay historial.</p>`;
   const maxV = Math.max(...filas.map(x => x.ventas), 1);
@@ -3449,10 +3446,10 @@ $("kpiPanel").addEventListener("click", e => {
   histVista = b.dataset.hist;
   $("bloqueHist").innerHTML = htmlHistorial(kpis.historial);
 });
-$("kpiPanel").addEventListener("change", e => {
-  const sel = e.target.closest("select[data-histf]"); if(!sel || !kpis) return;
-  if(sel.dataset.histf === "mes") histMes = Number(sel.value);
-  if(sel.dataset.histf === "anio"){ histAnio = Number(sel.value); histMes = null; }
+$("kpiPanel").addEventListener("click", e => {
+  const b = e.target.closest("button[data-histf]"); if(!b || !kpis) return;
+  if(b.dataset.histf === "mes") histMes = Number(b.dataset.v);
+  if(b.dataset.histf === "anio"){ histAnio = Number(b.dataset.v); histMes = null; }
   $("bloqueHist").innerHTML = htmlHistorial(kpis.historial);
 });
 $("kpiPanel").addEventListener("change", e => {
