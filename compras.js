@@ -1155,8 +1155,9 @@ function pintarDetalle(){
   $("cpDetPanel").innerHTML = h;
   const ap = $("btnCpAprobar");
   const guardando = bgPendientesDe(f.id);
-  ap.disabled = !f.lista || guardando > 0; ap.style.opacity = f.lista && !guardando ? "1" : ".45";
-  ap.textContent = guardando ? `⏳ Guardando ${guardando} cambio${guardando > 1 ? "s" : ""}… `
+  const subiendo = subiendoFC === f.id;   // ya se tocó Aprobar: no se deja tocar otra vez hasta que responda
+  ap.disabled = !f.lista || guardando > 0 || subiendo; ap.style.opacity = f.lista && !guardando && !subiendo ? "1" : ".45";
+  ap.textContent = subiendo ? "⏳ Subiendo a Siigo… espera" : guardando ? `⏳ Guardando ${guardando} cambio${guardando > 1 ? "s" : ""}… `
     : !f.lista ? "Resuelve los pendientes" : nota ? "Ya la registré en Siigo" : `Aprobar y subir ${plata(t.total)}`;
 }
 function reemplazar(nueva){
@@ -1933,8 +1934,21 @@ $("cpDetPanel").addEventListener("click", async e => {
     sub: `${plata(l.ic_unidad)} por unidad, como trae la factura` + (l.ic_ficha ? ` (la ficha tiene ${plata(l.ic_ficha)})` : ""), fn: () => setTimeout(() => ponerIcVenta(l), 60)});
   elegir(l.desc, ops);
 });
+// Factura que se está subiendo: mientras tanto Aprobar queda bloqueado (un segundo toque subía la factura dos veces)
+let subiendoFC = null;
 $("btnCpAprobar").addEventListener("click", async () => {
-  const f = sel; if(!f || !f.lista) return;
+  const f = sel; if(!f || !f.lista || subiendoFC) return;
+  subiendoFC = f.id;
+  $("btnCpAprobar").disabled = true;
+  pintarDetalle();
+  try{ await aprobarFactura(f); }
+  finally{
+    subiendoFC = null;
+    const sigue = (cola.facturas || []).concat(cola.notas || []).some(x => x.id === f.id);
+    if(sigue && sel && sel.id === f.id) pintarDetalle();
+  }
+});
+async function aprobarFactura(f){
   if(f.es_nota){
     const r = await pedirForm(`¿Ya registraste en Siigo la nota ${f.numero}?`, [{id: "doc", label: "Número del documento en Siigo (opcional, ej. el de la devolución)",
       valor: "", inputmode: "text"}], "Sí, ya la registré");
@@ -2009,7 +2023,7 @@ $("btnCpAprobar").addEventListener("click", async () => {
     (d.cuadra ? "" : "\n\nRevisa la compra en Siigo: algo no cuadra con lo esperado."));
   if(ic){ cargarAjustes(true); abrirAjustes(); return; }
   abrir("cpCola");
-});
+}
 $("btnCpIgnorar").addEventListener("click", async () => {
   const f = sel; if(!f) return;
   let motivo = await preguntar(`${f.proveedor} · ${f.numero}`, [
