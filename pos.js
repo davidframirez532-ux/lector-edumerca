@@ -217,8 +217,10 @@ function stockHtml(f){
   if(st.ok === null || st.ok === undefined) return `<br><span style="opacity:.7">Stock: sin productos con control de inventario para revisar</span>`;
   const det = (st.productos || []).filter(p => p.antes !== null && p.antes !== undefined)
     .map(p => `${p.bajo ? "✓" : "✗"} ${esc(p.nombre || p.codigo)}: ${cant(p.antes)} → ${p.ahora === null || p.ahora === undefined ? "?" : cant(p.ahora)}`).join("<br>");
-  return st.ok ? `<br><span class="fac">✓ El stock bajó en Siigo</span><br><span style="opacity:.75">${det}</span>`
+  const g = f.guardado;
+  return st.ok ? `<br><span class="fac">✓ El stock bajó en Siigo${g && g.ok ? " (la app la guardó sola en Siigo)" : ""}</span><br><span style="opacity:.75">${det}</span>`
     : `<br><span style="color:#ff9a86;font-weight:600">⚠ El stock NO bajó en Siigo.</span> Ábrela en Siigo → Editar → Guardar y toca "Revisar stock otra vez".
+      ${g && !g.ok ? `<br><span style="opacity:.75">La app intentó guardarla sola y Siigo dijo: ${esc(g.error)}</span>` : ""}
       <br><span style="opacity:.75">${det}</span>`;
 }
 function stockMal(f){ return f && f.stock && f.stock.ok === false; }
@@ -227,7 +229,7 @@ async function revisarStock(id){
   try{
     const r = await postAdmin({accion: "pos_stock", fecha: verFecha, id});
     recibirDia(r);
-    estado(r.stock && r.stock.ok ? `✓ ${r.factura}: el stock ya bajó en Siigo` : `⚠ ${r.factura}: el stock todavía no baja. Guárdala en Siigo (Editar → Guardar).`, !(r.stock && r.stock.ok));
+    estado(r.stock && r.stock.ok ? `✓ ${r.factura}: el stock ya bajó en Siigo${r.guardado && r.guardado.ok ? " (la app la guardó sola)" : ""}` : `⚠ ${r.factura}: el stock todavía no baja. Guárdala en Siigo (Editar → Guardar).`, !(r.stock && r.stock.ok));
   }catch(e){ estado("⚠ " + (/desconocida/i.test(e.message) ? "El servidor todavía no tiene Revisar stock." : e.message), true); }
   pintar();
 }
@@ -279,7 +281,7 @@ async function facturar(ids){
       malas.map(c => c.nombre + ":\n" + (c.stock.productos || []).filter(p => p.antes !== null && p.antes !== undefined)
         .map(p => `  ${p.nombre || p.codigo}: tenía ${cant(p.antes)}, vendió ${cant(p.vendido)}, quedó ${p.ahora === null || p.ahora === undefined ? "?" : cant(p.ahora)}`).join("\n")).join("\n\n") +
       "\n\nÁbrela en Siigo → Editar → Guardar y después toca \"Revisar stock otra vez\" en la cuenta.");
-    else if(creadas.some(c => c.stock && c.stock.ok)) estado(txt + " · ✓ el stock bajó en Siigo");
+    else if(creadas.some(c => c.stock && c.stock.ok)) estado(txt + " · ✓ el stock bajó en Siigo" + (creadas.some(c => c.guardado && c.guardado.ok) ? " (guardada sola en Siigo)" : ""));
     if(errores.length){
       estado((txt ? txt + " · " : "") + `⚠ ${errores.length} con problema`, true);
       alert((txt ? txt + "\n\n" : "") + "No se pudieron crear:\n\n" + errores.map(x => `Cuenta${x.cuentas.length > 1 ? "s" : ""} ${x.cuentas.join(", ")}: ${x.error}`).join("\n\n"));
