@@ -881,14 +881,14 @@ async function revisarPorGuardar(){
   }catch(e){ console.warn(e); }
   finally{ revisandoGuardar = false; pintarPorGuardar(false); }
 }
-/* ✏️ Editar en Siigo: Siigo no da por la API el número de su página de cada compra, así que se abre Siigo y se copia el
-   nombre de la compra (FC-1-127) para pegarlo en la lupa. Al volver a la app se revisa sola si ya sumó el stock; si quedó,
+/* ✏️ Editar en Siigo: Siigo no da por la API el número de su página de cada compra, así que se abre la lista de compras
+   de Siigo y se copia el nombre de la compra (FC-1-127) para buscarla. Al volver a la app se revisa sola si ya sumó el stock; si quedó,
    se cierra la ventana de Siigo (solo funciona donde el navegador lo deja, casi nunca en el celular). */
 let siigoAbierta = "", ventanaSiigo = null;
 function editarEnSiigo(doc){
   siigoAbierta = doc;
   try{ navigator.clipboard.writeText(doc).catch(() => {}); }catch(e){}
-  ventanaSiigo = window.open("https://siigonube.siigo.com/", "edumerca_siigo");
+  ventanaSiigo = window.open("https://siigonube.siigo.com/#/reports/3000/5451?TabID=1379&pTabID=1379", "edumerca_siigo");
   pintarPorGuardar(false);
 }
 let volviendoSiigo = false;
@@ -933,8 +933,8 @@ function pintarPorGuardar(cargando){
       `<button class="ppal chico" data-cp-siigo="${esc(c.doc)}" style="display:block;margin:8px 0 4px;width:100%;box-sizing:border-box;white-space:normal">` +
       `${siigoAbierta === c.doc ? "↻ Volver a abrir Siigo" : "✏️ Editar en Siigo"} (${esc(c.doc)})</button>` +
       `</div>`).join("") +
-    `<p class="nota" style="margin:6px 0 0">El botón abre Siigo y copia el número de la compra: pégalo en la 🔍 lupa de Siigo,
-      dale <b>Editar</b> → <b>Guardar</b> y vuelve a la app. Al volver la app revisa sola.</p>` +
+    `<p class="nota" style="margin:6px 0 0">El botón abre la lista de compras de Siigo y copia el número de la compra (si hay
+      casilla de buscar, pégalo ahí). Ábrela, dale <b>Editar</b> → <b>Guardar</b> y vuelve a la app: al volver revisa sola.</p>` +
     boton("btnCpYaGuarde", "Ya las guardé, revisar") + `</details>`;
   htmlPorGuardar = htmlIc + htmlStock;
   const vieja = $("cpPorGuardar"); if(vieja) vieja.remove();
