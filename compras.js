@@ -881,6 +881,31 @@ async function revisarPorGuardar(){
   }catch(e){ console.warn(e); }
   finally{ revisandoGuardar = false; pintarPorGuardar(false); }
 }
+/* ✏️ Editar en Siigo: Siigo no da por la API el número de su página de cada compra, así que se abre Siigo y se copia el
+   nombre de la compra (FC-1-127) para pegarlo en la lupa. Al volver a la app se revisa sola si ya sumó el stock; si quedó,
+   se cierra la ventana de Siigo (solo funciona donde el navegador lo deja, casi nunca en el celular). */
+let siigoAbierta = "", ventanaSiigo = null;
+function editarEnSiigo(doc){
+  siigoAbierta = doc;
+  try{ navigator.clipboard.writeText(doc).catch(() => {}); }catch(e){}
+  ventanaSiigo = window.open("https://siigonube.siigo.com/", "edumerca_siigo");
+  pintarPorGuardar(false);
+}
+let volviendoSiigo = false;
+async function volvioDeSiigo(){
+  const doc = siigoAbierta; if(!doc || volviendoSiigo) return;
+  volviendoSiigo = true;
+  try{ await revisarPorGuardar(); }finally{ volviendoSiigo = false; }
+  const sigue = ((porGuardar && porGuardar.pendientes) || []).some(c => c.doc === doc);
+  if(sigue) return;
+  siigoAbierta = "";
+  try{ if(ventanaSiigo && !ventanaSiigo.closed) ventanaSiigo.close(); }catch(e){}
+  ventanaSiigo = null;
+  pintarPorGuardar(false);
+  alert(`✅ ${doc} ya sumó el stock en Siigo.` + (((porGuardar && porGuardar.pendientes) || []).length ? "" : "\nNo quedan compras por guardar."));
+}
+document.addEventListener("visibilitychange", () => { if(!document.hidden && siigoAbierta) setTimeout(volvioDeSiigo, 800); });
+window.addEventListener("focus", () => { if(siigoAbierta) setTimeout(volvioDeSiigo, 800); });
 let htmlPorGuardar = "";
 function pintarPorGuardar(cargando){
   const l = (porGuardar && porGuardar.pendientes) || [];
@@ -905,7 +930,11 @@ function pintarPorGuardar(cargando){
         (p.esperado !== undefined && p.esperado !== null
           ? `debería tener <b>${num(p.esperado)}</b> (antes ${st(p.antes)} + compra ${num(p.suma)}${p.vendido ? " − vendido " + num(p.vendido) : ""}) · tiene <b>${st(p.ahora)}</b>`
           : `antes ${st(p.antes)} · ahora ${st(p.ahora)} · debe sumar +${num(p.suma)}`) + `</small>`).join("") +
+      `<button class="ppal chico" data-cp-siigo="${esc(c.doc)}" style="display:block;margin:8px 0 4px;width:100%;box-sizing:border-box;white-space:normal">` +
+      `${siigoAbierta === c.doc ? "↻ Volver a abrir Siigo" : "✏️ Editar en Siigo"} (${esc(c.doc)})</button>` +
       `</div>`).join("") +
+    `<p class="nota" style="margin:6px 0 0">El botón abre Siigo y copia el número de la compra: pégalo en la 🔍 lupa de Siigo,
+      dale <b>Editar</b> → <b>Guardar</b> y vuelve a la app. Al volver la app revisa sola.</p>` +
     boton("btnCpYaGuarde", "Ya las guardé, revisar") + `</details>`;
   htmlPorGuardar = htmlIc + htmlStock;
   const vieja = $("cpPorGuardar"); if(vieja) vieja.remove();
@@ -987,6 +1016,8 @@ function pintarCola(){
 }
 $("cpItems").addEventListener("click", e => {
   if(e.target.closest("#btnCpYaGuarde")){ revisarPorGuardar(); return; }
+  const bs = e.target.closest("[data-cp-siigo]");
+  if(bs){ editarEnSiigo(bs.dataset.cpSiigo); return; }
   if(e.target.closest("#btnCpIrAjustes")){ abrirAjustes(); return; }
   const b = e.target.closest(".item"); if(!b || !cola) return;
   sel = cola.facturas.find(f => f.id === b.dataset.id);
