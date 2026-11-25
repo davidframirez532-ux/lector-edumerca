@@ -382,7 +382,7 @@ function resumenPdf(d){
   const r = d.resultado || {};
   const sec = (titulo, l) => l && l.length ? `\n\n${titulo} (${l.length}):\n` + l.map(x => "• " + x).join("\n") : "";
   return ((r.asociadas || []).length ? `✅ ${r.asociadas.length} línea(s) asociadas por el EAN del PDF (temporales).\n` +
-      `Falta confirmar el FACTOR en cada una: tócala → "Confirmar el factor".` : "No se asoció ninguna línea nueva.") +
+      `Las que cuadran en costo e IVA con Siigo quedan con factor 1 solas; en las demás confirma el FACTOR: tócala → "Confirmar el factor".` : "No se asoció ninguna línea nueva.") +
     sec("Asociadas", r.asociadas) +
     sec("EAN que NO está en Siigo (producto nuevo: créalo con ese código de barras)", r.no_en_siigo) +
     sec("Claude no está seguro de cuál es (asócialas a mano)", r.dudosas) +
@@ -395,7 +395,7 @@ function notificar(op, d, err){
   if(err) texto = "No se guardó · " + op.texto + " · " + err.message;
   else if(op.tipo === "pdf"){
     const n = ((d.resultado || {}).asociadas || []).length;
-    texto = `EAN del PDF: ${n} línea${n === 1 ? "" : "s"} asociada${n === 1 ? "" : "s"}` + (n ? " (falta confirmar el factor)" : "");
+    texto = `EAN del PDF: ${n} línea${n === 1 ? "" : "s"} asociada${n === 1 ? "" : "s"}` + (n ? " (revisa las que piden factor)" : "");
     detalle = resumenPdf(d);
   }else texto = (op.tipo === "mezcla" ? "Reparto guardado · " : "Asociada · ") + op.texto;
   // Lo que salió bien sin nada que leer no se queda en la pastilla: muestra "✓ Cambios guardados" un momento
@@ -1070,6 +1070,7 @@ function lineaTxt(l){
     ? `🧾 Gasto · ${esc(l.nombre || l.cuenta)}` : `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "gasto sin cuenta")}</span>`;
   if(l.precio === undefined) return bon + `<span style="color:#ff9a86">⚠ ${esc(l.motivo || "sin asociar")}</span> · toca para resolver`;
   return bon + `📦 ${esc(l.nombre)}${l.factor && l.factor !== 1 ? ` · ${num(l.cant)} ${l.factor < 1 ? "÷ " + num(Math.round(1 / l.factor)) : "× " + num(l.factor)} = <b>${num(l.cant_siigo - (l.bonif_unidades || 0))}</b>` : ""}${l.desarme ? " · caja de desarme" : ""}${extra}` +
+    (l.factor_auto ? ` · <span style="color:#8fc9ff">factor 1 automático (costo e IVA cuadran)</span>` : "") +
     (l.temporal ? ` · <span style="color:#8fc9ff">asociación temporal</span>` : "") + notasIva(l) +
     (l.alerta ? `<br><span style="color:${l.margen_revisar ? "#ff9a86" : "#ffd23f"}">⚠ ${esc(l.alerta)}</span>` +
       (l.margen_revisar ? `<br><b style="color:#ff9a86">Toca la línea: corrige el factor${l.factor_margen ? " (probable: " + esc(l.factor_margen) + ")" : ""} o marca que el margen está bien</b>` : "") : "");
