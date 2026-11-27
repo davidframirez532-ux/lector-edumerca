@@ -1126,11 +1126,28 @@ async function ignorarMargenLinea(l, reactivar){
     codigo: l.codigo, nombre: l.nombre, motivo, reactivar: !!reactivar}));
   if(d && d.factura) reemplazar(d.factura);
 }
+/* Total para comparar con el XML (lo que Lina busca en la factura): lo que sube a Siigo más o menos lo que va por
+   fuera, con la misma cuenta que la conciliación del servidor. El título dice qué se sumó o restó. */
+function totalComparable(f){
+  const t = f.totales || {}, ls = f.lineas || [];
+  const ign = ls.filter(l => l.destino === "IGNORADA").reduce((s, l) => s + (Number(l.total_ignorado) || 0), 0);
+  const regalo = ls.filter(l => l.regalo).reduce((s, l) => s + (Number(l.subtotal) || 0), 0);
+  const ajustes = [
+    {signo: "+", nombre: "IVA descontable", valor: Number(t.iva_no_registrado) || 0},
+    {signo: "+", nombre: "impoconsumo", valor: Number(t.impoconsumo_pendiente) || 0},
+    {signo: "+", nombre: "ignorados", valor: ign},
+    {signo: "−", nombre: "bonificaciones", valor: regalo}
+  ].filter(a => a.valor >= 0.5);
+  const valor = ajustes.reduce((s, a) => s + (a.signo === "+" ? a.valor : -a.valor), Number(t.total) || 0);
+  return {valor, ajustado: ajustes.length > 0, detalle: ajustes,
+    titulo: "Siigo" + ajustes.map(a => " " + a.signo + " " + a.nombre).join("")};
+}
 function pintarDetalle(){
   const f = sel; if(!f) return;
   const nota = !!f.es_nota;
   $("cpDetTitulo").textContent = (nota ? "NC · " : "") + f.proveedor;
   const t = f.totales;
+  const cmp = totalComparable(f);
   let h = nota ? `<div class="bloque" style="border:2px solid #8fc9ff"><p class="nota" style="margin:0;opacity:1">
     🧾 <b>Nota crédito del proveedor</b>${f.referencia ? ` a la factura <b>${esc(f.referencia)}</b>` : ""}${
       f.compra_afectada ? ` (${esc(f.compra_afectada)} en Siigo)` : ""}.${f.motivo_nota ? `<br>Motivo: ${esc(f.motivo_nota)}` : ""}<br>
@@ -1140,11 +1157,11 @@ function pintarDetalle(){
     <p class="nota" style="margin:0">NIT ${esc(f.nit)} · ${fechaTxt(f.fecha)} · vence ${fechaTxt(f.vence)}${
       f.pdf ? ` · <a href="${esc(f.pdf)}" target="_blank" rel="noopener" style="color:var(--amarillo)">ver PDF</a>` : ""}</p>
     <div class="grilla" style="margin-top:10px">
-      <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
+      <div class="dato"><span>${esc(cmp.titulo)}</span><b>${plata(cmp.valor)}</b><div class="sub">${
+        cmp.ajustado ? `en Siigo ${plata(t.total)}${cmp.detalle.map(a => ` ${a.signo} ${plata(a.valor)}`).join("")}<br>` : ""}base ${plata(t.base)} · IVA ${plata(t.iva)}${
         t.impoconsumo ? ` · impoconsumo ${plata(t.impoconsumo)}` : ""}${
         t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
-        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2,19): la borras en Siigo al agregar el impoconsumo</span>` : ""}${
-        t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
+        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2,19): la borras en Siigo al agregar el impoconsumo</span>` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
     </div></div>`;
   const pagos = nota ? [] : (cola.pagos || []);
