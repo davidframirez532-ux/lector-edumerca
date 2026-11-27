@@ -1126,6 +1126,21 @@ async function ignorarMargenLinea(l, reactivar){
     codigo: l.codigo, nombre: l.nombre, motivo, reactivar: !!reactivar}));
   if(d && d.factura) reemplazar(d.factura);
 }
+/* Cuando el total de Siigo no es igual al del XML porque parte del IVA va aparte (registro de IVA descontable),
+   muestra la cuenta para que se vea que sí cuadra: Siigo + IVA aparte = XML */
+function cuadreTotales(t){
+  if(!t || !t.iva_no_registrado) return "";
+  const siigo = Number(t.total_final || t.total) || 0, aparte = Number(t.iva_no_registrado) || 0, xml = Number(t.xml) || 0;
+  const suma = siigo + aparte, dif = xml - suma, cuadra = Math.abs(dif) < 2;
+  return `<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(143,201,255,.12);border:1px solid ${cuadra ? "#4fd6a8" : "#ffd23f"};font-size:.92rem;line-height:1.5">
+    <div style="display:flex;justify-content:space-between;gap:8px"><span>Sube a Siigo</span><span>${plata(siigo)}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px"><span>+ IVA que va aparte (IVA descontable)</span><span>${plata(aparte)}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.25);margin-top:4px;padding-top:4px;font-weight:800">
+      <span>${cuadra ? "✅ = Total de la factura (XML)" : "⚠ Suma"}</span><span>${plata(suma)}</span></div>
+    ${cuadra ? `<p class="nota" style="margin:6px 0 0">No es un error: la factura completa vale ${plata(xml)}. A Siigo se suben ${plata(siigo)} y los ${plata(aparte)} de IVA se registran aparte.</p>`
+      : `<p class="nota" style="margin:6px 0 0;color:#ffd23f;opacity:1">${dif > 0 ? "Faltan" : "Sobran"} ${plata(Math.abs(dif))} frente al total del XML (${plata(xml)}).</p>`}
+  </div>`;
+}
 function pintarDetalle(){
   const f = sel; if(!f) return;
   const nota = !!f.es_nota;
@@ -1143,10 +1158,9 @@ function pintarDetalle(){
       <div class="dato"><span>Total Siigo</span><b>${plata(t.total)}</b><div class="sub">base ${plata(t.base)} · IVA ${plata(t.iva)}${
         t.impoconsumo ? ` · impoconsumo ${plata(t.impoconsumo)}` : ""}${
         t.impoconsumo_pendiente ? `<br>+ impoconsumo ${plata(t.impoconsumo_pendiente)} que agregas tú = <b>${plata(t.total_final)}</b>` : ""}${
-        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2,19): la borras en Siigo al agregar el impoconsumo</span>` : ""}${
-        t.iva_no_registrado ? `<br>IVA ${plata(t.iva_no_registrado)} al registro de IVA descontable` : ""}</div></div>
+        t.prueba_ic ? `<br><span style="color:#8fc9ff">🧪 Se sube con 1 LINEA DE PRUEBA ($2,19): la borras en Siigo al agregar el impoconsumo</span>` : ""}</div></div>
       <div class="dato"><span>Total XML</span><b>${plata(t.xml)}</b><div class="sub">IVA ${plata(t.xml_iva)}</div></div>
-    </div></div>`;
+    </div>${cuadreTotales(t)}</div>`;
   const pagos = nota ? [] : (cola.pagos || []);
   if(pagos.length){
     if(!f.pagoElegido) f.pagoElegido = f.pago;
