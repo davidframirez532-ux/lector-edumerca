@@ -123,7 +123,7 @@ const html = `
 </section>
 <input type="file" id="dsArchivo" accept="image/*,application/pdf" hidden>
 <style>
-  .cp-filtros{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
+  .cp-filtros{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;flex:none}
   .cp-filtros .sel-hora{padding:8px;font-size:.9rem}
   .cp-filtros .ancho{grid-column:1 / -1}
   .cp-paso{border-left:3px solid var(--amarillo);padding:4px 0 4px 10px;margin:10px 0}
@@ -3067,7 +3067,7 @@ function pintarMargenes(){
     #mrPie > *{flex:1;text-align:center;font-size:1rem;padding:12px 8px;text-decoration:none}
     .mr-tit{font-size:1.2rem;font-weight:800;margin:0}
     .mr-sec{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;opacity:.6;margin:16px 0 6px}
-    .mr-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .mr-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
     .mr-d{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 12px}
     .mr-d span{display:block;font-size:.8rem;opacity:.7}
     .mr-d b{display:block;font-size:1.15rem;margin-top:2px}

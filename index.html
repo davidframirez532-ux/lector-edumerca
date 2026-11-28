@@ -21,7 +21,7 @@
   *,*::before,*::after{box-sizing:inherit}
   html,body{height:100%;margin:0}
   body{background:var(--verde);color:var(--papel);font-family:"Barlow",system-ui,sans-serif;
-    overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+    overflow:hidden;overflow-wrap:break-word;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   button{font-family:inherit}
   .pantalla{position:fixed;inset:0;display:none;flex-direction:column;gap:12px;
     padding:calc(env(safe-area-inset-top,0px) + 56px) 20px calc(env(safe-area-inset-bottom,0px) + 20px)}
@@ -34,7 +34,7 @@
 
   .cabeza{display:flex;align-items:center;gap:10px;flex:none}
   .casita{flex:none;align-self:stretch;padding:8px 13px !important;font-size:1.25rem !important;line-height:1}
-  .cabeza h2{margin:0;flex:1;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.8rem;line-height:1}
+  .cabeza h2{margin:0;flex:1;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.8rem;line-height:1;min-width:0;overflow-wrap:anywhere}
   .sec{background:var(--verde2);color:var(--papel);border:0;border-radius:8px;font-size:1.05rem;
     font-weight:600;padding:12px 20px;cursor:pointer}
   .sec.chico{padding:9px 14px;font-size:.95rem}
@@ -102,19 +102,19 @@
   .chip{flex:none;border:1.5px solid rgba(251,250,245,.4);background:transparent;color:var(--papel);
     border-radius:999px;padding:8px 14px;font-size:.95rem;font-weight:600;cursor:pointer;text-transform:capitalize}
   .chip[aria-pressed="true"]{background:var(--amarillo);border-color:var(--amarillo);color:var(--verde)}
-  .items{flex:1;overflow-y:auto;margin:0 -20px;padding:0 20px;-webkit-overflow-scrolling:touch}
-  .item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;width:100%;
+  .items{flex:1;overflow-y:auto;margin:0 -20px;padding:0 20px;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+  .item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;
     background:transparent;border:0;border-bottom:1px solid rgba(251,250,245,.14);color:var(--papel);
     padding:13px 2px;text-align:left;cursor:pointer}
   .item .cod{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:1rem;
     background:var(--verde3);border-radius:6px;padding:4px 7px;min-width:3.4em;text-align:center}
-  .item .nom{font-size:1.02rem;font-weight:600;line-height:1.2;text-transform:uppercase}
+  .item .nom{font-size:1.02rem;font-weight:600;line-height:1.2;text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
   .item .nom small{display:block;font-size:.82rem;font-weight:500;opacity:.65;text-transform:none}
   .item .pre{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.45rem;
     color:var(--amarillo);white-space:nowrap;text-align:right}
   .item .pre small{display:block;font-family:"Barlow",sans-serif;font-weight:600;font-size:.8rem;color:var(--papel);opacity:.7}
   .item .pre .mas{color:var(--azul)} .item .pre .menos{color:var(--rojo)}
-  .item:has(.borrar){grid-template-columns:auto 1fr auto auto}
+  .item:has(.borrar){grid-template-columns:auto minmax(0,1fr) auto auto}
   .item .borrar{color:var(--rojo);font-size:1.25rem;padding:6px 4px 6px 12px;line-height:1}
   .vacio{opacity:.7;text-align:center;padding:30px 10px;font-size:1.05rem;line-height:1.5}
   .menu{display:flex;flex-direction:column;gap:14px;justify-content:center;flex:1}
@@ -149,7 +149,7 @@
   .bloque h3{margin:0 0 10px;font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.3rem;
     display:flex;justify-content:space-between;align-items:center;gap:10px}
   .bloque h3 small{font-family:"Barlow",sans-serif;font-weight:500;font-size:.8rem;opacity:.7;text-align:right}
-  .grilla{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grilla{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
   .dato{background:var(--verde);border-radius:10px;padding:10px 12px;min-width:0;display:flex;flex-direction:column;gap:2px}
   .dato>span{font-size:.78rem;opacity:.8}
   .dato b{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.6rem;line-height:1.05;
@@ -206,7 +206,7 @@
   .fila-campo{display:flex;gap:6px;align-items:center}
   .campo.bloqueado input{opacity:.6;background:var(--verde3);color:var(--papel)}
   .escanear-campo{margin-top:4px}
-  .fijo{display:grid;grid-template-columns:1fr 7.5em auto auto;gap:6px;align-items:center;padding:7px 0;
+  .fijo{display:grid;grid-template-columns:minmax(0,1fr) 7.5em auto auto;gap:6px;align-items:center;padding:7px 0;
     border-bottom:1px solid rgba(251,250,245,.12)}
   .fijo input{border:0;border-radius:8px;padding:10px;font:500 .95rem "Barlow",sans-serif;background:var(--papel);
     color:var(--tinta);width:100%;min-width:0;-webkit-user-select:text;user-select:text}
@@ -217,7 +217,7 @@
   .sw.on{background:var(--amarillo);color:var(--verde)}
   .bloque .sec{background:var(--verde3)}
   #btnFijoAgregar{white-space:nowrap}
-  .ab-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;
+  .ab-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;
     border-bottom:1px solid rgba(251,250,245,.12);cursor:pointer}
   .ab-item:last-child{border-bottom:0}
   .ab-check{width:30px;height:30px;border-radius:8px;border:2px solid rgba(251,250,245,.5);background:transparent;
@@ -230,14 +230,14 @@
   .ab-cant small{font-size:.8rem;opacity:.8}
   .ab-item.hecho .ab-nom,.ab-item.hecho .ab-cant{opacity:.4;text-decoration:line-through}
   #abResumen .caja b,#pdResumen .caja b{font-size:1.3rem}
-  .dias7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dias7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
   .dias7 .chip{padding:8px 0;font-size:.85rem;min-width:0;text-align:center}
   .fecha-campo{position:relative;display:block;background:var(--papel);color:var(--tinta);border-radius:8px;
     padding:12px 34px 12px 12px;font:600 1.05rem "Barlow",sans-serif;white-space:nowrap;overflow:hidden;cursor:pointer;
     -webkit-tap-highlight-color:rgba(0,0,0,.08)}
   .fecha-campo::after{content:"📅";position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:1rem}
   .fecha-campo input{position:absolute;left:0;bottom:0;width:100%;height:100%;opacity:0;padding:0;border:0;pointer-events:none}
-  .fechas{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
+  .fechas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;flex:none}
   .fechas .campo input{padding:9px 10px;font-size:1rem}
   .quitar{background:transparent;border:0;color:var(--rojo);font-size:1.6rem;line-height:1;padding:0 4px;cursor:pointer}
 </style>

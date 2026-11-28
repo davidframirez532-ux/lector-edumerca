@@ -31,10 +31,10 @@ function estado(t, mal){ const e = $("posEstado"); e.textContent = t || ""; e.st
 /* ---------- Estilos ---------- */
 (function(){
   const st = document.createElement("style");
-  st.textContent = `.pos-l{display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;align-items:center;padding:10px 0;
+  st.textContent = `.pos-l{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:10px 0;
       border-bottom:1px solid rgba(251,250,245,.12)}
     .pos-l.pos-nueva{background:rgba(47,211,147,.16);border-radius:8px;padding-left:8px;padding-right:8px}
-    .pos-l .pn{font-weight:600;line-height:1.2;min-width:0}
+    .pos-l .pn{font-weight:600;line-height:1.2;min-width:0;overflow-wrap:anywhere}
     .pos-l .pn small{display:block;font-weight:400;opacity:.7;font-size:.8rem;margin-top:2px}
     .pos-l .pn small button{background:none;border:0;color:inherit;text-decoration:underline;font:inherit;padding:0;cursor:pointer}
     .pos-q{display:flex;align-items:center;gap:2px}
