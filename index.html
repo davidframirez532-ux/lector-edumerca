@@ -602,7 +602,7 @@
 
 <script>
 /* =========== CONFIGURACIÓN =========== */
-const VERSION = "v2.6.05 · 28-nov-2026";
+const VERSION = "v2.6.10 · 28-nov-2026";
 const API_URL_DEFECTO = "https://script.google.com/macros/s/AKfycbyCpzCB0tK4DskCIlBsThHdq5Ju1D9YotOXvlcG_1Caas4memDVbvLG50obYAkQ0Kod/exec";
 const SEGUNDOS_CAMARA = 30;
 const SEGUNDOS_RESULTADO = 8;
@@ -4123,7 +4123,7 @@ setInterval(descargarCatalogo, MINUTOS_REFRESCO*60*1000);
 <script>
   /* Carga siempre la versión más reciente de compras.js y pos.js (Registrar) */
   (function(){
-    ["compras.js", "pos.js", "asistencia.js"].forEach  /* asistencia.js = botón 🎧 temporal: quitarlo de aquí y borrar el archivo */(function(f){
+    ["compras.js", "pos.js", "asistencia.js"].forEach  /* asistencia.js = botón 🛟 temporal: quitarlo de aquí y borrar el archivo */(function(f){
       var s = document.createElement("script");
       s.src = f + "?t=" + Date.now(); s.async = false;
       document.body.appendChild(s);
